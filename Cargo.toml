@@ -4,3 +4,9 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+la-arena = "0.2.1"
+rnix = { git = "https://github.com/nix-community/rnix-parser.git" }
+salsa = "0.16.1"
+
+[dev-dependencies]
+expect-test = "1.3.0"
