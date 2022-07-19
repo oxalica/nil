@@ -10,31 +10,27 @@ use std::sync::Arc;
 
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
-    #[salsa::invoke(Module::module_with_source_map_query)]
     fn module_with_source_map(&self, file_id: FileId) -> (Arc<Module>, Arc<ModuleSourceMap>);
 
-    #[salsa::invoke(Module::module_query)]
     fn module(&self, file_id: FileId) -> Arc<Module>;
+}
+
+fn module_with_source_map(
+    db: &dyn DefDatabase,
+    file_id: FileId,
+) -> (Arc<Module>, Arc<ModuleSourceMap>) {
+    let root = db.parse(file_id);
+    let (module, source_map) = lower::lower(root.map(|ast| ast.root()));
+    (Arc::new(module), Arc::new(source_map))
+}
+
+fn module(db: &dyn DefDatabase, file_id: FileId) -> Arc<Module> {
+    db.module_with_source_map(file_id).0
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     exprs: Arena<Expr>,
-}
-
-impl Module {
-    fn module_with_source_map_query(
-        db: &dyn DefDatabase,
-        file_id: FileId,
-    ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
-        let root = db.parse(file_id);
-        let (module, source_map) = lower::lower(root);
-        (Arc::new(module), Arc::new(source_map))
-    }
-
-    fn module_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Module> {
-        db.module_with_source_map(file_id).0
-    }
 }
 
 impl ops::Index<ExprId> for Module {
