@@ -1,34 +1,32 @@
-use std::collections::HashSet;
-
-use super::{Expr, ExprId, Literal, Module, ModuleSourceMap, Path, PathAnchor};
+use super::{AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, Path, PathAnchor};
 use crate::source::{FileId, InFile};
-use rnix::types::{self as ast, ParsedType, TokenWrapper, TypedNode, Wrapper};
+use rnix::types::{ParsedType, Root, TokenWrapper, TypedNode, Wrapper};
 use rnix::value::Anchor;
-use rnix::{NixValue, SyntaxNode};
+use rnix::{NixValue, SyntaxNode, AST};
 
-pub(super) fn lower(root: InFile<ast::Root>) -> (Module, ModuleSourceMap) {
+pub(super) fn lower(ast: InFile<AST>) -> (Module, ModuleSourceMap) {
     let mut ctx = LowerCtx {
-        file_id: root.file_id,
+        file_id: ast.file_id,
         module: Module::default(),
-        paths: HashSet::default(),
+        source_map: ModuleSourceMap::default(),
     };
-    ctx.lower_node_opt(Some(root.value.node().clone()));
-    (ctx.module, ModuleSourceMap::default())
+    let node = Root::cast(ast.value.node()).map(|root| root.node().clone());
+    ctx.lower_node_opt(node);
+    (ctx.module, ctx.source_map)
 }
 
 struct LowerCtx {
     file_id: FileId,
     module: Module,
-    paths: HashSet<Path>,
+    source_map: ModuleSourceMap,
 }
 
 impl LowerCtx {
-    fn alloc_expr(&mut self, expr: Expr) -> ExprId {
-        self.module.exprs.alloc(expr)
-    }
-
-    fn alloc_missing(&mut self) -> ExprId {
-        self.alloc_expr(Expr::Missing)
+    fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr) -> ExprId {
+        let id = self.module.exprs.alloc(expr);
+        self.source_map.expr_map.insert(ptr.clone(), id);
+        self.source_map.expr_map_rev.insert(id, ptr);
+        id
     }
 
     fn lower_node_opt(&mut self, node: Option<SyntaxNode>) -> ExprId {
@@ -37,10 +35,11 @@ impl LowerCtx {
                 return self.lower_expr(expr);
             }
         }
-        self.alloc_missing()
+        // Synthetic syntax has no coresponding text.
+        self.module.exprs.alloc(Expr::Missing)
     }
 
-    fn lower_path(&mut self, anchor: Anchor, segments: &str) -> ExprId {
+    fn lower_path(&mut self, anchor: Anchor, segments: &str, ptr: AstPtr) -> ExprId {
         let anchor = match anchor {
             Anchor::Relative => PathAnchor::Relative(self.file_id),
             Anchor::Absolute => todo!(),
@@ -51,17 +50,17 @@ impl LowerCtx {
             anchor,
             raw_segments: segments.into(),
         };
-        self.paths.insert(path.clone());
-        self.alloc_expr(Expr::Literal(Literal::Path(path)))
+        self.alloc_expr(Expr::Literal(Literal::Path(path)), ptr)
     }
 
     fn lower_expr(&mut self, expr: ParsedType) -> ExprId {
-        match expr {
-            ParsedType::Root(e) => self.lower_node_opt(e.inner()),
-            ParsedType::Paren(e) => self.lower_node_opt(e.inner()),
+        let ptr = AstPtr::new(expr.node());
+        let expr = match expr {
+            ParsedType::Root(e) => return self.lower_node_opt(e.inner()),
+            ParsedType::Paren(e) => return self.lower_node_opt(e.inner()),
             ParsedType::Ident(e) => {
                 let ident = e.to_inner_string();
-                self.alloc_expr(Expr::Ident(ident.into()))
+                Expr::Ident(ident.into())
             }
             ParsedType::Value(e) => match e.to_value() {
                 Ok(v) => {
@@ -69,16 +68,16 @@ impl LowerCtx {
                         NixValue::Integer(x) => Literal::Int(x),
                         NixValue::Float(_) => todo!(),
                         NixValue::String(s) => Literal::String(s.into()),
-                        NixValue::Path(anchor, path) => return self.lower_path(anchor, &path),
+                        NixValue::Path(anchor, path) => return self.lower_path(anchor, &path, ptr),
                     };
-                    self.alloc_expr(Expr::Literal(lit))
+                    Expr::Literal(lit)
                 }
-                Err(_) => self.alloc_missing(),
+                Err(_) => Expr::Missing,
             },
             ParsedType::Apply(e) => {
                 let lam = self.lower_node_opt(e.lambda());
                 let arg = self.lower_node_opt(e.value());
-                self.alloc_expr(Expr::Apply(lam, arg))
+                Expr::Apply(lam, arg)
             }
             ParsedType::Assert(_) => todo!(),
             ParsedType::IfElse(_) => todo!(),
@@ -105,7 +104,8 @@ impl LowerCtx {
             | ParsedType::PatEntry(_)
             | ParsedType::Key(_)
             | ParsedType::Dynamic(_)
-            | ParsedType::Error(_) => self.alloc_missing(),
-        }
+            | ParsedType::Error(_) => Expr::Missing,
+        };
+        self.alloc_expr(expr, ptr)
     }
 }

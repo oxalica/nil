@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 la-arena = "0.2.1"
 rnix = { git = "https://github.com/oxalica/rnix-parser.git" }
+rowan = "0.15.6"
 salsa = "0.17.0-pre.2"
 
 [dev-dependencies]

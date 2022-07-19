@@ -141,6 +141,7 @@ dependencies = [
  "expect-test",
  "la-arena",
  "rnix",
+ "rowan",
  "salsa",
 ]
 
