@@ -1,11 +1,10 @@
 use super::DefDatabase;
-use crate::tests::FixtureExt;
-use crate::RootDatabase;
+use crate::tests::TestDB;
 use expect_test::expect;
 
 #[test]
 fn module_basic() {
-    let (db, root_id) = RootDatabase::from_single_file(
+    let (db, root_id) = TestDB::from_file(
         r#"
         foo 123 ./bar.nix
         "#,
