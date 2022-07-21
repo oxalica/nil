@@ -16,7 +16,9 @@ fn module_basic() {
                 len: 5,
                 data: [
                     Ident(
-                        "foo",
+                        Name(
+                            "foo",
+                        ),
                     ),
                     Literal(
                         Int(

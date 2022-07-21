@@ -5,6 +5,7 @@ mod tests;
 
 use crate::source::{FileId, SourceDatabase};
 use la_arena::{Arena, Idx};
+use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::ops;
 use std::sync::Arc;
@@ -40,6 +41,8 @@ pub struct Module {
     exprs: Arena<Expr>,
 }
 
+pub type ExprId = Idx<Expr>;
+
 impl ops::Index<ExprId> for Module {
     type Output = Expr;
     fn index(&self, index: ExprId) -> &Self::Output {
@@ -55,12 +58,10 @@ pub struct ModuleSourceMap {
     expr_map_rev: HashMap<ExprId, AstPtr>,
 }
 
-pub type ExprId = Idx<Expr>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Missing,
-    Ident(Box<str>),
+    Ident(Name),
     Literal(Literal),
     Apply(ExprId, ExprId),
     // TODO
@@ -72,6 +73,21 @@ pub enum Literal {
     String(Box<str>),
     Path(Path),
     // TODO
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name(SmolStr);
+
+impl From<&'_ str> for Name {
+    fn from(s: &'_ str) -> Self {
+        Self(s.into())
+    }
+}
+
+impl From<String> for Name {
+    fn from(s: String) -> Self {
+        Self(s.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
