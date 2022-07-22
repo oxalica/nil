@@ -1,0 +1,22 @@
+Multiple root expressions at 12
+SOURCE_FILE@0..24
+  ASSERT@0..12
+    KW_ASSERT@0..6 "assert"
+    SPACE@6..7 " "
+    LITERAL@7..8
+      INT@7..8 "1"
+    SEMICOLON@8..9 ";"
+    SPACE@9..10 " "
+    LITERAL@10..11
+      INT@10..11 "2"
+    SPACE@11..12 "\n"
+  ASSERT@12..24
+    KW_ASSERT@12..18 "assert"
+    SPACE@18..19 " "
+    LITERAL@19..20
+      INT@19..20 "3"
+    SEMICOLON@20..21 ";"
+    SPACE@21..22 " "
+    LITERAL@22..23
+      INT@22..23 "4"
+    SPACE@23..24 "\n"

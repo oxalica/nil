@@ -1,0 +1,96 @@
+SOURCE_FILE@0..121
+  LIST@0..120
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    REF@4..5
+      IDENT@4..5 "a"
+    SPACE@5..8 "\n  "
+    LITERAL@8..9
+      INT@8..9 "1"
+    SPACE@9..12 "\n  "
+    LITERAL@12..15
+      FLOAT@12..15 "1.2"
+    SPACE@15..18 "\n  "
+    LITERAL@18..20
+      ABSOLUTE_PATH@18..20 "/a"
+    SPACE@20..23 "\n  "
+    LITERAL@23..26
+      RELATIVE_PATH@23..26 "a/a"
+    SPACE@26..29 "\n  "
+    LITERAL@29..32
+      HOME_PATH@29..32 "~/a"
+    SPACE@32..35 "\n  "
+    LITERAL@35..38
+      URI@35..38 "a:a"
+    SPACE@38..41 "\n  "
+    STRING@41..52
+      DQUOTE@41..42 "\""
+      STRING_FRAGMENT@42..44 "fo"
+      DYNAMIC@44..50
+        DOLLAR_L_CURLY@44..46 "${"
+        REF@46..49
+          IDENT@46..49 "bar"
+        R_CURLY@49..50 "}"
+      STRING_FRAGMENT@50..51 "o"
+      DQUOTE@51..52 "\""
+    SPACE@52..55 "\n  "
+    INDENT_STRING@55..68
+      QUOTE2@55..57 "''"
+      STRING_FRAGMENT@57..59 "fo"
+      DYNAMIC@59..65
+        DOLLAR_L_CURLY@59..61 "${"
+        REF@61..64
+          IDENT@61..64 "bar"
+        R_CURLY@64..65 "}"
+      STRING_FRAGMENT@65..66 "o"
+      QUOTE2@66..68 "''"
+    SPACE@68..71 "\n  "
+    ATTR_SET@71..78
+      KW_REC@71..74 "rec"
+      SPACE@74..75 " "
+      L_CURLY@75..76 "{"
+      SPACE@76..77 " "
+      R_CURLY@77..78 "}"
+    SPACE@78..81 "\n  "
+    ATTR_SET@81..88
+      KW_LET@81..84 "let"
+      SPACE@84..85 " "
+      L_CURLY@85..86 "{"
+      SPACE@86..87 " "
+      R_CURLY@87..88 "}"
+    SPACE@88..91 "\n  "
+    ATTR_SET@91..94
+      L_CURLY@91..92 "{"
+      SPACE@92..93 " "
+      R_CURLY@93..94 "}"
+    SPACE@94..97 "\n  "
+    SELECT@97..115
+      REF@97..98
+        IDENT@97..98 "a"
+      DOT@98..99 "."
+      ATTR_PATH@99..101
+        IDENT@99..100 "b"
+        SPACE@100..101 " "
+      KW_OR@101..103 "or"
+      SELECT@103..115
+        SPACE@103..104 " "
+        REF@104..105
+          IDENT@104..105 "c"
+        DOT@105..106 "."
+        ATTR_PATH@106..108
+          IDENT@106..107 "d"
+          SPACE@107..108 " "
+        KW_OR@108..110 "or"
+        SPACE@110..111 " "
+        REF@111..112
+          IDENT@111..112 "e"
+        SPACE@112..115 "\n  "
+    SELECT@115..119
+      REF@115..116
+        IDENT@115..116 "f"
+      DOT@116..117 "."
+      ATTR_PATH@117..119
+        IDENT@117..118 "g"
+        SPACE@118..119 "\n"
+    R_BRACK@119..120 "]"
+  SPACE@120..121 "\n"

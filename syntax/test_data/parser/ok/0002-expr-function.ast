@@ -1,0 +1,62 @@
+SOURCE_FILE@0..78
+  ASSERT@0..78
+    KW_ASSERT@0..6 "assert"
+    SPACE@6..7 " "
+    LITERAL@7..8
+      INT@7..8 "1"
+    SEMICOLON@8..9 ";"
+    SPACE@9..10 "\n"
+    WITH@10..78
+      KW_WITH@10..14 "with"
+      SPACE@14..15 " "
+      LITERAL@15..16
+        INT@15..16 "2"
+      SEMICOLON@16..17 ";"
+      SPACE@17..18 "\n"
+      LET_IN@18..78
+        KW_LET@18..21 "let"
+        SPACE@21..22 " "
+        KW_IN@22..24 "in"
+        SPACE@24..25 "\n"
+        IF_THEN_ELSE@25..78
+          KW_IF@25..27 "if"
+          SPACE@27..30 "\n  "
+          ATTR_SET@30..37
+            KW_REC@30..33 "rec"
+            SPACE@33..34 " "
+            L_CURLY@34..35 "{"
+            SPACE@35..36 " "
+            R_CURLY@36..37 "}"
+          SPACE@37..38 "\n"
+          KW_THEN@38..42 "then"
+          SPACE@42..45 "\n  "
+          ATTR_SET@45..52
+            KW_LET@45..48 "let"
+            SPACE@48..49 " "
+            L_CURLY@49..50 "{"
+            SPACE@50..51 " "
+            R_CURLY@51..52 "}"
+          SPACE@52..53 "\n"
+          KW_ELSE@53..57 "else"
+          SPACE@57..60 "\n  "
+          LAMBDA@60..78
+            PARAM@60..61
+              IDENT@60..61 "a"
+            COLON@61..62 ":"
+            SPACE@62..65 "\n  "
+            LAMBDA@65..78
+              PARAM@65..70
+                PAT@65..70
+                  L_CURLY@65..66 "{"
+                  SPACE@66..67 " "
+                  PAT_FIELD@67..69
+                    IDENT@67..68 "b"
+                    SPACE@68..69 " "
+                  R_CURLY@69..70 "}"
+              COLON@70..71 ":"
+              SPACE@71..74 "\n  "
+              ATTR_SET@74..77
+                L_CURLY@74..75 "{"
+                SPACE@75..76 " "
+                R_CURLY@76..77 "}"
+              SPACE@77..78 "\n"

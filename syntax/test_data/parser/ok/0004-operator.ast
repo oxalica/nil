@@ -1,0 +1,90 @@
+SOURCE_FILE@0..71
+  BINARY_OP@0..71
+    LITERAL@0..1
+      INT@0..1 "1"
+    SPACE@1..2 " "
+    MINUS_GT@2..4 "->"
+    BINARY_OP@4..71
+      BINARY_OP@4..32
+        BINARY_OP@4..23
+          SPACE@4..5 " "
+          LITERAL@5..6
+            INT@5..6 "2"
+          SPACE@6..7 " "
+          OR2@7..9 "||"
+          BINARY_OP@9..23
+            SPACE@9..10 " "
+            UNARY_OP@10..13
+              MINUS@10..11 "-"
+              LITERAL@11..12
+                INT@11..12 "3"
+              SPACE@12..13 " "
+            AND2@13..15 "&&"
+            BINARY_OP@15..23
+              SPACE@15..16 " "
+              LITERAL@16..17
+                INT@16..17 "4"
+              SPACE@17..18 " "
+              EQ2@18..20 "=="
+              SPACE@20..21 " "
+              LITERAL@21..22
+                INT@21..22 "5"
+              SPACE@22..23 " "
+        OR2@23..25 "||"
+        BINARY_OP@25..32
+          SPACE@25..26 " "
+          LITERAL@26..27
+            INT@26..27 "6"
+          SPACE@27..28 " "
+          LT@28..29 "<"
+          SPACE@29..30 " "
+          LITERAL@30..31
+            INT@30..31 "7"
+          SPACE@31..32 " "
+      OR2@32..34 "||"
+      BINARY_OP@34..71
+        SPACE@34..35 " "
+        LITERAL@35..36
+          INT@35..36 "8"
+        SPACE@36..37 " "
+        SLASH2@37..39 "//"
+        BINARY_OP@39..71
+          SPACE@39..40 " "
+          UNARY_OP@40..66
+            BANG@40..41 "!"
+            BINARY_OP@41..66
+              LITERAL@41..42
+                INT@41..42 "9"
+              SPACE@42..43 " "
+              PLUS@43..44 "+"
+              BINARY_OP@44..66
+                SPACE@44..45 " "
+                LITERAL@45..47
+                  INT@45..47 "10"
+                SPACE@47..48 " "
+                STAR@48..49 "*"
+                BINARY_OP@49..66
+                  SPACE@49..50 " "
+                  LITERAL@50..52
+                    INT@50..52 "11"
+                  SPACE@52..53 " "
+                  PLUS2@53..55 "++"
+                  HAS_ATTR@55..66
+                    SPACE@55..56 " "
+                    APPLY@56..62
+                      LITERAL@56..58
+                        INT@56..58 "12"
+                      SPACE@58..59 " "
+                      LITERAL@59..61
+                        INT@59..61 "13"
+                      SPACE@61..62 " "
+                    QUESTION@62..63 "?"
+                    ATTR_PATH@63..66
+                      SPACE@63..64 " "
+                      IDENT@64..65 "a"
+                      SPACE@65..66 " "
+          SLASH2@66..68 "//"
+          SPACE@68..69 " "
+          LITERAL@69..70
+            INT@69..70 "1"
+          SPACE@70..71 "\n"

@@ -1,0 +1,32 @@
+SOURCE_FILE@0..33
+  LIST@0..32
+    L_BRACK@0..1 "["
+    SPACE@1..2 " "
+    LITERAL@2..4
+      INT@2..4 "42"
+    SPACE@4..5 " "
+    LITERAL@5..8
+      FLOAT@5..8 "1.0"
+    SPACE@8..9 " "
+    LITERAL@9..14
+      FLOAT@9..14 "1.2e3"
+    SPACE@14..15 " "
+    PAREN@15..27
+      L_PAREN@15..16 "("
+      LET_IN@16..26
+        KW_LET@16..19 "let"
+        SPACE@19..20 " "
+        KW_IN@20..22 "in"
+        SPACE@22..23 " "
+        ATTR_SET@23..26
+          L_CURLY@23..24 "{"
+          SPACE@24..25 " "
+          R_CURLY@25..26 "}"
+      R_PAREN@26..27 ")"
+    SPACE@27..28 " "
+    ATTR_SET@28..30
+      L_CURLY@28..29 "{"
+      R_CURLY@29..30 "}"
+    SPACE@30..31 " "
+    R_BRACK@31..32 "]"
+  SPACE@32..33 "\n"
