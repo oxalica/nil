@@ -1,6 +1,7 @@
 #[macro_use]
 mod kind;
 
+pub mod ast;
 pub mod lexer;
 pub mod parser;
 

@@ -1,17 +1,26 @@
-use crate::SyntaxNode;
 use crate::{
+    ast::SourceFile,
     lexer, Error,
     SyntaxKind::{self, *},
+    SyntaxNode,
 };
-use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextSize};
+use rowan::{ast::AstNode, Checkpoint, GreenNode, GreenNodeBuilder, TextSize};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Parse {
     green: GreenNode,
     errors: Vec<(Error, TextSize)>,
 }
 
 impl Parse {
+    pub fn green_node(&self) -> GreenNode {
+        self.green.clone()
+    }
+
+    pub fn root(&self) -> SourceFile {
+        SourceFile::cast(self.syntax_node()).unwrap()
+    }
+
     pub fn syntax_node(&self) -> SyntaxNode {
         SyntaxNode::new_root(self.green.clone())
     }
