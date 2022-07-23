@@ -121,6 +121,7 @@ def! {
     PAREN,
     PAT,
     PAT_FIELD,
+    REF,
     SELECT,
     STRING,
     UNARY_OP,

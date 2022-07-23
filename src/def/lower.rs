@@ -42,7 +42,7 @@ impl LowerCtx {
                 let lit = self.lower_literal(e);
                 self.alloc_expr(lit.map_or(Expr::Missing, Expr::Literal), ptr)
             }
-            ast::Expr::Name(e) => {
+            ast::Expr::Ref(e) => {
                 let name = e.token().map_or_else(|| "".into(), |tok| tok.text().into());
                 self.alloc_expr(Expr::Ident(name), ptr)
             }

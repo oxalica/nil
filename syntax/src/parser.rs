@@ -423,7 +423,7 @@ impl<'i> Parser<'i> {
         // `a b or c` => `(a (b or)) c`
         } else if self.peek_non_ws() == Some(T![or]) {
             self.start_node_at(cp, APPLY);
-            self.start_node(NAME);
+            self.start_node(REF);
             self.bump(); // or
             self.finish_node();
             self.finish_node();
@@ -436,7 +436,7 @@ impl<'i> Parser<'i> {
         // This must matches SyntaxKind::can_start_atom_expr.
         match self.peek_non_ws() {
             Some(IDENT) => {
-                self.start_node(NAME);
+                self.start_node(REF);
                 self.bump(); // IDENT
                 self.finish_node();
             }

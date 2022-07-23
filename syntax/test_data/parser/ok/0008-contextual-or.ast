@@ -40,16 +40,16 @@ SOURCE_FILE@0..42
       SPACE@32..33 " "
       APPLY@33..42
         APPLY@33..39
-          NAME@33..34
+          REF@33..34
             IDENT@33..34 "f"
           SPACE@34..35 " "
           APPLY@35..39
-            NAME@35..36
+            REF@35..36
               IDENT@35..36 "a"
             SPACE@36..37 " "
-            NAME@37..39
+            REF@37..39
               KW_OR@37..39 "or"
         SPACE@39..40 " "
-        NAME@40..41
+        REF@40..41
           IDENT@40..41 "b"
         SPACE@41..42 "\n"

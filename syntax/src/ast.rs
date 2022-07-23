@@ -220,8 +220,8 @@ enums! {
         LetIn,
         List,
         Literal,
-        Name,
         Paren,
+        Ref,
         Select,
         String,
         UnaryOp,
@@ -384,12 +384,17 @@ asts! {
         question_token: T![?],
         default_expr: Expr,
     },
+    REF = Ref {
+        pub fn token(&self) -> Option<SyntaxToken> {
+            self.0.children_with_tokens().find_map(NodeOrToken::into_token)
+        }
+    },
     SELECT = Select {
         set: Expr,
         dot_token: T![.],
         attrpath: Attrpath,
         or_token: T![or],
-        default_expr: Expr,
+        default_expr[1]: Expr,
     },
     STRING = String [HasStringParts] {
         start_dquote_token: T!['"'],

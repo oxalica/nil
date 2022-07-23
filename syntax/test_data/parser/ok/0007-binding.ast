@@ -12,7 +12,7 @@ SOURCE_FILE@0..160
         DOT@9..10 "."
         DYNAMIC@10..14
           DOLLAR_L_CURLY@10..12 "${"
-          NAME@12..13
+          REF@12..13
             IDENT@12..13 "c"
           R_CURLY@13..14 "}"
         DOT@14..15 "."
@@ -21,7 +21,7 @@ SOURCE_FILE@0..160
           STRING_FRAGMENT@16..17 "d"
           DYNAMIC@17..21
             DOLLAR_L_CURLY@17..19 "${"
-            NAME@19..20
+            REF@19..20
               IDENT@19..20 "e"
             R_CURLY@20..21 "}"
           DQUOTE@21..22 "\""
@@ -40,7 +40,7 @@ SOURCE_FILE@0..160
       SPACE@39..40 " "
       DYNAMIC@40..44
         DOLLAR_L_CURLY@40..42 "${"
-        NAME@42..43
+        REF@42..43
           IDENT@42..43 "b"
         R_CURLY@43..44 "}"
       SPACE@44..45 " "
@@ -54,7 +54,7 @@ SOURCE_FILE@0..160
       ATTR_PATH@52..61
         DYNAMIC@52..58
           DOLLAR_L_CURLY@52..54 "${"
-          NAME@54..57
+          REF@54..57
             IDENT@54..57 "dyn"
           R_CURLY@57..58 "}"
         DOT@58..59 "."
@@ -73,12 +73,12 @@ SOURCE_FILE@0..160
       PAREN@76..83
         L_PAREN@76..77 "("
         BINARY_OP@77..82
-          NAME@77..78
+          REF@77..78
             IDENT@77..78 "a"
           SPACE@78..79 " "
           PLUS@79..80 "+"
           SPACE@80..81 " "
-          NAME@81..82
+          REF@81..82
             IDENT@81..82 "b"
         R_PAREN@82..83 ")"
       SPACE@83..84 " "
@@ -131,7 +131,7 @@ SOURCE_FILE@0..160
         ATTR_PATH@131..136
           DYNAMIC@131..135
             DOLLAR_L_CURLY@131..133 "${"
-            NAME@133..134
+            REF@133..134
               IDENT@133..134 "f"
             R_CURLY@134..135 "}"
           SPACE@135..136 " "

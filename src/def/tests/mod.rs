@@ -15,7 +15,7 @@ fn source_map() {
     expect![[r#"
         [
             SyntaxNodePtr {
-                kind: NAME,
+                kind: REF,
                 range: 0..3,
             },
             SyntaxNodePtr {
