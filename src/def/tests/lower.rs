@@ -75,3 +75,51 @@ fn path() {
         "#]],
     );
 }
+
+#[test]
+fn lambda() {
+    check_lower(
+        "a: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Lambda(Some(Idx::<NameDef>(0)), None, Idx::<Expr>(0))
+        "#]],
+    );
+    check_lower(
+        "{ }: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Lambda(None, Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))
+        "#]],
+    );
+    check_lower(
+        "a@{ ... }: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: true }), Idx::<Expr>(0))
+        "#]],
+    );
+    check_lower(
+        "{ }@a: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))
+        "#]],
+    );
+    check_lower(
+        "{ a, b ? 0, ... }: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Literal(Int(0))
+            2: Lambda(None, Some(Pat { fields: [(Some(Idx::<NameDef>(0)), None), (Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0)))], ellipsis: true }), Idx::<Expr>(1))
+        "#]],
+    );
+    check_lower(
+        "{ a ? 0, b }@c: 0",
+        expect![[r#"
+            0: Literal(Int(0))
+            1: Literal(Int(0))
+            2: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [(Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0))), (Some(Idx::<NameDef>(2)), None)], ellipsis: false }), Idx::<Expr>(1))
+        "#]],
+    );
+}

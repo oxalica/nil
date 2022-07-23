@@ -1,4 +1,7 @@
-use super::{AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, Path, PathAnchor};
+use super::{
+    AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, Pat, Path,
+    PathAnchor,
+};
 use crate::source::{FileId, InFile};
 use rowan::ast::AstNode;
 use syntax::ast::{self, LiteralKind};
@@ -27,6 +30,16 @@ impl LowerCtx {
         id
     }
 
+    fn alloc_name_def(&mut self, node: ast::Name) -> NameDefId {
+        let name = node
+            .token()
+            .map_or_else(Default::default, |tok| tok.text().into());
+        let id = self.module.name_defs.alloc(NameDef { name });
+        let ptr = AstPtr::new(node.syntax());
+        self.source_map.name_def_map.insert(ptr, id);
+        id
+    }
+
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
         if let Some(expr) = expr {
             return self.lower_expr(expr);
@@ -43,7 +56,9 @@ impl LowerCtx {
                 self.alloc_expr(lit.map_or(Expr::Missing, Expr::Literal), ptr)
             }
             ast::Expr::Ref(e) => {
-                let name = e.token().map_or_else(|| "".into(), |tok| tok.text().into());
+                let name = e
+                    .token()
+                    .map_or_else(Default::default, |tok| tok.text().into());
                 self.alloc_expr(Expr::Ident(name), ptr)
             }
             ast::Expr::Apply(e) => {
@@ -52,13 +67,32 @@ impl LowerCtx {
                 self.alloc_expr(Expr::Apply(func, arg), ptr)
             }
             ast::Expr::Paren(e) => self.lower_expr_opt(e.expr()),
+            ast::Expr::Lambda(e) => {
+                let (param, pat) = e.param().map_or((None, None), |param| {
+                    let name = param.name().map(|n| self.alloc_name_def(n));
+                    let pat = param.pat().map(|pat| {
+                        let fields = pat
+                            .fields()
+                            .map(|field| {
+                                let field_name = field.name().map(|n| self.alloc_name_def(n));
+                                let default_expr = field.default_expr().map(|e| self.lower_expr(e));
+                                (field_name, default_expr)
+                            })
+                            .collect();
+                        let ellipsis = pat.ellipsis_token().is_some();
+                        Pat { fields, ellipsis }
+                    });
+                    (name, pat)
+                });
+                let body = self.lower_expr_opt(e.body());
+                self.alloc_expr(Expr::Lambda(param, pat, body), ptr)
+            }
             ast::Expr::Assert(_) => todo!(),
             ast::Expr::AttrSet(_) => todo!(),
             ast::Expr::BinaryOp(_) => todo!(),
             ast::Expr::HasAttr(_) => todo!(),
             ast::Expr::IfThenElse(_) => todo!(),
             ast::Expr::IndentString(_) => todo!(),
-            ast::Expr::Lambda(_) => todo!(),
             ast::Expr::LetIn(_) => todo!(),
             ast::Expr::List(_) => todo!(),
             ast::Expr::Select(_) => todo!(),

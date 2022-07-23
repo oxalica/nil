@@ -40,14 +40,23 @@ fn source_map(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleSourceMap> {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     exprs: Arena<Expr>,
+    name_defs: Arena<NameDef>,
 }
 
 pub type ExprId = Idx<Expr>;
+pub type NameDefId = Idx<NameDef>;
 
 impl ops::Index<ExprId> for Module {
     type Output = Expr;
     fn index(&self, index: ExprId) -> &Self::Output {
         &self.exprs[index]
+    }
+}
+
+impl ops::Index<NameDefId> for Module {
+    type Output = NameDef;
+    fn index(&self, index: NameDefId) -> &Self::Output {
+        &self.name_defs[index]
     }
 }
 
@@ -57,6 +66,7 @@ pub type AstPtr = rowan::ast::SyntaxNodePtr<syntax::NixLanguage>;
 pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
+    name_def_map: HashMap<AstPtr, NameDefId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +75,13 @@ pub enum Expr {
     Ident(Name),
     Literal(Literal),
     Apply(ExprId, ExprId),
+    Lambda(Option<NameDefId>, Option<Pat>, ExprId),
     // TODO
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameDef {
+    pub name: Name,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -77,7 +93,7 @@ pub enum Literal {
     // TODO
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Name(SmolStr);
 
 impl From<&'_ str> for Name {
@@ -112,4 +128,10 @@ pub enum PathAnchor {
     Absolute,
     Home,
     Search(Box<str>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Pat {
+    pub fields: Box<[(Option<NameDefId>, Option<ExprId>)]>,
+    pub ellipsis: bool,
 }
