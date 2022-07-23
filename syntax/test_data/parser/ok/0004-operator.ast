@@ -81,7 +81,8 @@ SOURCE_FILE@0..71
                     QUESTION@62..63 "?"
                     ATTR_PATH@63..66
                       SPACE@63..64 " "
-                      IDENT@64..65 "a"
+                      NAME@64..65
+                        IDENT@64..65 "a"
                       SPACE@65..66 " "
           SLASH2@66..68 "//"
           SPACE@68..69 " "

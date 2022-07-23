@@ -6,12 +6,14 @@ SOURCE_FILE@0..209
       L_PAREN@4..5 "("
       LAMBDA@5..12
         PARAM@5..6
-          IDENT@5..6 "a"
+          NAME@5..6
+            IDENT@5..6 "a"
         COLON@6..7 ":"
         SPACE@7..8 " "
         LAMBDA@8..12
           PARAM@8..9
-            IDENT@8..9 "b"
+            NAME@8..9
+              IDENT@8..9 "b"
           COLON@9..10 ":"
           SPACE@10..11 " "
           LITERAL@11..12
@@ -64,7 +66,8 @@ SOURCE_FILE@0..209
             L_CURLY@48..49 "{"
             SPACE@49..50 " "
             PAT_FIELD@50..52
-              IDENT@50..51 "a"
+              NAME@50..51
+                IDENT@50..51 "a"
               SPACE@51..52 " "
             R_CURLY@52..53 "}"
         COLON@53..54 ":"
@@ -81,7 +84,8 @@ SOURCE_FILE@0..209
             L_CURLY@61..62 "{"
             SPACE@62..63 " "
             PAT_FIELD@63..64
-              IDENT@63..64 "a"
+              NAME@63..64
+                IDENT@63..64 "a"
             COMMA@64..65 ","
             SPACE@65..66 " "
             R_CURLY@66..67 "}"
@@ -99,7 +103,8 @@ SOURCE_FILE@0..209
             L_CURLY@75..76 "{"
             SPACE@76..77 " "
             PAT_FIELD@77..78
-              IDENT@77..78 "a"
+              NAME@77..78
+                IDENT@77..78 "a"
             COMMA@78..79 ","
             SPACE@79..80 " "
             DOT3@80..83 "..."
@@ -119,11 +124,13 @@ SOURCE_FILE@0..209
             L_CURLY@93..94 "{"
             SPACE@94..95 " "
             PAT_FIELD@95..96
-              IDENT@95..96 "a"
+              NAME@95..96
+                IDENT@95..96 "a"
             COMMA@96..97 ","
             SPACE@97..98 " "
             PAT_FIELD@98..100
-              IDENT@98..99 "b"
+              NAME@98..99
+                IDENT@98..99 "b"
               SPACE@99..100 " "
             R_CURLY@100..101 "}"
         COLON@101..102 ":"
@@ -156,7 +163,8 @@ SOURCE_FILE@0..209
             L_CURLY@124..125 "{"
             SPACE@125..126 " "
             PAT_FIELD@126..135
-              IDENT@126..127 "a"
+              NAME@126..127
+                IDENT@126..127 "a"
               SPACE@127..128 " "
               QUESTION@128..129 "?"
               SPACE@129..130 " "
@@ -167,12 +175,13 @@ SOURCE_FILE@0..209
                     R_CURLY@131..132 "}"
                 COLON@132..133 ":"
                 SPACE@133..134 " "
-                REF@134..135
+                NAME@134..135
                   IDENT@134..135 "a"
             COMMA@135..136 ","
             SPACE@136..137 " "
             PAT_FIELD@137..138
-              IDENT@137..138 "b"
+              NAME@137..138
+                IDENT@137..138 "b"
             COMMA@138..139 ","
             SPACE@139..140 " "
             DOT3@140..143 "..."
@@ -188,7 +197,8 @@ SOURCE_FILE@0..209
       L_PAREN@153..154 "("
       LAMBDA@154..162
         PARAM@154..159
-          IDENT@154..155 "a"
+          NAME@154..155
+            IDENT@154..155 "a"
           AT@155..156 "@"
           PAT@156..159
             L_CURLY@156..157 "{"
@@ -204,13 +214,15 @@ SOURCE_FILE@0..209
       L_PAREN@166..167 "("
       LAMBDA@167..177
         PARAM@167..174
-          IDENT@167..168 "a"
+          NAME@167..168
+            IDENT@167..168 "a"
           AT@168..169 "@"
           PAT@169..174
             L_CURLY@169..170 "{"
             SPACE@170..171 " "
             PAT_FIELD@171..173
-              IDENT@171..172 "a"
+              NAME@171..172
+                IDENT@171..172 "a"
               SPACE@172..173 " "
             R_CURLY@173..174 "}"
         COLON@174..175 ":"
@@ -228,7 +240,8 @@ SOURCE_FILE@0..209
             SPACE@183..184 " "
             R_CURLY@184..185 "}"
           AT@185..186 "@"
-          IDENT@186..187 "a"
+          NAME@186..187
+            IDENT@186..187 "a"
         COLON@187..188 ":"
         SPACE@188..189 " "
         LITERAL@189..190
@@ -243,11 +256,13 @@ SOURCE_FILE@0..209
             L_CURLY@195..196 "{"
             SPACE@196..197 " "
             PAT_FIELD@197..199
-              IDENT@197..198 "a"
+              NAME@197..198
+                IDENT@197..198 "a"
               SPACE@198..199 " "
             R_CURLY@199..200 "}"
           AT@200..201 "@"
-          IDENT@201..202 "a"
+          NAME@201..202
+            IDENT@201..202 "a"
         COLON@202..203 ":"
         SPACE@203..204 " "
         LITERAL@204..205

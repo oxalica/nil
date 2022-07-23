@@ -4,13 +4,15 @@ SOURCE_FILE@0..160
     SPACE@3..6 "\n  "
     ATTR_PATH_VALUE@6..27
       ATTR_PATH@6..23
-        IDENT@6..7 "a"
+        NAME@6..7
+          IDENT@6..7 "a"
         DOT@7..8 "."
-        IDENT@8..9 "b"
+        NAME@8..9
+          IDENT@8..9 "b"
         DOT@9..10 "."
         DYNAMIC@10..14
           DOLLAR_L_CURLY@10..12 "${"
-          REF@12..13
+          NAME@12..13
             IDENT@12..13 "c"
           R_CURLY@13..14 "}"
         DOT@14..15 "."
@@ -19,7 +21,7 @@ SOURCE_FILE@0..160
           STRING_FRAGMENT@16..17 "d"
           DYNAMIC@17..21
             DOLLAR_L_CURLY@17..19 "${"
-            REF@19..20
+            NAME@19..20
               IDENT@19..20 "e"
             R_CURLY@20..21 "}"
           DQUOTE@21..22 "\""
@@ -33,11 +35,12 @@ SOURCE_FILE@0..160
     INHERIT@30..49
       KW_INHERIT@30..37 "inherit"
       SPACE@37..38 " "
-      IDENT@38..39 "a"
+      NAME@38..39
+        IDENT@38..39 "a"
       SPACE@39..40 " "
       DYNAMIC@40..44
         DOLLAR_L_CURLY@40..42 "${"
-        REF@42..43
+        NAME@42..43
           IDENT@42..43 "b"
         R_CURLY@43..44 "}"
       SPACE@44..45 " "
@@ -51,11 +54,12 @@ SOURCE_FILE@0..160
       ATTR_PATH@52..61
         DYNAMIC@52..58
           DOLLAR_L_CURLY@52..54 "${"
-          REF@54..57
+          NAME@54..57
             IDENT@54..57 "dyn"
           R_CURLY@57..58 "}"
         DOT@58..59 "."
-        IDENT@59..60 "a"
+        NAME@59..60
+          IDENT@59..60 "a"
         SPACE@60..61 " "
       EQ@61..62 "="
       SPACE@62..63 " "
@@ -69,16 +73,17 @@ SOURCE_FILE@0..160
       PAREN@76..83
         L_PAREN@76..77 "("
         BINARY_OP@77..82
-          REF@77..78
+          NAME@77..78
             IDENT@77..78 "a"
           SPACE@78..79 " "
           PLUS@79..80 "+"
           SPACE@80..81 " "
-          REF@81..82
+          NAME@81..82
             IDENT@81..82 "b"
         R_PAREN@82..83 ")"
       SPACE@83..84 " "
-      IDENT@84..85 "c"
+      NAME@84..85
+        IDENT@84..85 "c"
       SEMICOLON@85..86 ";"
     SPACE@86..87 "\n"
     KW_IN@87..89 "in"
@@ -89,14 +94,17 @@ SOURCE_FILE@0..160
       INHERIT@94..104
         KW_INHERIT@94..101 "inherit"
         SPACE@101..102 " "
-        IDENT@102..103 "c"
+        NAME@102..103
+          IDENT@102..103 "c"
         SEMICOLON@103..104 ";"
       SPACE@104..107 "\n  "
       ATTR_PATH_VALUE@107..128
         ATTR_PATH@107..111
-          IDENT@107..108 "d"
+          NAME@107..108
+            IDENT@107..108 "d"
           DOT@108..109 "."
-          IDENT@109..110 "e"
+          NAME@109..110
+            IDENT@109..110 "e"
           SPACE@110..111 " "
         EQ@111..112 "="
         SPACE@112..113 " "
@@ -107,7 +115,8 @@ SOURCE_FILE@0..160
           SPACE@118..119 " "
           ATTR_PATH_VALUE@119..125
             ATTR_PATH@119..121
-              IDENT@119..120 "f"
+              NAME@119..120
+                IDENT@119..120 "f"
               SPACE@120..121 " "
             EQ@121..122 "="
             SPACE@122..123 " "
@@ -122,7 +131,7 @@ SOURCE_FILE@0..160
         ATTR_PATH@131..136
           DYNAMIC@131..135
             DOLLAR_L_CURLY@131..133 "${"
-            REF@133..134
+            NAME@133..134
               IDENT@133..134 "f"
             R_CURLY@134..135 "}"
           SPACE@135..136 " "
@@ -135,7 +144,8 @@ SOURCE_FILE@0..160
           SPACE@143..144 " "
           ATTR_PATH_VALUE@144..154
             ATTR_PATH@144..149
-              IDENT@144..148 "body"
+              NAME@144..148
+                IDENT@144..148 "body"
               SPACE@148..149 " "
             EQ@149..150 "="
             SPACE@150..151 " "

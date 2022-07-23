@@ -230,7 +230,9 @@ impl<'i> Parser<'i> {
                     self.pat();
                     if self.peek_non_ws() == Some(T![@]) {
                         self.bump(); // @
+                        self.start_node(NAME);
                         self.want(IDENT);
+                        self.finish_node();
                     }
                     self.finish_node();
 
@@ -251,7 +253,9 @@ impl<'i> Parser<'i> {
                     self.start_node(LAMBDA);
 
                     self.start_node(PARAM);
+                    self.start_node(NAME);
                     self.bump(); // IDENT
+                    self.finish_node();
                     if self.peek_non_ws() == Some(T![@]) {
                         self.bump();
                         if self.peek_non_ws() == Some(T!['{']) {
@@ -398,16 +402,21 @@ impl<'i> Parser<'i> {
             self.start_node_at(cp, SELECT);
             self.bump();
             self.attrpath_opt();
-            // Check contectual keyword "or".
-            self.ws();
-            match self.tokens.last() {
-                Some(&(IDENT, range)) if &self.src[range] == "or" => {
-                    self.tokens.pop();
-                    self.builder.token(T![or].into(), &self.src[range]);
-                    self.expr_select_opt();
-                }
-                _ => {}
+
+            if self.peek_non_ws() == Some(T![or]) {
+                self.bump();
+                self.expr_select_opt();
             }
+            self.finish_node();
+
+        // Yes, this is wierd, but Nix parse `or` immediately after a non-select atom expression,
+        // and construct a Apply node, with higher priority than left-associative Apply.
+        // `a b or c` => `(a (b or)) c`
+        } else if self.peek_non_ws() == Some(T![or]) {
+            self.start_node_at(cp, APPLY);
+            self.start_node(NAME);
+            self.bump(); // or
+            self.finish_node();
             self.finish_node();
         }
     }
@@ -418,8 +427,8 @@ impl<'i> Parser<'i> {
         // This must matches SyntaxKind::can_start_atom_expr.
         match self.peek_non_ws() {
             Some(IDENT) => {
-                self.start_node(REF);
-                self.bump();
+                self.start_node(NAME);
+                self.bump(); // IDENT
                 self.finish_node();
             }
             Some(INT | FLOAT | RELATIVE_PATH | ABSOLUTE_PATH | HOME_PATH | SEARCH_PATH | URI) => {
@@ -521,7 +530,9 @@ impl<'i> Parser<'i> {
                 }
                 Some(IDENT) => {
                     self.start_node(PAT_FIELD);
+                    self.start_node(NAME);
                     self.bump(); // IDENT
+                    self.finish_node();
                     if self.peek_non_ws() == Some(T![?]) {
                         self.bump(); // ?
                         self.expr_function_opt();
@@ -603,7 +614,11 @@ impl<'i> Parser<'i> {
     fn attr_opt(&mut self) {
         // This must matches SyntaxKind::can_start_attr.
         match self.peek_non_ws() {
-            Some(IDENT) => self.bump(),
+            Some(IDENT | T![or]) => {
+                self.start_node(NAME);
+                self.bump();
+                self.finish_node();
+            }
             Some(T!["${"]) => self.dynamic(),
             Some(T!['"']) => self.string(STRING),
             _ => self.error(Error::MissingAttr),
@@ -681,7 +696,7 @@ impl SyntaxKind {
 
     // This must matches Parser::attr_opt.
     fn can_start_attr(self) -> bool {
-        matches!(self, T!["${"] | T!['"'] | IDENT)
+        matches!(self, T!["${"] | T!['"'] | T![or] | IDENT)
     }
 
     // This must matches Parser::expr_atom_opt.

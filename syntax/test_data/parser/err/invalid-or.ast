@@ -1,0 +1,29 @@
+Unexpected token at 2
+Unexpected token at 9
+Unexpected token at 14
+SOURCE_FILE@0..21
+  BINARY_OP@0..21
+    BINARY_OP@0..12
+      LIST@0..6
+        L_BRACK@0..1 "["
+        SPACE@1..2 " "
+        KW_OR@2..4 "or"
+        SPACE@4..5 " "
+        R_BRACK@5..6 "]"
+      SPACE@6..7 " "
+      PLUS@7..8 "+"
+      SPACE@8..9 " "
+      APPLY@9..11
+        NAME@9..11
+          KW_OR@9..11 "or"
+      SPACE@11..12 " "
+    PLUS@12..13 "+"
+    SPACE@13..14 " "
+    APPLY@14..21
+      APPLY@14..16
+        NAME@14..16
+          KW_OR@14..16 "or"
+      SPACE@16..17 " "
+      NAME@17..20
+        IDENT@17..20 "foo"
+      SPACE@20..21 "\n"

@@ -1,10 +1,11 @@
-SOURCE_FILE@0..45
-  LET_IN@0..45
+SOURCE_FILE@0..42
+  LET_IN@0..42
     KW_LET@0..3 "let"
     SPACE@3..4 " "
     ATTR_PATH_VALUE@4..11
       ATTR_PATH@4..7
-        IDENT@4..6 "or"
+        NAME@4..6
+          KW_OR@4..6 "or"
         SPACE@6..7 " "
       EQ@7..8 "="
       SPACE@8..9 " "
@@ -14,7 +15,7 @@ SOURCE_FILE@0..45
     SPACE@11..12 " "
     KW_IN@12..14 "in"
     SPACE@14..15 " "
-    BINARY_OP@15..45
+    BINARY_OP@15..42
       LIST@15..30
         L_BRACK@15..16 "["
         SPACE@16..17 " "
@@ -25,7 +26,8 @@ SOURCE_FILE@0..45
             R_CURLY@19..20 "}"
           DOT@20..21 "."
           ATTR_PATH@21..24
-            IDENT@21..23 "or"
+            NAME@21..23
+              KW_OR@21..23 "or"
             SPACE@23..24 " "
           KW_OR@24..26 "or"
           SPACE@26..27 " "
@@ -36,15 +38,18 @@ SOURCE_FILE@0..45
       SPACE@30..31 " "
       PLUS@31..32 "+"
       SPACE@32..33 " "
-      APPLY@33..45
-        APPLY@33..42
-          REF@33..38
-            IDENT@33..38 "foldr"
-          SPACE@38..39 " "
-          REF@39..41
-            IDENT@39..41 "or"
-          SPACE@41..42 " "
-        ATTR_SET@42..44
-          L_CURLY@42..43 "{"
-          R_CURLY@43..44 "}"
-        SPACE@44..45 "\n"
+      APPLY@33..42
+        APPLY@33..39
+          NAME@33..34
+            IDENT@33..34 "f"
+          SPACE@34..35 " "
+          APPLY@35..39
+            NAME@35..36
+              IDENT@35..36 "a"
+            SPACE@36..37 " "
+            NAME@37..39
+              KW_OR@37..39 "or"
+        SPACE@39..40 " "
+        NAME@40..41
+          IDENT@40..41 "b"
+        SPACE@41..42 "\n"

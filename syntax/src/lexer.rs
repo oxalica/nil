@@ -152,7 +152,7 @@ pub fn lex(src: &[u8]) -> LexTokens {
                     b"in" => T![in],
                     b"inherit" => T![inherit],
                     b"let" => T![let],
-                    // b"or" => T![or], Handled in parser.
+                    b"or" => T![or],
                     b"rec" => T![rec],
                     b"then" => T![then],
                     b"with" => T![with],
@@ -329,6 +329,27 @@ mod test {
                 STRING_FRAGMENT " $$x $ "
                 STRING_FRAGMENT "$"
                 QUOTE2 "''"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn or_is_keyword() {
+        check_lex(
+            "{ or = 1; } or",
+            expect![[r#"
+                L_CURLY "{"
+                SPACE " "
+                KW_OR "or"
+                SPACE " "
+                EQ "="
+                SPACE " "
+                INT "1"
+                SEMICOLON ";"
+                SPACE " "
+                R_CURLY "}"
+                SPACE " "
+                KW_OR "or"
             "#]],
         );
     }

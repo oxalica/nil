@@ -41,7 +41,8 @@ SOURCE_FILE@0..78
           SPACE@57..60 "\n  "
           LAMBDA@60..78
             PARAM@60..61
-              IDENT@60..61 "a"
+              NAME@60..61
+                IDENT@60..61 "a"
             COLON@61..62 ":"
             SPACE@62..65 "\n  "
             LAMBDA@65..78
@@ -50,7 +51,8 @@ SOURCE_FILE@0..78
                   L_CURLY@65..66 "{"
                   SPACE@66..67 " "
                   PAT_FIELD@67..69
-                    IDENT@67..68 "b"
+                    NAME@67..68
+                      IDENT@67..68 "b"
                     SPACE@68..69 " "
                   R_CURLY@69..70 "}"
               COLON@70..71 ":"
