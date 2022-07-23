@@ -15,15 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
-name = "cbitset"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29b6ad25ae296159fb0da12b970b2fe179b234584d7cd294c891e2bbb284466b"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -146,19 +137,10 @@ version = "0.0.0"
 dependencies = [
  "expect-test",
  "la-arena",
- "rnix",
  "rowan",
  "salsa",
  "smol_str",
-]
-
-[[package]]
-name = "num-traits"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
-dependencies = [
- "autocfg",
+ "syntax",
 ]
 
 [[package]]
@@ -240,15 +222,6 @@ name = "regex-syntax"
 version = "0.6.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
-
-[[package]]
-name = "rnix"
-version = "0.11.0-dev"
-source = "git+https://github.com/oxalica/rnix-parser.git#80fabb304defc3b488f21d225128bde0758d1eb3"
-dependencies = [
- "cbitset",
- "rowan",
-]
 
 [[package]]
 name = "rowan"

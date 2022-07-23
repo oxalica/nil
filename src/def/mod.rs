@@ -23,8 +23,8 @@ fn module_with_source_map(
     db: &dyn DefDatabase,
     file_id: FileId,
 ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
-    let root = db.parse(file_id);
-    let (module, source_map) = lower::lower(root);
+    let parse = db.parse(file_id);
+    let (module, source_map) = lower::lower(parse.map(|p| p.root()));
     (Arc::new(module), Arc::new(source_map))
 }
 
@@ -50,7 +50,7 @@ impl ops::Index<ExprId> for Module {
     }
 }
 
-pub type AstPtr = rowan::ast::SyntaxNodePtr<rnix::NixLanguage>;
+pub type AstPtr = rowan::ast::SyntaxNodePtr<syntax::NixLanguage>;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ModuleSourceMap {

@@ -1,5 +1,5 @@
-use rnix::AST;
 use std::sync::Arc;
+use syntax::Parse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileId(pub u32);
@@ -31,12 +31,12 @@ pub trait SourceDatabase {
     #[salsa::input]
     fn file_content(&self, file_id: FileId) -> Arc<[u8]>;
 
-    fn parse(&self, file_id: FileId) -> InFile<AST>;
+    fn parse(&self, file_id: FileId) -> InFile<Parse>;
 }
 
-fn parse(db: &dyn SourceDatabase, file_id: FileId) -> InFile<AST> {
+fn parse(db: &dyn SourceDatabase, file_id: FileId) -> InFile<Parse> {
     let content = db.file_content(file_id);
     let content = std::str::from_utf8(&content).unwrap_or_default();
-    let ast = rnix::parse(content);
-    InFile::new(file_id, ast)
+    let parse = syntax::parse_file(content);
+    InFile::new(file_id, parse)
 }

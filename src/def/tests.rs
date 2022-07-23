@@ -4,15 +4,11 @@ use expect_test::expect;
 
 #[test]
 fn module_basic() {
-    let (db, root_id) = TestDB::from_file(
-        r#"
-        foo 123 ./bar.nix
-        "#,
-    );
+    let (db, root_id) = TestDB::from_file("foo 123");
     expect![[r#"
         Module {
             exprs: Arena {
-                len: 5,
+                len: 3,
                 data: [
                     Ident(
                         Name(
@@ -28,22 +24,6 @@ fn module_basic() {
                         Idx::<Expr>(0),
                         Idx::<Expr>(1),
                     ),
-                    Literal(
-                        Path(
-                            Path {
-                                anchor: Relative(
-                                    FileId(
-                                        0,
-                                    ),
-                                ),
-                                raw_segments: "./bar.nix",
-                            },
-                        ),
-                    ),
-                    Apply(
-                        Idx::<Expr>(2),
-                        Idx::<Expr>(3),
-                    ),
                 ],
             },
         }
@@ -57,24 +37,16 @@ fn module_basic() {
     expect![[r#"
         [
             SyntaxNodePtr {
-                kind: NODE_IDENT,
-                range: 9..12,
+                kind: NAME,
+                range: 0..3,
             },
             SyntaxNodePtr {
-                kind: NODE_LITERAL,
-                range: 13..16,
+                kind: LITERAL,
+                range: 4..7,
             },
             SyntaxNodePtr {
-                kind: NODE_APPLY,
-                range: 9..16,
-            },
-            SyntaxNodePtr {
-                kind: NODE_LITERAL,
-                range: 17..26,
-            },
-            SyntaxNodePtr {
-                kind: NODE_APPLY,
-                range: 9..26,
+                kind: APPLY,
+                range: 0..7,
             },
         ]
     "#]]
