@@ -1,4 +1,4 @@
-use super::{AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap};
+use super::{AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, Path, PathAnchor};
 use crate::source::{FileId, InFile};
 use rowan::ast::AstNode;
 use syntax::ast::{self, LiteralKind};
@@ -71,16 +71,61 @@ impl LowerCtx {
     fn lower_literal(&mut self, lit: ast::Literal) -> Option<Literal> {
         let kind = lit.kind()?;
         let tok = lit.token().unwrap();
-        let text = tok.text();
+        let mut text = tok.text();
+
+        fn normalize_path(path: &str) -> (usize, Box<str>) {
+            let mut ret = String::new();
+            let mut supers = 0usize;
+            for seg in path.split('/').filter(|&seg| !seg.is_empty() && seg != ".") {
+                if seg != ".." {
+                    if !ret.is_empty() {
+                        ret.push('/');
+                    }
+                    ret.push_str(seg);
+                } else if ret.is_empty() {
+                    supers += 1;
+                } else {
+                    let last_slash = ret.bytes().rposition(|c| c != b'/').unwrap_or(0);
+                    ret.truncate(last_slash);
+                }
+            }
+            (supers, ret.into())
+        }
 
         Some(match kind {
             LiteralKind::Int => Literal::Int(text.parse::<i64>().ok()?),
-            LiteralKind::Float => todo!(),
+            LiteralKind::Float => Literal::Float(text.parse::<f64>().unwrap().into()),
             LiteralKind::Uri => Literal::String(text.into()),
-            LiteralKind::RelativePath => todo!(),
-            LiteralKind::AbsolutePath => todo!(),
-            LiteralKind::HomePath => todo!(),
-            LiteralKind::SearchPath => todo!(),
+            LiteralKind::RelativePath
+            | LiteralKind::AbsolutePath
+            | LiteralKind::HomePath
+            | LiteralKind::SearchPath => {
+                let anchor = match kind {
+                    LiteralKind::RelativePath => PathAnchor::Relative(self.file_id),
+                    LiteralKind::AbsolutePath => PathAnchor::Absolute,
+                    LiteralKind::HomePath => {
+                        text = &text[2..]; // Strip "~/".
+                        PathAnchor::Home
+                    }
+                    LiteralKind::SearchPath => {
+                        text = &text[1..text.len() - 1]; // Strip '<' and '>'.
+                        let (search_name, path) = text.split_once('/').unwrap();
+                        text = path;
+                        PathAnchor::Search(search_name.into())
+                    }
+                    _ => unreachable!(),
+                };
+                let (mut supers, raw_segments) = normalize_path(text);
+                if kind == LiteralKind::AbsolutePath {
+                    // Extra ".." has no effect for absolute path.
+                    supers = 0;
+                }
+                Literal::Path(Path {
+                    anchor,
+                    supers,
+                    raw_segments,
+                })
+            }
         })
     }
 }

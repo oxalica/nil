@@ -5,6 +5,7 @@ mod tests;
 
 use crate::source::{FileId, SourceDatabase};
 use la_arena::{Arena, Idx};
+use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::ops;
@@ -70,6 +71,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     Int(i64),
+    Float(OrderedFloat<f64>),
     String(Box<str>),
     Path(Path),
     // TODO
@@ -93,6 +95,7 @@ impl From<String> for Name {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
     pub anchor: PathAnchor,
+    pub supers: usize,
     // Normalized path separated by `/`, with no `.` or `..` segments.
     pub raw_segments: Box<str>,
 }
