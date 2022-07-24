@@ -1,5 +1,5 @@
+use crate::base::{FileId, SourceDatabase, SourceDatabaseStorage};
 use crate::def::DefDatabaseStorage;
-use crate::source::{FileId, SourceDatabase, SourceDatabaseStorage};
 use rowan::{ast::AstNode, TextSize};
 use syntax::NixLanguage;
 

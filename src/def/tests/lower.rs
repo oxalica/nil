@@ -1,5 +1,5 @@
+use crate::base::{FileId, InFile};
 use crate::def::lower::lower;
-use crate::source::{FileId, InFile};
 use expect_test::{expect, Expect};
 use std::fmt::Write;
 use syntax::parse_file;

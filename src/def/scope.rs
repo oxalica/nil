@@ -1,5 +1,5 @@
 use super::{DefDatabase, Expr, ExprId, Module, Name, NameDefId};
-use crate::source::FileId;
+use crate::base::FileId;
 use la_arena::{Arena, Idx};
 use std::borrow::Borrow;
 use std::collections::HashMap;

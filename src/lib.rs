@@ -1,6 +1,6 @@
+mod base;
 mod def;
 mod ide;
-mod source;
 
 #[cfg(test)]
 mod tests;

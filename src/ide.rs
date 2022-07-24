@@ -1,4 +1,4 @@
-use crate::{def::DefDatabaseStorage, source::SourceDatabaseStorage};
+use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage};
 use std::fmt;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]

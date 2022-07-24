@@ -4,7 +4,7 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use crate::source::{FileId, SourceDatabase};
+use crate::base::{FileId, SourceDatabase};
 use la_arena::{Arena, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;

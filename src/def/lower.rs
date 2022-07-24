@@ -2,7 +2,7 @@ use super::{
     AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, Pat, Path,
     PathAnchor,
 };
-use crate::source::{FileId, InFile};
+use crate::base::{FileId, InFile};
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use syntax::ast::{self, LiteralKind};
