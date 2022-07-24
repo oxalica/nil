@@ -44,7 +44,8 @@ impl LowerCtx {
             .map_or_else(Default::default, |tok| tok.text().into());
         let id = self.module.name_defs.alloc(NameDef { name });
         let ptr = AstPtr::new(node.syntax());
-        self.source_map.name_def_map.insert(ptr, id);
+        self.source_map.name_def_map.insert(ptr.clone(), id);
+        self.source_map.name_def_map_rev.insert(id, ptr);
         id
     }
 

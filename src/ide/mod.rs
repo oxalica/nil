@@ -1,5 +1,16 @@
+use crate::FileId;
 use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage};
+use rowan::TextRange;
 use std::fmt;
+
+mod goto_definition;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationTarget {
+    pub file_id: FileId,
+    pub full_range: TextRange,
+    pub focus_range: TextRange,
+}
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
 #[derive(Default)]

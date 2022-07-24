@@ -5,5 +5,5 @@ mod ide;
 #[cfg(test)]
 mod tests;
 
-pub use base::{Change, FileId};
+pub use base::{Change, FileId, FilePos, InFile};
 pub use ide::RootDatabase;

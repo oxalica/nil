@@ -63,3 +63,34 @@ pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<NixLanguage>;
 pub type SyntaxElementChildren = rowan::SyntaxElementChildren<NixLanguage>;
 pub type PreorderWithTokens = rowan::api::PreorderWithTokens<NixLanguage>;
+
+/// Matches a `SyntaxNode` against an `ast` type.
+///
+/// # Example:
+///
+/// ```
+/// # use syntax::{SyntaxNode, match_ast, ast};
+/// # fn main() {
+/// # let node: SyntaxNode = return;
+/// match_ast! {
+///     match node {
+///         ast::AttrpathValue(it) => {},
+///         ast::PatField(it) => {},
+///         _ => {},
+///     }
+/// }
+/// # }
+/// ```
+#[macro_export]
+macro_rules! match_ast {
+    (match $node:ident { $($tt:tt)* }) => {
+        match_ast!(match ($node) { $($tt)* })
+    };
+    (match ($node:expr) {
+        $( $( $path:ident )::+ ($it:pat) => $res:expr, )*
+        _ => $catch_all:expr $(,)?
+    }) => {{
+        $( if let Some($it) = <$($path)::* as $crate::rowan::ast::AstNode>::cast($node.clone()) { $res } else )*
+        { $catch_all }
+    }};
+}

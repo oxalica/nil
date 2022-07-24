@@ -1,3 +1,4 @@
+use rowan::TextSize;
 use salsa::Durability;
 use std::sync::Arc;
 use syntax::Parse;
@@ -23,6 +24,8 @@ impl<T> InFile<T> {
         }
     }
 }
+
+pub type FilePos = InFile<TextSize>;
 
 #[salsa::query_group(SourceDatabaseStorage)]
 pub trait SourceDatabase {

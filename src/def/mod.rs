@@ -5,7 +5,7 @@ mod scope;
 mod tests;
 
 use crate::base::{FileId, SourceDatabase};
-use la_arena::{Arena, Idx};
+use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
 use std::borrow::Borrow;
@@ -25,6 +25,9 @@ pub trait DefDatabase: SourceDatabase {
 
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
+
+    #[salsa::invoke(ModuleScopes::lookup_name_query)]
+    fn lookup_name(&self, file_id: FileId, expr_id: ExprId) -> Option<NameDefId>;
 }
 
 fn module_with_source_map(
@@ -75,6 +78,21 @@ pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
     name_def_map: HashMap<AstPtr, NameDefId>,
+    name_def_map_rev: ArenaMap<NameDefId, AstPtr>,
+}
+
+impl ModuleSourceMap {
+    pub fn node_expr(&self, node: AstPtr) -> Option<ExprId> {
+        self.expr_map.get(&node).copied()
+    }
+
+    pub fn expr_node(&self, expr_id: ExprId) -> Option<AstPtr> {
+        self.expr_map_rev.get(&expr_id).cloned()
+    }
+
+    pub fn name_def_node(&self, def_id: NameDefId) -> Option<AstPtr> {
+        self.name_def_map_rev.get(def_id).cloned()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

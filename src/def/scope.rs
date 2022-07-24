@@ -1,6 +1,6 @@
 use super::{DefDatabase, Expr, ExprId, Module, Name, NameDefId};
 use crate::base::FileId;
-use la_arena::{Arena, Idx};
+use la_arena::{Arena, ArenaMap, Idx};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -10,7 +10,7 @@ use std::{iter, ops};
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ModuleScopes {
     scopes: Arena<ScopeData>,
-    scope_by_expr: HashMap<ExprId, ScopeId>,
+    scope_by_expr: ArenaMap<ExprId, ScopeId>,
 }
 
 pub type ScopeId = Idx<ScopeData>;
@@ -37,12 +37,30 @@ impl ModuleScopes {
         Arc::new(this)
     }
 
+    pub(crate) fn lookup_name_query(
+        db: &dyn DefDatabase,
+        file_id: FileId,
+        expr_id: ExprId,
+    ) -> Option<NameDefId> {
+        let module = db.module(file_id);
+        let name = match &module[expr_id] {
+            Expr::Ident(name) => name,
+            _ => return None,
+        };
+        db.scopes(file_id).lookup(expr_id, name)
+    }
+
     pub fn scope_by_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
-        self.scope_by_expr.get(&expr_id).copied()
+        self.scope_by_expr.get(expr_id).copied()
     }
 
     pub fn ancestors(&self, scope_id: ScopeId) -> impl Iterator<Item = &'_ ScopeData> + '_ {
         iter::successors(Some(scope_id), |&i| self[i].parent).map(|i| &self[i])
+    }
+
+    pub fn lookup(&self, expr_id: ExprId, name: &Name) -> Option<NameDefId> {
+        self.ancestors(self.scope_by_expr(expr_id)?)
+            .find_map(|scope| scope.get(name))
     }
 
     fn new_root_scope(&mut self) -> ScopeId {
