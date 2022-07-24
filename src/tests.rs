@@ -1,5 +1,6 @@
-use crate::base::{FileId, SourceDatabase, SourceDatabaseStorage};
+use crate::base::{SourceDatabase, SourceDatabaseStorage};
 use crate::def::DefDatabaseStorage;
+use crate::{Change, FileId};
 use rowan::{ast::AstNode, TextSize};
 use syntax::NixLanguage;
 
@@ -17,8 +18,9 @@ impl TestDB {
     pub fn from_file(content: &str) -> (Self, FileId) {
         let mut db = Self::default();
         let root_id = FileId(0);
-        db.set_file_content(root_id, content.as_bytes().into());
-        db.set_file_source_root(root_id);
+        let mut change = Change::new();
+        change.change_file(root_id, Some(content.into()));
+        change.apply(&mut db);
         (db, root_id)
     }
 

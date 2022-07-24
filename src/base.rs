@@ -1,3 +1,4 @@
+use salsa::Durability;
 use std::sync::Arc;
 use syntax::Parse;
 
@@ -26,17 +27,36 @@ impl<T> InFile<T> {
 #[salsa::query_group(SourceDatabaseStorage)]
 pub trait SourceDatabase {
     #[salsa::input]
-    fn file_source_root(&self) -> FileId;
-
-    #[salsa::input]
-    fn file_content(&self, file_id: FileId) -> Arc<[u8]>;
+    fn file_content(&self, file_id: FileId) -> Arc<str>;
 
     fn parse(&self, file_id: FileId) -> InFile<Parse>;
 }
 
 fn parse(db: &dyn SourceDatabase, file_id: FileId) -> InFile<Parse> {
     let content = db.file_content(file_id);
-    let content = std::str::from_utf8(&content).unwrap_or_default();
-    let parse = syntax::parse_file(content);
+    let parse = syntax::parse_file(&content);
     InFile::new(file_id, parse)
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Change {
+    pub file_changes: Vec<(FileId, Option<Arc<str>>)>,
+}
+
+impl Change {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn change_file(&mut self, file_id: FileId, content: Option<Arc<str>>) {
+        self.file_changes.push((file_id, content));
+    }
+
+    pub fn apply(self, db: &mut dyn SourceDatabase) {
+        for (file_id, content) in self.file_changes {
+            let content = content.unwrap_or_else(|| String::new().into());
+            // TODO: Better guess of durability?
+            db.set_file_content_with_durability(file_id, content, Durability::HIGH);
+        }
+    }
 }
