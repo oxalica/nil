@@ -6,4 +6,4 @@ mod ide;
 mod tests;
 
 pub use base::{Change, FileId, FilePos, InFile};
-pub use ide::RootDatabase;
+pub use ide::{Analysis, AnalysisHost, RootDatabase};

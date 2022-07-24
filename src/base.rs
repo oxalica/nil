@@ -55,7 +55,7 @@ impl Change {
         self.file_changes.push((file_id, content));
     }
 
-    pub fn apply(self, db: &mut dyn SourceDatabase) {
+    pub(crate) fn apply(self, db: &mut dyn SourceDatabase) {
         for (file_id, content) in self.file_changes {
             let content = content.unwrap_or_else(|| String::new().into());
             // TODO: Better guess of durability?

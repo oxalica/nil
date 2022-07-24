@@ -1,6 +1,6 @@
-use crate::FileId;
-use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage};
+use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage, Change, FileId, FilePos};
 use rowan::TextRange;
+use salsa::{Cancelled, Database, Durability, ParallelDatabase};
 use std::fmt;
 
 mod goto_definition;
@@ -11,6 +11,8 @@ pub struct NavigationTarget {
     pub full_range: TextRange,
     pub focus_range: TextRange,
 }
+
+pub type Cancellable<T> = Result<T, Cancelled>;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
 #[derive(Default)]
@@ -31,5 +33,49 @@ impl salsa::ParallelDatabase for RootDatabase {
 impl fmt::Debug for RootDatabase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RootDatabase").finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct AnalysisHost {
+    db: RootDatabase,
+}
+
+impl AnalysisHost {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn snapshot(&self) -> Analysis {
+        Analysis {
+            db: self.db.snapshot(),
+        }
+    }
+
+    pub fn request_cancellation(&mut self) {
+        self.db.salsa_runtime_mut().synthetic_write(Durability::LOW);
+    }
+
+    pub fn apply_change(&mut self, change: Change) {
+        self.request_cancellation();
+        change.apply(&mut self.db);
+    }
+}
+
+#[derive(Debug)]
+pub struct Analysis {
+    db: salsa::Snapshot<RootDatabase>,
+}
+
+impl Analysis {
+    fn with_db<F, T>(&self, f: F) -> Cancellable<T>
+    where
+        F: FnOnce(&RootDatabase) -> T + std::panic::UnwindSafe,
+    {
+        Cancelled::catch(|| f(&self.db))
+    }
+
+    pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<NavigationTarget>> {
+        self.with_db(|db| goto_definition::goto_definition(db, pos.file_id, pos.value))
     }
 }
