@@ -1,4 +1,5 @@
 mod lower;
+mod scope;
 
 #[cfg(test)]
 mod tests;
@@ -7,9 +8,12 @@ use crate::source::{FileId, SourceDatabase};
 use la_arena::{Arena, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ops;
 use std::sync::Arc;
+
+pub use self::scope::{ModuleScopes, ScopeData, ScopeId};
 
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
@@ -18,6 +22,9 @@ pub trait DefDatabase: SourceDatabase {
     fn module(&self, file_id: FileId) -> Arc<Module>;
 
     fn source_map(&self, file_id: FileId) -> Arc<ModuleSourceMap>;
+
+    #[salsa::invoke(ModuleScopes::module_scopes_query)]
+    fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 }
 
 fn module_with_source_map(
@@ -37,10 +44,11 @@ fn source_map(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleSourceMap> {
     db.module_with_source_map(file_id).1
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     exprs: Arena<Expr>,
     name_defs: Arena<NameDef>,
+    entry_expr: ExprId,
 }
 
 pub type ExprId = Idx<Expr>;
@@ -93,7 +101,7 @@ pub enum Literal {
     // TODO
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Name(SmolStr);
 
 impl From<&'_ str> for Name {
@@ -105,6 +113,12 @@ impl From<&'_ str> for Name {
 impl From<String> for Name {
     fn from(s: String) -> Self {
         Self(s.into())
+    }
+}
+
+impl Borrow<str> for Name {
+    fn borrow(&self) -> &str {
+        &*self.0
     }
 }
 

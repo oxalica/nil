@@ -3,17 +3,25 @@ use super::{
     PathAnchor,
 };
 use crate::source::{FileId, InFile};
+use la_arena::Arena;
 use rowan::ast::AstNode;
 use syntax::ast::{self, LiteralKind};
 
 pub(super) fn lower(root: InFile<ast::SourceFile>) -> (Module, ModuleSourceMap) {
     let mut ctx = LowerCtx {
         file_id: root.file_id,
-        module: Module::default(),
+        module: Module {
+            exprs: Arena::new(),
+            name_defs: Arena::new(),
+            // Placeholder.
+            entry_expr: ExprId::from_raw(0.into()),
+        },
         source_map: ModuleSourceMap::default(),
     };
-    ctx.lower_expr_opt(root.value.expr());
-    (ctx.module, ctx.source_map)
+    let entry = ctx.lower_expr_opt(root.value.expr());
+    let mut module = ctx.module;
+    module.entry_expr = entry;
+    (module, ctx.source_map)
 }
 
 struct LowerCtx {

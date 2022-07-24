@@ -3,6 +3,7 @@ use crate::tests::TestDB;
 use expect_test::expect;
 
 mod lower;
+mod scope;
 
 #[test]
 fn source_map() {
