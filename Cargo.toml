@@ -16,4 +16,7 @@ syntax = { path = "./syntax" }
 expect-test = "1.3.0"
 
 [workspace]
-members = ["syntax"]
+members = [
+    "syntax",
+    "lsp",
+]

@@ -51,6 +51,10 @@ impl Change {
         Self::default()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.file_changes.is_empty()
+    }
+
     pub fn change_file(&mut self, file_id: FileId, content: Option<Arc<str>>) {
         self.file_changes.push((file_id, content));
     }
