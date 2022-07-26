@@ -19,7 +19,7 @@ pub(crate) fn goto_definition(
 
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(AstPtr::new(node.syntax()))?;
-    let def_id = db.lookup_name(file_id, expr_id)?;
+    let def_id = db.resolve_name(file_id, expr_id)?;
     let def_node = source_map
         .name_def_node(def_id)?
         .to_node(&parse.syntax_node());

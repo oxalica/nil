@@ -8,10 +8,7 @@ use crate::base::{FileId, SourceDatabase};
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::ops;
-use std::sync::Arc;
+use std::{collections::HashMap, ops, sync::Arc};
 
 pub use self::scope::{ModuleScopes, ScopeData, ScopeId};
 
@@ -26,8 +23,8 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 
-    #[salsa::invoke(ModuleScopes::lookup_name_query)]
-    fn lookup_name(&self, file_id: FileId, expr_id: ExprId) -> Option<NameDefId>;
+    #[salsa::invoke(ModuleScopes::resolve_name_query)]
+    fn resolve_name(&self, file_id: FileId, expr_id: ExprId) -> Option<NameDefId>;
 }
 
 fn module_with_source_map(
@@ -98,7 +95,7 @@ impl ModuleSourceMap {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Missing,
-    Ident(Name),
+    Reference(SmolStr),
     Literal(Literal),
     Apply(ExprId, ExprId),
     Lambda(Option<NameDefId>, Option<Pat>, ExprId),
@@ -107,37 +104,15 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameDef {
-    pub name: Name,
+    pub name: SmolStr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     Int(i64),
     Float(OrderedFloat<f64>),
-    String(Box<str>),
+    String(SmolStr),
     Path(Path),
-    // TODO
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Name(SmolStr);
-
-impl From<&'_ str> for Name {
-    fn from(s: &'_ str) -> Self {
-        Self(s.into())
-    }
-}
-
-impl From<String> for Name {
-    fn from(s: String) -> Self {
-        Self(s.into())
-    }
-}
-
-impl Borrow<str> for Name {
-    fn borrow(&self) -> &str {
-        &*self.0
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -145,7 +120,7 @@ pub struct Path {
     pub anchor: PathAnchor,
     pub supers: usize,
     // Normalized path separated by `/`, with no `.` or `..` segments.
-    pub raw_segments: Box<str>,
+    pub raw_segments: SmolStr,
 }
 
 impl Path {
@@ -159,7 +134,7 @@ pub enum PathAnchor {
     Relative(FileId),
     Absolute,
     Home,
-    Search(Box<str>),
+    Search(SmolStr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -1,11 +1,8 @@
-use super::{DefDatabase, Expr, ExprId, Module, Name, NameDefId};
+use super::{DefDatabase, Expr, ExprId, Module, NameDefId};
 use crate::base::FileId;
 use la_arena::{Arena, ArenaMap, Idx};
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::sync::Arc;
-use std::{iter, ops};
+use smol_str::SmolStr;
+use std::{collections::HashMap, iter, ops, sync::Arc};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ModuleScopes {
@@ -18,7 +15,7 @@ pub type ScopeId = Idx<ScopeData>;
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ScopeData {
     parent: Option<ScopeId>,
-    name_defs: HashMap<Name, NameDefId>,
+    name_defs: HashMap<SmolStr, NameDefId>,
 }
 
 impl ops::Index<ScopeId> for ModuleScopes {
@@ -37,17 +34,17 @@ impl ModuleScopes {
         Arc::new(this)
     }
 
-    pub(crate) fn lookup_name_query(
+    pub(crate) fn resolve_name_query(
         db: &dyn DefDatabase,
         file_id: FileId,
         expr_id: ExprId,
     ) -> Option<NameDefId> {
         let module = db.module(file_id);
         let name = match &module[expr_id] {
-            Expr::Ident(name) => name,
+            Expr::Reference(name) => name,
             _ => return None,
         };
-        db.scopes(file_id).lookup(expr_id, name)
+        db.scopes(file_id).resolve_anme(expr_id, name)
     }
 
     pub fn scope_by_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
@@ -58,9 +55,9 @@ impl ModuleScopes {
         iter::successors(Some(scope_id), |&i| self[i].parent).map(|i| &self[i])
     }
 
-    pub fn lookup(&self, expr_id: ExprId, name: &Name) -> Option<NameDefId> {
+    pub fn resolve_anme(&self, expr_id: ExprId, name: &SmolStr) -> Option<NameDefId> {
         self.ancestors(self.scope_by_expr(expr_id)?)
-            .find_map(|scope| scope.get(name))
+            .find_map(|scope| scope.resolve(name))
     }
 
     fn new_root_scope(&mut self) -> ScopeId {
@@ -70,7 +67,7 @@ impl ModuleScopes {
         })
     }
 
-    fn new_scope(&mut self, parent: ScopeId, name_defs: HashMap<Name, NameDefId>) -> ScopeId {
+    fn new_scope(&mut self, parent: ScopeId, name_defs: HashMap<SmolStr, NameDefId>) -> ScopeId {
         self.scopes.alloc(ScopeData {
             parent: Some(parent),
             name_defs,
@@ -80,7 +77,7 @@ impl ModuleScopes {
     fn traverse_expr(&mut self, module: &Module, scope_id: ScopeId, expr_id: ExprId) {
         self.scope_by_expr.insert(expr_id, scope_id);
         match module[expr_id] {
-            Expr::Missing | Expr::Ident(_) | Expr::Literal(_) => {}
+            Expr::Missing | Expr::Reference(_) | Expr::Literal(_) => {}
             Expr::Apply(func, arg) => {
                 self.traverse_expr(module, scope_id, func);
                 self.traverse_expr(module, scope_id, arg);
@@ -117,11 +114,7 @@ impl ScopeData {
         self.name_defs.values().copied()
     }
 
-    pub fn get<Q>(&self, name: &Q) -> Option<NameDefId>
-    where
-        Q: Hash + Eq,
-        Name: Borrow<Q>,
-    {
+    pub fn resolve(&self, name: &SmolStr) -> Option<NameDefId> {
         self.name_defs.get(name).copied()
     }
 }

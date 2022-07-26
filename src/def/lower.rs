@@ -5,6 +5,7 @@ use super::{
 use crate::base::{FileId, InFile};
 use la_arena::Arena;
 use rowan::ast::AstNode;
+use smol_str::SmolStr;
 use syntax::ast::{self, LiteralKind};
 
 pub(super) fn lower(root: InFile<ast::SourceFile>) -> (Module, ModuleSourceMap) {
@@ -68,7 +69,7 @@ impl LowerCtx {
                 let name = e
                     .token()
                     .map_or_else(Default::default, |tok| tok.text().into());
-                self.alloc_expr(Expr::Ident(name), ptr)
+                self.alloc_expr(Expr::Reference(name), ptr)
             }
             ast::Expr::Apply(e) => {
                 let func = self.lower_expr_opt(e.function());
@@ -116,7 +117,7 @@ impl LowerCtx {
         let tok = lit.token().unwrap();
         let mut text = tok.text();
 
-        fn normalize_path(path: &str) -> (usize, Box<str>) {
+        fn normalize_path(path: &str) -> (usize, SmolStr) {
             let mut ret = String::new();
             let mut supers = 0usize;
             for seg in path.split('/').filter(|&seg| !seg.is_empty() && seg != ".") {
