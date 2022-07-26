@@ -10,7 +10,8 @@ use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
 use std::{collections::HashMap, ops, sync::Arc};
 
-pub use self::scope::{ModuleScopes, ScopeData, ScopeId};
+pub use self::scope::{ModuleScopes, ResolveResult, ScopeData, ScopeId};
+pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
@@ -24,7 +25,7 @@ pub trait DefDatabase: SourceDatabase {
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 
     #[salsa::invoke(ModuleScopes::resolve_name_query)]
-    fn resolve_name(&self, file_id: FileId, expr_id: ExprId) -> Option<NameDefId>;
+    fn resolve_name(&self, file_id: FileId, expr_id: ExprId) -> Option<ResolveResult>;
 }
 
 fn module_with_source_map(
@@ -97,9 +98,57 @@ pub enum Expr {
     Missing,
     Reference(SmolStr),
     Literal(Literal),
-    Apply(ExprId, ExprId),
     Lambda(Option<NameDefId>, Option<Pat>, ExprId),
+    With(ExprId, ExprId),
+    Assert(ExprId, ExprId),
+    IfThenElse(ExprId, ExprId, ExprId),
+    Binary(Option<BinaryOp>, ExprId, ExprId),
+    Apply(ExprId, ExprId),
+    Unary(Option<UnaryOp>, ExprId),
+    HasAttr(ExprId, Attrpath),
+    Select(ExprId, Attrpath, Option<ExprId>),
+    StringInterpolation(Box<[ExprId]>),
+    List(Box<[ExprId]>),
     // TODO
+}
+
+impl Expr {
+    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+        match self {
+            Self::Missing | Self::Reference(_) | Self::Literal(_) => {}
+            Self::Lambda(_, pat, body) => {
+                if let Some(p) = pat {
+                    p.fields
+                        .iter()
+                        .filter_map(|&(_, default_expr)| default_expr)
+                        .for_each(&mut f);
+                }
+                f(*body);
+            }
+            Self::Unary(_, a) => f(*a),
+            Self::Assert(a, b) | Self::With(a, b) | Self::Binary(_, a, b) | Self::Apply(a, b) => {
+                f(*a);
+                f(*b);
+            }
+            Self::IfThenElse(a, b, c) => {
+                f(*a);
+                f(*b);
+                f(*c);
+            }
+            Self::HasAttr(set, path) => {
+                f(*set);
+                path.iter().copied().for_each(f);
+            }
+            Self::Select(set, path, default_expr) => {
+                f(*set);
+                path.iter().copied().for_each(&mut f);
+                if let &Some(e) = default_expr {
+                    f(e);
+                }
+            }
+            Self::StringInterpolation(xs) | Self::List(xs) => xs.iter().copied().for_each(f),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,3 +191,5 @@ pub struct Pat {
     pub fields: Box<[(Option<NameDefId>, Option<ExprId>)]>,
     pub ellipsis: bool,
 }
+
+pub type Attrpath = Box<[ExprId]>;

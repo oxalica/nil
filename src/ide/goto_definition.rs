@@ -1,5 +1,5 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, DefDatabase};
+use crate::def::{AstPtr, DefDatabase, ResolveResult};
 use crate::FileId;
 use rowan::ast::AstNode;
 use rowan::TextSize;
@@ -19,21 +19,36 @@ pub(crate) fn goto_definition(
 
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(AstPtr::new(node.syntax()))?;
-    let def_id = db.resolve_name(file_id, expr_id)?;
-    let def_node = source_map
-        .name_def_node(def_id)?
-        .to_node(&parse.syntax_node());
-    let full_node = def_node.ancestors().find(|n| {
-        matches!(
-            n.kind(),
-            SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
-        )
-    })?;
+    let (focus_range, full_range) = match db.resolve_name(file_id, expr_id)? {
+        ResolveResult::NameDef(def) => {
+            let name_node = source_map.name_def_node(def)?.to_node(&parse.syntax_node());
+            let full_node = name_node.ancestors().find(|n| {
+                matches!(
+                    n.kind(),
+                    SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
+                )
+            })?;
+            (name_node.text_range(), full_node.text_range())
+        }
+        ResolveResult::WithEnv(env) => {
+            // with expr; body
+            // ^--^       focus
+            // ^--------^ full
+            let env_node = source_map.expr_node(env)?.to_node(&parse.syntax_node());
+            let with_node = ast::With::cast(env_node.parent()?)?;
+            let with_token_range = with_node.with_token()?.text_range();
+            let with_header_end = with_node
+                .semicolon_token()
+                .map_or_else(|| env_node.text_range(), |tok| tok.text_range());
+            let with_header = with_token_range.cover(with_header_end);
+            (with_token_range, with_header)
+        }
+    };
 
     Some(NavigationTarget {
         file_id,
-        full_range: full_node.text_range(),
-        focus_range: def_node.text_range(),
+        focus_range,
+        full_range,
     })
 }
 
@@ -73,5 +88,10 @@ mod tests {
         check("a: (a@{ x }: (a $0a)) 1", expect!["<a>@{ x }: (a a)"]);
         check("a: ({ x ? $0a }@a: a) 1", expect!["{ x ? a }@<a>: a"]);
         check("a: ({ x ? $0x }@a: a) 1", expect!["{ <x> ? x }@a: a"]);
+    }
+
+    #[test]
+    fn with_env() {
+        check("with a; $0b", expect!["<with> a;"]);
     }
 }

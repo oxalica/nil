@@ -1,12 +1,13 @@
 use super::{
-    AstPtr, Expr, ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, Pat, Path,
-    PathAnchor,
+    AstPtr, Attrpath, Expr, ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, Pat,
+    Path, PathAnchor,
 };
 use crate::base::{FileId, InFile};
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use syntax::ast::{self, LiteralKind};
+use std::str;
+use syntax::ast::{self, HasStringParts, LiteralKind};
 
 pub(super) fn lower(root: InFile<ast::SourceFile>) -> (Module, ModuleSourceMap) {
     let mut ctx = LowerCtx {
@@ -39,15 +40,19 @@ impl LowerCtx {
         id
     }
 
-    fn alloc_name_def(&mut self, node: ast::Name) -> NameDefId {
-        let name = node
-            .token()
-            .map_or_else(Default::default, |tok| tok.text().into());
+    fn alloc_name_def(&mut self, name: SmolStr, ptr: AstPtr) -> NameDefId {
         let id = self.module.name_defs.alloc(NameDef { name });
-        let ptr = AstPtr::new(node.syntax());
         self.source_map.name_def_map.insert(ptr.clone(), id);
         self.source_map.name_def_map_rev.insert(id, ptr);
         id
+    }
+
+    fn lower_name(&mut self, node: ast::Name) -> NameDefId {
+        let name = node
+            .token()
+            .map_or_else(Default::default, |tok| tok.text().into());
+        let ptr = AstPtr::new(node.syntax());
+        self.alloc_name_def(name, ptr)
     }
 
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
@@ -79,12 +84,12 @@ impl LowerCtx {
             ast::Expr::Paren(e) => self.lower_expr_opt(e.expr()),
             ast::Expr::Lambda(e) => {
                 let (param, pat) = e.param().map_or((None, None), |param| {
-                    let name = param.name().map(|n| self.alloc_name_def(n));
+                    let name = param.name().map(|n| self.lower_name(n));
                     let pat = param.pat().map(|pat| {
                         let fields = pat
                             .fields()
                             .map(|field| {
-                                let field_name = field.name().map(|n| self.alloc_name_def(n));
+                                let field_name = field.name().map(|n| self.lower_name(n));
                                 let default_expr = field.default_expr().map(|e| self.lower_expr(e));
                                 (field_name, default_expr)
                             })
@@ -97,18 +102,52 @@ impl LowerCtx {
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::Lambda(param, pat, body), ptr)
             }
-            ast::Expr::Assert(_) => todo!(),
+            ast::Expr::Assert(e) => {
+                let cond = self.lower_expr_opt(e.condition());
+                let body = self.lower_expr_opt(e.body());
+                self.alloc_expr(Expr::Assert(cond, body), ptr)
+            }
+            ast::Expr::IfThenElse(e) => {
+                let cond = self.lower_expr_opt(e.condition());
+                let then_body = self.lower_expr_opt(e.then_body());
+                let else_body = self.lower_expr_opt(e.else_body());
+                self.alloc_expr(Expr::IfThenElse(cond, then_body, else_body), ptr)
+            }
+            ast::Expr::With(e) => {
+                let env = self.lower_expr_opt(e.environment());
+                let body = self.lower_expr_opt(e.body());
+                self.alloc_expr(Expr::With(env, body), ptr)
+            }
+            ast::Expr::BinaryOp(e) => {
+                let lhs = self.lower_expr_opt(e.lhs());
+                let op = e.op_kind();
+                let rhs = self.lower_expr_opt(e.rhs());
+                self.alloc_expr(Expr::Binary(op, lhs, rhs), ptr)
+            }
+            ast::Expr::UnaryOp(e) => {
+                let op = e.op_kind();
+                let arg = self.lower_expr_opt(e.arg());
+                self.alloc_expr(Expr::Unary(op, arg), ptr)
+            }
+            ast::Expr::HasAttr(e) => {
+                let set = self.lower_expr_opt(e.set());
+                let attrpath = self.lower_attrpath_opt(e.attrpath());
+                self.alloc_expr(Expr::HasAttr(set, attrpath), ptr)
+            }
+            ast::Expr::Select(e) => {
+                let set = self.lower_expr_opt(e.set());
+                let attrpath = self.lower_attrpath_opt(e.attrpath());
+                let default_expr = e.default_expr().map(|e| self.lower_expr(e));
+                self.alloc_expr(Expr::Select(set, attrpath, default_expr), ptr)
+            }
+            ast::Expr::String(s) => self.lower_string(&s),
+            ast::Expr::IndentString(s) => self.lower_string(&s),
+            ast::Expr::List(e) => {
+                let elements = e.elements().map(|e| self.lower_expr(e)).collect();
+                self.alloc_expr(Expr::List(elements), ptr)
+            }
             ast::Expr::AttrSet(_) => todo!(),
-            ast::Expr::BinaryOp(_) => todo!(),
-            ast::Expr::HasAttr(_) => todo!(),
-            ast::Expr::IfThenElse(_) => todo!(),
-            ast::Expr::IndentString(_) => todo!(),
             ast::Expr::LetIn(_) => todo!(),
-            ast::Expr::List(_) => todo!(),
-            ast::Expr::Select(_) => todo!(),
-            ast::Expr::String(_) => todo!(),
-            ast::Expr::UnaryOp(_) => todo!(),
-            ast::Expr::With(_) => todo!(),
         }
     }
 
@@ -171,5 +210,40 @@ impl LowerCtx {
                 })
             }
         })
+    }
+
+    fn lower_attrpath_opt(&mut self, attrpath: Option<ast::Attrpath>) -> Attrpath {
+        attrpath
+            .into_iter()
+            .flat_map(|attrpath| attrpath.attrs())
+            .map(|attr| match attr {
+                ast::Attr::Dynamic(d) => self.lower_expr_opt(d.expr()),
+                ast::Attr::Name(n) => {
+                    let name = n
+                        .token()
+                        .map_or_else(Default::default, |tok| tok.text().into());
+                    let ptr = AstPtr::new(n.syntax());
+                    self.alloc_expr(Expr::Literal(Literal::String(name)), ptr)
+                }
+                ast::Attr::String(s) => self.lower_string(&s),
+            })
+            .collect()
+    }
+
+    fn lower_string(&mut self, n: &impl HasStringParts) -> ExprId {
+        let ptr = AstPtr::new(n.syntax());
+        // Here we don't need to special case literal strings.
+        // They would simply become `Expr::StringInterpolation([])`.
+        let parts = n
+            .string_parts()
+            .filter_map(|part| {
+                match part {
+                    ast::StringPart::Dynamic(d) => Some(self.lower_expr_opt(d.expr())),
+                    // Currently we don't encode literal fragments.
+                    ast::StringPart::Fragment(_) | ast::StringPart::Escape(_) => None,
+                }
+            })
+            .collect();
+        self.alloc_expr(Expr::StringInterpolation(parts), ptr)
     }
 }

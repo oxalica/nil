@@ -90,6 +90,7 @@ trait NodeWrapper {
 macro_rules! enums {
     ($($name:ident { $($variant:ident,)* },)*) => {
         $(
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             $($variant($variant),)*
         }
@@ -309,6 +310,7 @@ asts! {
     },
     HAS_ATTR = HasAttr {
         set: Expr,
+        question_token: T![?],
         attrpath: Attrpath,
     },
     IF_THEN_ELSE = IfThenElse {
@@ -336,6 +338,7 @@ asts! {
     LET_IN = LetIn [HasBindings] {
         let_token: T![let],
         in_token: T![in],
+        body: Expr,
     },
     LIST = List {
         l_brack_token: T!['['],
@@ -422,7 +425,9 @@ asts! {
         }
     },
     WITH = With {
+        with_token: T![with],
         environment: Expr,
+        semicolon_token: T![;],
         body[1]: Expr,
     },
 }
