@@ -84,7 +84,9 @@ regex_dfa! {
     STRING_TOKEN_DFA, STRING_TOKEN_MAP {
         // The order matters!
         DQUOTE = r#"""#,
-        STRING_ESCAPE = r#"\\."#,
+        // Yes, we parse one UTF-8 encoded char here, to avoid break into code units.
+        // We can assume the input is already a valid UTF-8 string.
+        STRING_ESCAPE = r#"\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)"#,
         DOLLAR_L_CURLY = r"\$\{",
         STRING_FRAGMENT = r#"([^"$\\]|\$[^{"\\])+"#,
         // For '$' before ending.
@@ -95,7 +97,8 @@ regex_dfa! {
 regex_dfa! {
     INDENT_STRING_TOKEN_DFA, INDENT_STRING_TOKEN_MAP {
         // The order matters!
-        STRING_ESCAPE = r#"''\\.|''\$|'''"#,
+        // See comments in STRING_TOKEN_DFA's STRING_ESCAPE.
+        STRING_ESCAPE = r#"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''"#,
         QUOTE2 = r"''",
         DOLLAR_L_CURLY = r"\$\{",
         STRING_FRAGMENT = r"([^'$]|\$[^{'])+",
@@ -292,6 +295,21 @@ mod test {
                 DQUOTE "\""
             "#]],
         );
+
+        // '𐍈' U+10348 b"\xF0\x90\x8D\x88"
+        check_lex(
+            r#""\n\_\
+\ΣΣ""#,
+            expect![[r#"
+                DQUOTE "\""
+                STRING_ESCAPE "\\n"
+                STRING_ESCAPE "\\_"
+                STRING_ESCAPE "\\\n"
+                STRING_ESCAPE "\\Σ"
+                STRING_FRAGMENT "Σ"
+                DQUOTE "\""
+            "#]],
+        );
     }
 
     #[test]
@@ -328,6 +346,21 @@ mod test {
                 STRING_ESCAPE "''$"
                 STRING_FRAGMENT " $$x $ "
                 STRING_FRAGMENT "$"
+                QUOTE2 "''"
+            "#]],
+        );
+
+        // '𐍈' U+10348 b"\xF0\x90\x8D\x88"
+        check_lex(
+            r#"''''\n''\_''\
+''\ΣΣ''"#,
+            expect![[r#"
+                QUOTE2 "''"
+                STRING_ESCAPE "''\\n"
+                STRING_ESCAPE "''\\_"
+                STRING_ESCAPE "''\\\n"
+                STRING_ESCAPE "''\\Σ"
+                STRING_FRAGMENT "Σ"
                 QUOTE2 "''"
             "#]],
         );
