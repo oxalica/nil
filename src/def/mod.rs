@@ -109,7 +109,9 @@ pub enum Expr {
     Select(ExprId, Attrpath, Option<ExprId>),
     StringInterpolation(Box<[ExprId]>),
     List(Box<[ExprId]>),
-    // TODO
+    LetIn(Bindings, ExprId),
+    Attrset(Bindings),
+    LetAttrset(Bindings),
 }
 
 impl Expr {
@@ -147,6 +149,13 @@ impl Expr {
                 }
             }
             Self::StringInterpolation(xs) | Self::List(xs) => xs.iter().copied().for_each(f),
+            Self::LetIn(bindings, body) => {
+                bindings.walk_child_exprs(&mut f);
+                f(*body);
+            }
+            Self::Attrset(bindings) | Self::LetAttrset(bindings) => {
+                bindings.walk_child_exprs(f);
+            }
         }
     }
 }
@@ -193,3 +202,38 @@ pub struct Pat {
 }
 
 pub type Attrpath = Box<[ExprId]>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Bindings {
+    pub entries: Box<[(BindingKey, BindingValue)]>,
+    pub inherit_froms: Box<[ExprId]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BindingKey {
+    NameDef(NameDefId),
+    Name(SmolStr),
+    Dynamic(ExprId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BindingValue {
+    Inherit(ExprId),
+    InheritFrom(u32),
+    Expr(ExprId),
+}
+
+impl Bindings {
+    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+        for (key, kind) in self.entries.iter() {
+            match key {
+                BindingKey::NameDef(_) | BindingKey::Name(_) => {}
+                &BindingKey::Dynamic(expr) => f(expr),
+            }
+            match *kind {
+                BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
+                BindingValue::InheritFrom(_) => {}
+            }
+        }
+    }
+}
