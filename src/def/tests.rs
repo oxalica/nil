@@ -2,8 +2,6 @@ use super::DefDatabase;
 use crate::tests::TestDB;
 use expect_test::expect;
 
-mod lower;
-
 #[test]
 fn source_map() {
     let (db, root_id) = TestDB::from_file("foo 123");
