@@ -375,4 +375,112 @@ mod tests {
             "#]],
         );
     }
+
+    #[test]
+    fn string() {
+        check_lower(
+            r#"" fo\no ""#,
+            expect![[r#"
+                0: StringInterpolation([])
+            "#]],
+        );
+        check_lower(
+            r#"'' fo'''o ''"#,
+            expect![[r#"
+                0: StringInterpolation([])
+            "#]],
+        );
+
+        check_lower(
+            r#"" fo${1}o\n$${${42}\💗""#,
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(42))
+                2: StringInterpolation([Idx::<Expr>(0), Idx::<Expr>(1)])
+            "#]],
+        );
+        check_lower(
+            r#"'' ''$${1} $${}${42} ''"#,
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(42))
+                2: StringInterpolation([Idx::<Expr>(0), Idx::<Expr>(1)])
+            "#]],
+        );
+    }
+
+    #[test]
+    fn trivial_expr() {
+        check_lower(
+            "(1 + 2) 3 * -4",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Binary(Some(Add), Idx::<Expr>(0), Idx::<Expr>(1))
+                3: Literal(Int(3))
+                4: Apply(Idx::<Expr>(2), Idx::<Expr>(3))
+                5: Literal(Int(4))
+                6: Unary(Some(Negate), Idx::<Expr>(5))
+                7: Binary(Some(Mul), Idx::<Expr>(4), Idx::<Expr>(6))
+            "#]],
+        );
+        check_lower(
+            "assert 1; 2",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Assert(Idx::<Expr>(0), Idx::<Expr>(1))
+            "#]],
+        );
+        check_lower(
+            "if 1 then 2 else 3",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Literal(Int(3))
+                3: IfThenElse(Idx::<Expr>(0), Idx::<Expr>(1), Idx::<Expr>(2))
+            "#]],
+        );
+        check_lower(
+            "with 1; 2",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: With(Idx::<Expr>(0), Idx::<Expr>(1))
+            "#]],
+        );
+        check_lower(
+            "[ 1 2 ]",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: List([Idx::<Expr>(0), Idx::<Expr>(1)])
+            "#]],
+        );
+    }
+
+    #[test]
+    fn attrpath() {
+        check_lower(
+            r#"a.b."c".${d} or e"#,
+            expect![[r#"
+                0: Reference("a")
+                1: Literal(String("b"))
+                2: StringInterpolation([])
+                3: Reference("d")
+                4: Reference("e")
+                5: Select(Idx::<Expr>(0), [Idx::<Expr>(1), Idx::<Expr>(2), Idx::<Expr>(3)], Some(Idx::<Expr>(4)))
+            "#]],
+        );
+        check_lower(
+            r#"a?b."c".${d}"#,
+            expect![[r#"
+                0: Reference("a")
+                1: Literal(String("b"))
+                2: StringInterpolation([])
+                3: Reference("d")
+                4: HasAttr(Idx::<Expr>(0), [Idx::<Expr>(1), Idx::<Expr>(2), Idx::<Expr>(3)])
+            "#]],
+        );
+    }
 }
