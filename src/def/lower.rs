@@ -176,8 +176,10 @@ impl LowerCtx {
                 let bindings = set.finish(self);
                 for (key, _) in bindings.entries.iter() {
                     if let BindingKey::Dynamic(expr) = key {
-                        let range = self.file_range(&self.source_map.expr_map_rev[&*expr]);
-                        self.push_diagnostic(Diagnostic::InvalidDynamic(range));
+                        if let Some(ptr) = self.source_map.expr_node(*expr) {
+                            let range = self.file_range(&ptr);
+                            self.push_diagnostic(Diagnostic::InvalidDynamic(range));
+                        }
                     }
                 }
                 let body = self.lower_expr_opt(e.body());
@@ -487,8 +489,9 @@ impl MergingValue {
             Self::Final(v) => {
                 let mut set = MergingSet::new(is_rec, ptr.clone());
                 if let BindingValue::Expr(expr) = *v {
-                    let prev_ptr = ctx.source_map.expr_map_rev[&expr].clone();
-                    set.recover_error(ctx, expr, prev_ptr);
+                    if let Some(prev_ptr) = ctx.source_map.expr_node(expr) {
+                        set.recover_error(ctx, expr, prev_ptr);
+                    }
                 }
                 self.emit_duplicated_key(ctx, &ptr);
                 *self = Self::Attrset(set);
@@ -530,7 +533,10 @@ impl MergingValue {
             Self::Placeholder => unreachable!(),
             Self::Attrset(set) => ctx.file_range(&set.ptr),
             Self::Final(BindingValue::Inherit(prev_expr) | BindingValue::Expr(prev_expr)) => {
-                ctx.file_range(&ctx.source_map.expr_map_rev[&*prev_expr])
+                match ctx.source_map.expr_node(*prev_expr) {
+                    Some(ptr) => ctx.file_range(&ptr),
+                    None => return,
+                }
             }
             Self::Final(BindingValue::InheritFrom(_)) => {
                 // FIXME: Cannot get inherit from attrs.
@@ -1020,5 +1026,12 @@ mod tests {
                 DuplicatedKey(InFile { file_id: FileId(0), value: 10..11 }, InFile { file_id: FileId(0), value: 17..18 })
             "#]],
         );
+    }
+
+    #[test]
+    fn attrset_malformed_no_panic() {
+        let src = "{ } @ y: y { cc, extraPackages ? optional (cc.isGNU) }: 1";
+        let parse = parse_file(src);
+        let (_module, _source_map) = lower(InFile::new(FileId(0), parse));
     }
 }
