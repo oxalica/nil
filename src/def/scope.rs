@@ -142,16 +142,18 @@ impl ScopeData {
 
 #[cfg(test)]
 mod tests {
+    use super::ScopeKind;
     use crate::{
         base::SourceDatabase,
         def::{AstPtr, DefDatabase, ResolveResult},
         tests::TestDB,
     };
+    use expect_test::{expect, Expect};
     use rowan::ast::AstNode;
     use syntax::ast;
 
     #[track_caller]
-    fn check_scopes(src: &str, expect: &str) {
+    fn check_scopes(src: &str, expect: Expect) {
         let (db, file_id, pos) = TestDB::from_file_with_pos(src);
         let ptr = AstPtr::new(db.node_at::<ast::Expr>(file_id, pos).syntax());
 
@@ -159,24 +161,31 @@ mod tests {
         let expr_id = source_map.expr_map[&ptr];
         let scopes = db.scopes(file_id);
 
-        // "innermost var abc | middle var | outmost var"
+        // "innermost@pos var@pos | middle@pos | outmost@pos"
         let scope_id = scopes.scope_by_expr(expr_id).expect("No scope data");
         let scope_defs = scopes
             .ancestors(scope_id)
-            .filter_map(|scope| {
-                let mut names = scope
-                    .name_defs()
-                    .map(|(name, _)| &**name)
-                    .collect::<Vec<_>>();
-                if names.is_empty() {
-                    return None;
+            .map(|scope| match &scope.kind {
+                ScopeKind::NameDefs(defs) => {
+                    let mut names = defs
+                        .iter()
+                        .map(|(name, def)| {
+                            let pos = source_map.name_def_node(*def).unwrap().text_range().start();
+                            format!("{}@{}", name, u32::from(pos))
+                        })
+                        .collect::<Vec<_>>();
+                    names.sort();
+                    names.join(" ")
                 }
-                names.sort();
-                Some(names.join(" "))
+                &ScopeKind::WithEnv(expr) => {
+                    let pos = source_map.expr_node(expr).unwrap().text_range().start();
+                    format!("with@{}", u32::from(pos))
+                }
             })
             .collect::<Vec<_>>();
-        let got = scope_defs.join(" | ");
-        assert_eq!(got, expect);
+        // The last one is the empty root.
+        let got = scope_defs[..scope_defs.len() - 1].join(" | ");
+        expect.assert_eq(&got);
     }
 
     #[track_caller]
@@ -204,27 +213,25 @@ mod tests {
 
     #[test]
     fn top_level() {
-        check_scopes(r"$0a", "");
-
-        check_resolve(r"$0a", None);
+        check_scopes(r"$0a", expect![[""]]);
     }
 
     #[test]
     fn lambda() {
-        check_scopes(r"(a: b: (c: 0) $0a (d: 0)) (e: 0)", "b | a");
-        check_scopes(r"{ a, b ? c, ... }@d: $0x (y: x)", "a b d");
-        check_scopes(r"a: { a, b ? $0c, ... }@d: y: a", "a b d | a");
-
-        check_resolve(r"a: b: b$0", Some(3));
-        check_resolve(r"a: { a, b ? $0d, ... }@d: y: a", Some(21));
-        check_resolve(r"a: { a, b ? $0y, ... }@d: y: a", None);
-        check_resolve(r"a: { a, b ? $0a, ... }@d: y: a", Some(5));
-        check_resolve(r"a: { x, b ? $0a, ... }@d: y: a", Some(0));
+        check_scopes(r"(a: b: (c: 0) $0a (d: 0)) (e: 0)", expect!["b@4 | a@1"]);
+        check_scopes(r"{ a, b ? c, ... }@d: $0x (y: x)", expect!["a@2 b@5 d@18"]);
+        check_scopes(
+            r"a: { a, b ? $0c, ... }@d: y: a",
+            expect!["a@5 b@8 d@21 | a@0"],
+        );
     }
 
     #[test]
     fn with() {
-        check_scopes(r"a: with b; c: $0a", "c | a");
+        check_scopes(
+            r"a: with b; c: with c; $0a (d: with e; a)",
+            expect!["with@19 | c@11 | with@8 | a@0"],
+        );
 
         check_resolve(r"a: with b; c: $0a", Some(0));
         check_resolve(r"a: with b; c: $0c", Some(11));
