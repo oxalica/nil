@@ -287,6 +287,7 @@ mod tests {
             r"a: { a, b ? $0c, ... }@d: y: a",
             expect!["a@5 b@8 d@21 | a@0"],
         );
+        check_resolve("{} @ y: $0y", Some(5));
     }
 
     #[test]

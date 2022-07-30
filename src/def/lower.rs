@@ -679,7 +679,7 @@ mod tests {
             "#]],
         );
         check_lower(
-            "{ }@a: 0",
+            "{ } @ a: 0",
             expect![[r#"
                 0: Literal(Int(0))
                 1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))

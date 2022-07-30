@@ -239,6 +239,7 @@ impl<'i> Parser<'i> {
                     self.pat();
                     if self.peek_non_ws() == Some(T![@]) {
                         self.bump(); // @
+                        self.ws(); // Don't leave spaces in NAME.
                         self.start_node(NAME);
                         self.want(IDENT);
                         self.finish_node();
