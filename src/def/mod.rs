@@ -4,7 +4,10 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use crate::base::{FileId, SourceDatabase};
+use crate::{
+    base::SourceDatabase,
+    {Diagnostic, FileId},
+};
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
@@ -33,7 +36,7 @@ fn module_with_source_map(
     file_id: FileId,
 ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
     let parse = db.parse(file_id);
-    let (module, source_map) = lower::lower(parse.map(|p| p.root()));
+    let (module, source_map) = lower::lower(parse);
     (Arc::new(module), Arc::new(source_map))
 }
 
@@ -50,6 +53,7 @@ pub struct Module {
     exprs: Arena<Expr>,
     name_defs: Arena<NameDef>,
     entry_expr: ExprId,
+    diagnostics: Vec<Diagnostic>,
 }
 
 pub type ExprId = Idx<Expr>;
@@ -66,6 +70,12 @@ impl ops::Index<NameDefId> for Module {
     type Output = NameDef;
     fn index(&self, index: NameDefId) -> &Self::Output {
         &self.name_defs[index]
+    }
+}
+
+impl Module {
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 }
 

@@ -2,26 +2,41 @@ use super::{
     AstPtr, Attrpath, BindingKey, BindingValue, Bindings, Expr, ExprId, Literal, Module,
     ModuleSourceMap, NameDef, NameDefId, Pat, Path, PathAnchor,
 };
-use crate::base::{FileId, InFile};
+use crate::{Diagnostic, FileId, FileRange, InFile};
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
+use rowan::TextRange;
 use smol_str::SmolStr;
 use std::str;
-use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
+use syntax::{
+    ast::{self, HasBindings, HasStringParts, LiteralKind},
+    Parse,
+};
 
-pub(super) fn lower(root: InFile<ast::SourceFile>) -> (Module, ModuleSourceMap) {
+pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
+    let diagnostics = parse
+        .value
+        .errors()
+        .iter()
+        .map(|&(err, pos)| {
+            Diagnostic::SyntaxError(InFile::new(parse.file_id, TextRange::empty(pos)), err)
+        })
+        .collect();
+
     let mut ctx = LowerCtx {
-        file_id: root.file_id,
+        file_id: parse.file_id,
         module: Module {
             exprs: Arena::new(),
             name_defs: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
+            diagnostics,
         },
         source_map: ModuleSourceMap::default(),
     };
-    let entry = ctx.lower_expr_opt(root.value.expr());
+
+    let entry = ctx.lower_expr_opt(parse.value.root().expr());
     let mut module = ctx.module;
     module.entry_expr = entry;
     (module, ctx.source_map)
@@ -46,6 +61,14 @@ impl LowerCtx {
         self.source_map.name_def_map.insert(ptr.clone(), id);
         self.source_map.name_def_map_rev.insert(id, ptr);
         id
+    }
+
+    fn file_range(&self, ptr: &AstPtr) -> FileRange {
+        InFile::new(self.file_id, ptr.text_range())
+    }
+
+    fn push_diagnostic(&mut self, diag: Diagnostic) {
+        self.module.diagnostics.push(diag);
     }
 
     fn lower_name(&mut self, node: ast::Name) -> NameDefId {
@@ -151,6 +174,12 @@ impl LowerCtx {
                 let mut set = MergingSet::new(true, ptr.clone());
                 set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
+                for (key, _) in bindings.entries.iter() {
+                    if let BindingKey::Dynamic(expr) = key {
+                        let range = self.file_range(&self.source_map.expr_map_rev[&*expr]);
+                        self.push_diagnostic(Diagnostic::InvalidDynamic(range));
+                    }
+                }
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
             }
@@ -345,8 +374,7 @@ impl MergingSet {
     }
 
     // Place an orphaned Expr as dynamic-attrs for error recovery.
-    // TODO: Report errors.
-    fn error(&mut self, ctx: &mut LowerCtx, expr: ExprId, ptr: AstPtr) {
+    fn recover_error(&mut self, ctx: &mut LowerCtx, expr: ExprId, ptr: AstPtr) {
         let k = BindingKey::Dynamic(ctx.alloc_expr(Expr::Missing, ptr));
         let v = MergingValue::Final(BindingValue::Expr(expr));
         self.entries.insert(k, v);
@@ -374,15 +402,16 @@ impl MergingSet {
             let key = match ctx.lower_key(self.is_rec, attr) {
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 BindingKey::Dynamic(expr) => {
-                    self.error(ctx, expr, ptr.clone());
+                    ctx.push_diagnostic(Diagnostic::InvalidDynamic(ctx.file_range(&ptr)));
+                    self.recover_error(ctx, expr, ptr.clone());
                     continue;
                 }
                 key => key,
             };
 
             // Inherited names never merge other values. It must be an error.
-            if self.entries.contains_key(&key) {
-                // Report error.
+            if let Some(v) = self.entries.get(&key) {
+                v.emit_duplicated_key(ctx, &ptr);
                 continue;
             }
 
@@ -411,10 +440,11 @@ impl MergingSet {
         let mut attrs = entry.attrpath().into_iter().flat_map(|path| path.attrs());
         let mut next_attr = match attrs.next() {
             Some(first_attr) => first_attr,
-            // Recover from missing Attrpath.
+            // Recover from missing Attrpath. This is already a syntax error,
+            // don't report it again.
             None => {
                 let value_expr = ctx.lower_expr_opt(entry.value());
-                self.error(ctx, value_expr, AstPtr::new(entry.syntax()));
+                self.recover_error(ctx, value_expr, AstPtr::new(entry.syntax()));
                 return;
             }
         };
@@ -450,20 +480,17 @@ impl MergingSet {
 impl MergingValue {
     fn make_attrset(&mut self, ctx: &mut LowerCtx, is_rec: bool, ptr: AstPtr) -> &mut MergingSet {
         match self {
-            // TOOD: Report warnings if set.is_rec
+            // TODO: Report warnings if set.is_rec
             Self::Attrset(set) => return set,
             Self::Placeholder => *self = Self::Attrset(MergingSet::new(is_rec, ptr)),
             // We prefer to become a Attrset as a guess, which supports further merging.
             Self::Final(v) => {
-                // TOOD: Report errors.
-                let mut set = MergingSet::new(is_rec, ptr);
+                let mut set = MergingSet::new(is_rec, ptr.clone());
                 if let BindingValue::Expr(expr) = *v {
-                    // If the previous one is Final, it must be from `inherit` or `key = final_expr`,
-                    // where the source map must already be store.
-                    // Value merging can only make Final -> Attrset but not the reverse.
                     let prev_ptr = ctx.source_map.expr_map_rev[&expr].clone();
-                    set.error(ctx, expr, prev_ptr);
+                    set.recover_error(ctx, expr, prev_ptr);
                 }
+                self.emit_duplicated_key(ctx, &ptr);
                 *self = Self::Attrset(set);
             }
         }
@@ -488,9 +515,29 @@ impl MergingValue {
         // Here we got an unmergable non-Attrset Expr.
         match self {
             Self::Placeholder => *self = Self::Final(BindingValue::Expr(ctx.lower_expr_opt(e))),
-            // TODO: Report errors.
-            Self::Attrset(..) | Self::Final(_) => {}
+            Self::Attrset(_) | Self::Final(_) => {
+                // Only emit errors if there is RHS.
+                if let Some(e) = e {
+                    self.emit_duplicated_key(ctx, &AstPtr::new(e.syntax()));
+                }
+            }
         }
+    }
+
+    fn emit_duplicated_key(&self, ctx: &mut LowerCtx, ptr: &AstPtr) {
+        let cur_range = ctx.file_range(ptr);
+        let prev_range = match self {
+            Self::Placeholder => unreachable!(),
+            Self::Attrset(set) => ctx.file_range(&set.ptr),
+            Self::Final(BindingValue::Inherit(prev_expr) | BindingValue::Expr(prev_expr)) => {
+                ctx.file_range(&ctx.source_map.expr_map_rev[&*prev_expr])
+            }
+            Self::Final(BindingValue::InheritFrom(_)) => {
+                // FIXME: Cannot get inherit from attrs.
+                cur_range
+            }
+        };
+        ctx.push_diagnostic(Diagnostic::DuplicatedKey(prev_range, cur_range));
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
@@ -517,7 +564,7 @@ mod tests {
 
     fn check_lower(src: &str, expect: Expect) {
         let parse = parse_file(src);
-        let (module, _source_map) = lower(InFile::new(FileId(0), parse.root()));
+        let (module, _source_map) = lower(InFile::new(FileId(0), parse));
         let mut got = String::new();
         for (i, e) in module.exprs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), e).unwrap();
@@ -527,6 +574,17 @@ mod tests {
         }
         for (i, def) in module.name_defs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), def).unwrap();
+        }
+        assert!(module.diagnostics().is_empty());
+        expect.assert_eq(&got);
+    }
+
+    fn check_error(src: &str, expect: Expect) {
+        let parse = parse_file(src);
+        let (module, _source_map) = lower(InFile::new(FileId(0), parse));
+        let mut got = String::new();
+        for diag in module.diagnostics() {
+            writeln!(got, "{:?}", diag).unwrap();
         }
         expect.assert_eq(&got);
     }
@@ -905,6 +963,61 @@ mod tests {
                 4: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 5: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
                 6: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(4))), (Dynamic(Idx::<Expr>(2)), Expr(Idx::<Expr>(5)))], inherit_froms: [] })
+            "#]],
+        );
+    }
+
+    #[test]
+    fn invalid_dynamic_error() {
+        check_error(
+            "let ${a} = 1; in 1",
+            expect![[r#"
+                InvalidDynamic(InFile { file_id: FileId(0), value: 6..7 })
+            "#]],
+        );
+        check_error(
+            "{ inherit ${a}; }",
+            expect![[r#"
+                InvalidDynamic(InFile { file_id: FileId(0), value: 10..14 })
+            "#]],
+        );
+        check_error(
+            "{ inherit (a) ${a}; }",
+            expect![[r#"
+                InvalidDynamic(InFile { file_id: FileId(0), value: 14..18 })
+            "#]],
+        );
+    }
+
+    // FIXME: The location is not quite right currently.
+    #[test]
+    fn attrset_merge_error() {
+        // Value and value.
+        check_error(
+            "{ a = 1; a = 2; }",
+            expect![[r#"
+                DuplicatedKey(InFile { file_id: FileId(0), value: 6..7 }, InFile { file_id: FileId(0), value: 13..14 })
+            "#]],
+        );
+        // Set and value.
+        check_error(
+            "{ a.b = 1; a = 2; }",
+            expect![[r#"
+                DuplicatedKey(InFile { file_id: FileId(0), value: 4..5 }, InFile { file_id: FileId(0), value: 15..16 })
+            "#]],
+        );
+        // Value and set.
+        check_error(
+            "{ a = 1; a.b = 2; }",
+            expect![[r#"
+                DuplicatedKey(InFile { file_id: FileId(0), value: 6..7 }, InFile { file_id: FileId(0), value: 11..12 })
+            "#]],
+        );
+        // Inherit and value.
+        check_error(
+            "{ inherit a; a = 1; }",
+            expect![[r#"
+                DuplicatedKey(InFile { file_id: FileId(0), value: 10..11 }, InFile { file_id: FileId(0), value: 17..18 })
             "#]],
         );
     }
