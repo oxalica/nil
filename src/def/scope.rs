@@ -1,4 +1,4 @@
-use super::{DefDatabase, Expr, ExprId, Module, NameDefId};
+use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameDefId};
 use crate::base::FileId;
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
@@ -105,8 +105,58 @@ impl ModuleScopes {
                 });
                 self.traverse_expr(module, *body, scope);
             }
+            Expr::Attrset(bindings) | Expr::LetAttrset(bindings) => {
+                self.traverse_bindings(module, bindings, scope);
+            }
+            Expr::LetIn(bindings, body) => {
+                let scope = self.traverse_bindings(module, bindings, scope);
+                self.traverse_expr(module, *body, scope);
+            }
             e => e.walk_child_exprs(|e| self.traverse_expr(module, e, scope)),
         }
+    }
+
+    fn traverse_bindings(
+        &mut self,
+        module: &Module,
+        bindings: &Bindings,
+        scope: ScopeId,
+    ) -> ScopeId {
+        let mut defs = HashMap::default();
+
+        for (k, v) in bindings.entries.iter() {
+            if let &BindingKey::NameDef(def) = k {
+                defs.insert(module[def].name.clone(), def);
+            }
+
+            // Inherited attrs are resolved in the outer scope.
+            if let &BindingValue::Inherit(expr) = v {
+                assert!(matches!(&module[expr], Expr::Reference(_)));
+                self.traverse_expr(module, expr, scope);
+            }
+        }
+
+        let scope = if defs.is_empty() {
+            scope
+        } else {
+            self.scopes.alloc(ScopeData {
+                parent: Some(scope),
+                kind: ScopeKind::NameDefs(defs),
+            })
+        };
+
+        for (k, v) in bindings.entries.iter() {
+            if let &BindingKey::Dynamic(expr) = k {
+                self.traverse_expr(module, expr, scope);
+            }
+            if let &BindingValue::Expr(expr) = v {
+                self.traverse_expr(module, expr, scope);
+            }
+        }
+        for &e in bindings.inherit_froms.iter() {
+            self.traverse_expr(module, e, scope);
+        }
+        scope
     }
 }
 
@@ -150,7 +200,7 @@ mod tests {
     };
     use expect_test::{expect, Expect};
     use rowan::ast::AstNode;
-    use syntax::ast;
+    use syntax::{ast, match_ast};
 
     #[track_caller]
     fn check_scopes(src: &str, expect: Expect) {
@@ -191,7 +241,20 @@ mod tests {
     #[track_caller]
     fn check_resolve(src: &str, expect: Option<u32>) {
         let (db, file_id, pos) = TestDB::from_file_with_pos(src);
-        let ptr = AstPtr::new(db.node_at::<ast::Expr>(file_id, pos).syntax());
+
+        // Inherit(Attr(Name)) or Expr(Ref(Name))
+        let ptr = db
+            .find_node(file_id, pos, |n| {
+                match_ast! {
+                    match n {
+                        ast::Expr(e) => Some(AstPtr::new(e.syntax())),
+                        ast::Attr(e) => Some(AstPtr::new(e.syntax())),
+                        _ => None,
+                    }
+                }
+            })
+            .expect("No Attr or Expr found");
+
         let parse = db.parse(file_id).value;
         let source_map = db.source_map(file_id);
         let expr_id = source_map.expr_map[&ptr];
@@ -238,5 +301,61 @@ mod tests {
         check_resolve(r"a: with b; c: $0x", Some(8));
         check_resolve(r"x: with a; with b; $0x", Some(0));
         check_resolve(r"x: with a; with b; $0y", Some(16));
+    }
+
+    #[test]
+    fn attrset_non_rec() {
+        check_scopes(
+            "a: { inherit a; b = c: $0a; e = 1; inherit (a) f; }",
+            expect!["c@20 | a@0"],
+        );
+        check_scopes(
+            "a: { inherit a; b = c: a; e = 1; inherit ($0a) f; }",
+            expect!["a@0"],
+        );
+    }
+
+    #[test]
+    fn attrset_rec() {
+        check_scopes(
+            "a: rec { inherit a; b = c: $0a; e = 1; inherit (a) f; }",
+            expect!["c@24 | a@17 b@20 e@30 f@49 | a@0"],
+        );
+        check_scopes(
+            "a: rec { inherit a; b = c: a; e = 1; inherit ($0a) f; }",
+            expect!["a@17 b@20 e@30 f@49 | a@0"],
+        );
+        check_scopes(
+            "a: rec { inherit $0a; b = c: a; e = 1; inherit (a) f; }",
+            expect!["a@0"],
+        );
+    }
+
+    #[test]
+    fn let_in() {
+        check_scopes(r#"let a.b = 1; "c+d" = a; in $0a"#, expect!["a@4 c+d@13"]);
+        check_scopes(r#"let a.b = 1; "b+c" = $0a; in a"#, expect!["a@4 b+c@13"]);
+    }
+
+    #[test]
+    fn shadowing() {
+        check_scopes(
+            "let a = 1; b = 2; in let a = 2; inherit b; in $0a",
+            expect!["a@25 b@40 | a@4 b@11"],
+        );
+
+        check_resolve(
+            "let a = 1; b = 2; in let a = 2; inherit b; in $0a",
+            Some(25),
+        );
+        check_resolve(
+            "let a = 1; b = 2; in let a = 2; inherit b; in $0b",
+            Some(40),
+        );
+        check_resolve(
+            "let a = 1; b = 2; in let a = 2; inherit $0b; in b",
+            Some(11),
+        );
+        check_resolve("let a = 1; in let a = $0a; in a", Some(18));
     }
 }

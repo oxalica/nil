@@ -2,7 +2,7 @@ use crate::base::{SourceDatabase, SourceDatabaseStorage};
 use crate::def::DefDatabaseStorage;
 use crate::{Change, FileId};
 use rowan::{ast::AstNode, TextSize};
-use syntax::NixLanguage;
+use syntax::{NixLanguage, SyntaxNode};
 
 pub const CURSOR_MARKER: &str = "$0";
 
@@ -30,7 +30,12 @@ impl TestDB {
         (this, root_id, pos)
     }
 
-    pub fn node_at<N: AstNode<Language = NixLanguage>>(&self, file_id: FileId, pos: TextSize) -> N {
+    pub fn find_node<T>(
+        &self,
+        file_id: FileId,
+        pos: TextSize,
+        f: impl FnMut(SyntaxNode) -> Option<T>,
+    ) -> Option<T> {
         self.parse(file_id)
             .value
             .syntax_node()
@@ -38,7 +43,11 @@ impl TestDB {
             .right_biased()
             .expect("No token")
             .parent_ancestors()
-            .find_map(N::cast)
+            .find_map(f)
+    }
+
+    pub fn node_at<N: AstNode<Language = NixLanguage>>(&self, file_id: FileId, pos: TextSize) -> N {
+        self.find_node(file_id, pos, N::cast)
             .expect("No node found")
     }
 }
