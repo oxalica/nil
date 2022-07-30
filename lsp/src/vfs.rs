@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use lsp_types::Url;
 use nil::{Change, FileId, FilePos};
+use std::collections::HashMap;
 use std::{fmt, mem, path::PathBuf, sync::Arc};
 use text_size::TextSize;
 
@@ -83,9 +84,16 @@ impl Vfs {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq)]
 struct LineMap {
     line_starts: Vec<u32>,
+    char_diffs: HashMap<u32, Vec<(u32, CodeUnitsDiff)>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodeUnitsDiff {
+    One = 1,
+    Two = 2,
 }
 
 impl LineMap {
@@ -94,24 +102,57 @@ impl LineMap {
         if text.len() > u32::MAX as usize {
             return None;
         }
-        // TODO: UTF-16 handling of non-ASCII chars and "\r\n" handling.
-        if text.bytes().any(|b| !b.is_ascii() || b == b'\r') {
-            return None;
-        }
-        let line_starts = Some(0)
+
+        let text = text.replace('\r', "");
+        let bytes = text.as_bytes();
+
+        let mut line_starts = Some(0)
             .into_iter()
             .chain(
-                text.bytes()
+                bytes
+                    .iter()
                     .zip(0u32..)
-                    .filter(|(b, _)| *b == b'\n')
+                    .filter(|(b, _)| **b == b'\n')
                     .map(|(_, i)| i + 1),
             )
-            .collect();
-        Some((text, Self { line_starts }))
+            .collect::<Vec<_>>();
+        line_starts.push(text.len() as u32);
+
+        let mut char_diffs = HashMap::new();
+        for ((&start, &end), i) in line_starts.iter().zip(&line_starts[1..]).zip(0u32..) {
+            let mut diffs = Vec::new();
+            for (&b, pos) in bytes[start as usize..end as usize].iter().zip(0u32..) {
+                let diff = match b {
+                    0b0000_0000..=0b0111_1111 |                      // utf8_len == 1, utf16_len == 1
+                    0b1000_0000..=0b1011_1111 => continue,           // Continuation bytes.
+                    0b1100_0000..=0b1101_1111 => CodeUnitsDiff::One, // utf8_len == 2, utf16_len == 1
+                    0b1110_0000..=0b1110_1111 => CodeUnitsDiff::Two, // utf8_len == 3, utf16_len == 1
+                    0b1111_0000.. => CodeUnitsDiff::Two,             // utf8_len == 4, utf16_len == 2
+                };
+                diffs.push((pos, diff));
+            }
+            if !diffs.is_empty() {
+                char_diffs.insert(i, diffs);
+            }
+        }
+
+        let this = Self {
+            line_starts,
+            char_diffs,
+        };
+        Some((text, this))
     }
 
-    fn pos(&self, line: u32, col: u32) -> TextSize {
-        (self.line_starts.get(line as usize).copied().unwrap_or(0) + col).into()
+    fn pos(&self, line: u32, mut col: u32) -> TextSize {
+        let pos = self.line_starts.get(line as usize).copied().unwrap_or(0);
+        if let Some(diffs) = self.char_diffs.get(&line) {
+            for &(char_pos, diff) in diffs {
+                if char_pos < col {
+                    col += diff as u32;
+                }
+            }
+        }
+        (pos + col).into()
     }
 
     fn line_col(&self, pos: TextSize) -> (u32, u32) {
@@ -120,20 +161,28 @@ impl LineMap {
             .line_starts
             .partition_point(|&i| i <= pos)
             .saturating_sub(1);
-        let col = pos - self.line_starts[line];
-        (line as u32, col as u32)
+        let mut col = pos - self.line_starts[line];
+        if let Some(diffs) = self.char_diffs.get(&(line as u32)) {
+            col -= diffs
+                .iter()
+                .take_while(|(char_pos, _)| *char_pos < col)
+                .map(|(_, diff)| *diff as u32)
+                .sum::<u32>();
+        }
+        (line as u32, col)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::LineMap;
+    use super::{CodeUnitsDiff, LineMap};
+    use std::collections::HashMap;
 
     #[test]
-    fn line_map() {
+    fn line_map_ascii() {
         let (s, map) = LineMap::normalize("hello\nworld\nend".into()).unwrap();
         assert_eq!(s, "hello\nworld\nend");
-        assert_eq!(&map.line_starts, &[0, 6, 12]);
+        assert_eq!(&map.line_starts, &[0, 6, 12, 15]);
 
         let mapping = [
             (0, 0, 0),
@@ -142,6 +191,40 @@ mod tests {
             (6, 1, 0),
             (11, 1, 5),
             (12, 2, 0),
+        ];
+        for (pos, line, col) in mapping {
+            assert_eq!(map.line_col(pos.into()), (line, col));
+            assert_eq!(map.pos(line, col), pos.into());
+        }
+    }
+
+    #[test]
+    fn line_map_unicode() {
+        let (s, map) = LineMap::normalize("_A_ß_ℝ_💣_".into()).unwrap();
+        assert_eq!(s, "_A_ß_ℝ_💣_");
+        assert_eq!(&map.line_starts, &[0, 15]);
+        assert_eq!(
+            &map.char_diffs,
+            &HashMap::from([(
+                0u32,
+                vec![
+                    (3u32, CodeUnitsDiff::One),
+                    (6, CodeUnitsDiff::Two),
+                    (10, CodeUnitsDiff::Two),
+                ],
+            )])
+        );
+
+        let mapping = [
+            (0, 0, 0),
+            (1, 0, 1),
+            (2, 0, 2),
+            (3, 0, 3),
+            (5, 0, 4),
+            (6, 0, 5),
+            (9, 0, 6),
+            (10, 0, 7),
+            (14, 0, 9),
         ];
         for (pos, line, col) in mapping {
             assert_eq!(map.line_col(pos.into()), (line, col));
