@@ -1,9 +1,10 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, DefDatabase, ResolveResult};
-use crate::FileId;
-use rowan::ast::AstNode;
-use rowan::TextSize;
-use syntax::{ast, SyntaxKind, T};
+use crate::{
+    def::{AstPtr, DefDatabase, ResolveResult},
+    FileId,
+};
+use rowan::{ast::AstNode, TextSize};
+use syntax::{ast, match_ast, SyntaxKind, T};
 
 pub(crate) fn goto_definition(
     db: &dyn DefDatabase,
@@ -15,10 +16,19 @@ pub(crate) fn goto_definition(
     if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT) {
         return None;
     }
-    let node = tok.parent_ancestors().find_map(ast::Ref::cast)?;
+    let ptr = tok.parent_ancestors().find_map(|node| {
+        match_ast! {
+            match node {
+                ast::Ref(n) => Some(AstPtr::new(n.syntax())),
+                ast::Name(n) => Some(AstPtr::new(n.syntax())),
+                _ => None,
+            }
+        }
+    })?;
 
     let source_map = db.source_map(file_id);
-    let expr_id = source_map.node_expr(AstPtr::new(node.syntax()))?;
+    let expr_id = source_map.node_expr(ptr)?;
+
     let (focus_range, full_range) = match db.resolve_name(file_id, expr_id)? {
         ResolveResult::NameDef(def) => {
             let name_node = source_map.name_def_node(def)?.to_node(&parse.syntax_node());
@@ -93,5 +103,21 @@ mod tests {
     #[test]
     fn with_env() {
         check("with a; $0b", expect!["<with> a;"]);
+    }
+
+    #[test]
+    fn bindings() {
+        check(
+            "let a = a; in rec { inherit a; b = $0a; }",
+            expect!["inherit <a>;"],
+        );
+        check(
+            "let a = a; in rec { inherit $0a; b = a; }",
+            expect!["<a> = a;"],
+        );
+        check(
+            "let a = $0a; in rec { inherit a; b = a; }",
+            expect!["<a> = a;"],
+        );
     }
 }
