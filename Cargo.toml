@@ -7,6 +7,7 @@ edition = "2021"
 indexmap = "1.9.1"
 la-arena = "0.2.1"
 ordered-float = "3.0.0"
+phf = { version = "0.11.0", features = ["macros"] }
 rowan = "0.15.6"
 salsa = "0.17.0-pre.2"
 smol_str = "0.1.23"

@@ -1,5 +1,5 @@
 use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameDefId};
-use crate::base::FileId;
+use crate::{builtin, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
 use std::{collections::HashMap, iter, ops, sync::Arc};
@@ -53,17 +53,25 @@ impl ModuleScopes {
     }
 
     pub fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
-        let mut inner_env = None;
-        self.ancestors(self.scope_by_expr(expr_id)?)
+        let mut innermost_env = None;
+        let scope = self.scope_by_expr(expr_id)?;
+        // 1. Local defs.
+        self.ancestors(scope)
             .find_map(|data| match &data.kind {
-                ScopeKind::NameDefs(defs) => defs.get(name).copied(),
+                ScopeKind::NameDefs(defs) => Some(ResolveResult::NameDef(*defs.get(name)?)),
                 ScopeKind::WithEnv(env) => {
-                    inner_env = inner_env.or(Some(*env));
+                    innermost_env = innermost_env.or(Some(*env));
                     None
                 }
             })
-            .map(ResolveResult::NameDef)
-            .or_else(|| inner_env.map(ResolveResult::WithEnv))
+            // 2. Builtin names.
+            .or_else(|| {
+                builtin::NAMES
+                    .get_key(name)
+                    .map(|s| ResolveResult::Builtin(s))
+            })
+            // 3. Innermost "with" expr.
+            .or_else(|| innermost_env.map(ResolveResult::WithEnv))
     }
 
     fn traverse_expr(&mut self, module: &Module, expr: ExprId, scope: ScopeId) {
@@ -164,6 +172,7 @@ impl ModuleScopes {
 pub enum ResolveResult {
     NameDef(NameDefId),
     WithEnv(ExprId),
+    Builtin(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,6 +279,8 @@ mod tests {
                 .to_node(&parse.syntax_node())
                 .text_range()
                 .start(),
+            // Same pos for builtin names.
+            ResolveResult::Builtin(_) => pos,
         });
         assert_eq!(got, Some(def_pos));
     }
@@ -349,5 +360,12 @@ mod tests {
         check_resolve("let a = 1; b = 2; in let a = 2; inherit $1b; in $0b");
         check_resolve("let a = 1; $1b = 2; in let a = 2; inherit $0b; in b");
         check_resolve("let a = 1; in let $1a = $0a; in a");
+    }
+
+    #[test]
+    fn builtin() {
+        check_resolve("let $1true = 1; in with x; $0true + false + falsie");
+        check_resolve("let true = 1; in with x; true + $0$1false + falsie");
+        check_resolve("let true = 1; in with $1x; true + false + $0falsie");
     }
 }

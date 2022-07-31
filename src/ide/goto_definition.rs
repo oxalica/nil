@@ -53,6 +53,8 @@ pub(crate) fn goto_definition(
             let with_header = with_token_range.cover(with_header_end);
             (with_token_range, with_header)
         }
+        // Currently builtin names cannot "goto-definition".
+        ResolveResult::Builtin(_) => return None,
     };
 
     Some(NavigationTarget {
@@ -119,5 +121,11 @@ mod tests {
             "let a = $0a; in rec { inherit a; b = a; }",
             expect!["<a> = a;"],
         );
+    }
+
+    #[test]
+    fn builtin() {
+        check("let true = 1; in $0true && false", expect!["<true> = 1;"]);
+        check("let true = 1; in true && $0false", expect![""]);
     }
 }
