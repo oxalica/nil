@@ -68,8 +68,8 @@ mod tests {
     use crate::tests::TestDB;
     use expect_test::{expect, Expect};
 
-    fn check(src: &str, expect: Expect) {
-        let (db, file_id, pos) = TestDB::from_file_with_pos(src);
+    fn check(fixture: &str, expect: Expect) {
+        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
         let src = db.file_content(file_id);
         let got = match super::goto_definition(&db, file_id, pos) {
             None => String::new(),

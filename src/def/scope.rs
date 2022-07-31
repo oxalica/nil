@@ -194,8 +194,7 @@ impl ScopeData {
 mod tests {
     use super::ScopeKind;
     use crate::{
-        base::SourceDatabase,
-        def::{AstPtr, DefDatabase, ResolveResult},
+        def::{AstPtr, DefDatabase, ResolveResult, SourceDatabase},
         tests::TestDB,
     };
     use expect_test::{expect, Expect};
@@ -203,8 +202,8 @@ mod tests {
     use syntax::{ast, match_ast};
 
     #[track_caller]
-    fn check_scopes(src: &str, expect: Expect) {
-        let (db, file_id, pos) = TestDB::from_file_with_pos(src);
+    fn check_scopes(fixture: &str, expect: Expect) {
+        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
         let ptr = AstPtr::new(db.node_at::<ast::Expr>(file_id, pos).syntax());
 
         let source_map = db.source_map(file_id);
@@ -239,8 +238,8 @@ mod tests {
     }
 
     #[track_caller]
-    fn check_resolve(src: &str, expect: Option<u32>) {
-        let (db, file_id, pos) = TestDB::from_file_with_pos(src);
+    fn check_resolve(fixture: &str) {
+        let (db, file_id, [pos, def_pos]) = TestDB::single_file(fixture).unwrap();
 
         // Inherit(Attr(Name)) or Expr(Ref(Name))
         let ptr = db
@@ -258,20 +257,21 @@ mod tests {
         let parse = db.parse(file_id).value;
         let source_map = db.source_map(file_id);
         let expr_id = source_map.expr_map[&ptr];
-        let got = db
-            .resolve_name(file_id, expr_id)
-            .map(|ret| match ret {
-                ResolveResult::NameDef(def) => source_map
-                    .name_def_node(def)
-                    .unwrap()
-                    .to_node(&parse.syntax_node()),
-                ResolveResult::WithEnv(env) => source_map
-                    .expr_node(env)
-                    .unwrap()
-                    .to_node(&parse.syntax_node()),
-            })
-            .map(|n| u32::from(n.text_range().start()));
-        assert_eq!(got, expect);
+        let got = db.resolve_name(file_id, expr_id).map(|ret| match ret {
+            ResolveResult::NameDef(def) => source_map
+                .name_def_node(def)
+                .unwrap()
+                .to_node(&parse.syntax_node())
+                .text_range()
+                .start(),
+            ResolveResult::WithEnv(env) => source_map
+                .expr_node(env)
+                .unwrap()
+                .to_node(&parse.syntax_node())
+                .text_range()
+                .start(),
+        });
+        assert_eq!(got, Some(def_pos));
     }
 
     #[test]
@@ -287,7 +287,7 @@ mod tests {
             r"a: { a, b ? $0c, ... }@d: y: a",
             expect!["a@5 b@8 d@21 | a@0"],
         );
-        check_resolve("{} @ y: $0y", Some(5));
+        check_resolve("{} @ $1y: $0y");
     }
 
     #[test]
@@ -297,11 +297,11 @@ mod tests {
             expect!["with@19 | c@11 | with@8 | a@0"],
         );
 
-        check_resolve(r"a: with b; c: $0a", Some(0));
-        check_resolve(r"a: with b; c: $0c", Some(11));
-        check_resolve(r"a: with b; c: $0x", Some(8));
-        check_resolve(r"x: with a; with b; $0x", Some(0));
-        check_resolve(r"x: with a; with b; $0y", Some(16));
+        check_resolve(r"$1a: with b; c: $0a");
+        check_resolve(r"a: with b; $1c: $0c");
+        check_resolve(r"a: with $1b; c: $0x");
+        check_resolve(r"$1x: with a; with b; $0x");
+        check_resolve(r"x: with a; with $1b; $0y");
     }
 
     #[test]
@@ -345,18 +345,9 @@ mod tests {
             expect!["a@25 b@40 | a@4 b@11"],
         );
 
-        check_resolve(
-            "let a = 1; b = 2; in let a = 2; inherit b; in $0a",
-            Some(25),
-        );
-        check_resolve(
-            "let a = 1; b = 2; in let a = 2; inherit b; in $0b",
-            Some(40),
-        );
-        check_resolve(
-            "let a = 1; b = 2; in let a = 2; inherit $0b; in b",
-            Some(11),
-        );
-        check_resolve("let a = 1; in let a = $0a; in a", Some(18));
+        check_resolve("let a = 1; b = 2; in let $1a = 2; inherit b; in $0a");
+        check_resolve("let a = 1; b = 2; in let a = 2; inherit $1b; in $0b");
+        check_resolve("let a = 1; $1b = 2; in let a = 2; inherit $0b; in b");
+        check_resolve("let a = 1; in let $1a = $0a; in a");
     }
 }
