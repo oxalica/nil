@@ -75,7 +75,7 @@ impl Analysis {
         Cancelled::catch(|| f(&self.db))
     }
 
-    pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<NavigationTarget>> {
+    pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<Vec<NavigationTarget>>> {
         self.with_db(|db| goto_definition::goto_definition(db, pos.file_id, pos.value))
     }
 }

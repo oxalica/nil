@@ -66,14 +66,17 @@ impl State {
                         &st.vfs.read().unwrap(),
                         &params.text_document_position_params,
                     )?;
-                    let target = st.analysis.goto_definition(pos).ok()??;
-                    let loc = to_lsp_location(
-                        &st.vfs.read().unwrap(),
-                        InFile::new(target.file_id, target.focus_range),
-                    )?;
-                    Some(loc)
+                    let targets = st.analysis.goto_definition(pos).ok()??;
+                    let vfs = st.vfs.read().unwrap();
+                    let targets = targets
+                        .into_iter()
+                        .filter_map(|target| {
+                            to_lsp_location(&vfs, InFile::new(target.file_id, target.focus_range))
+                        })
+                        .collect::<Vec<_>>();
+                    Some(targets)
                 })() {
-                    Some(loc) => Some(lsp::GotoDefinitionResponse::Scalar(loc)),
+                    Some(locs) => Some(lsp::GotoDefinitionResponse::Array(locs)),
                     None => Some(lsp::GotoDefinitionResponse::Array(Vec::new())),
                 }
             })

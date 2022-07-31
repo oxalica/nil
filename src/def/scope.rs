@@ -53,25 +53,27 @@ impl ModuleScopes {
     }
 
     pub fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
-        let mut innermost_env = None;
         let scope = self.scope_by_expr(expr_id)?;
         // 1. Local defs.
-        self.ancestors(scope)
-            .find_map(|data| match &data.kind {
-                ScopeKind::NameDefs(defs) => Some(ResolveResult::NameDef(*defs.get(name)?)),
-                ScopeKind::WithEnv(env) => {
-                    innermost_env = innermost_env.or(Some(*env));
-                    None
-                }
-            })
-            // 2. Builtin names.
-            .or_else(|| {
-                builtin::NAMES
-                    .get_key(name)
-                    .map(|s| ResolveResult::Builtin(s))
-            })
-            // 3. Innermost "with" expr.
-            .or_else(|| innermost_env.map(ResolveResult::WithEnv))
+        if let Some(def) = self
+            .ancestors(scope)
+            .find_map(|data| data.as_name_defs()?.get(name))
+        {
+            return Some(ResolveResult::NameDef(*def));
+        }
+        // 2. Builtin names.
+        if let Some(name) = builtin::NAMES.get_key(name) {
+            return Some(ResolveResult::Builtin(name));
+        }
+        // 3. "with" exprs.
+        let envs = self
+            .ancestors(scope)
+            .filter_map(|data| data.as_with())
+            .collect::<Vec<_>>();
+        if !envs.is_empty() {
+            return Some(ResolveResult::WithEnvs(envs));
+        }
+        None
     }
 
     fn traverse_expr(&mut self, module: &Module, expr: ExprId, scope: ScopeId) {
@@ -171,8 +173,8 @@ impl ModuleScopes {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveResult {
     NameDef(NameDefId),
-    WithEnv(ExprId),
     Builtin(&'static str),
+    WithEnvs(Vec<ExprId>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,14 +190,18 @@ enum ScopeKind {
 }
 
 impl ScopeData {
-    pub fn name_defs(&self) -> impl Iterator<Item = (&SmolStr, NameDefId)> + '_ {
+    pub fn as_name_defs(&self) -> Option<&HashMap<SmolStr, NameDefId>> {
         match &self.kind {
             ScopeKind::NameDefs(defs) => Some(defs),
-            ScopeKind::WithEnv(_) => None,
+            _ => None,
         }
-        .into_iter()
-        .flatten()
-        .map(|(name, &def)| (name, def))
+    }
+
+    pub fn as_with(&self) -> Option<ExprId> {
+        match self.kind {
+            ScopeKind::WithEnv(expr) => Some(expr),
+            _ => None,
+        }
     }
 }
 
@@ -273,8 +279,8 @@ mod tests {
                 .to_node(&parse.syntax_node())
                 .text_range()
                 .start(),
-            ResolveResult::WithEnv(env) => source_map
-                .expr_node(env)
+            ResolveResult::WithEnvs(env) => source_map
+                .expr_node(env[0])
                 .unwrap()
                 .to_node(&parse.syntax_node())
                 .text_range()

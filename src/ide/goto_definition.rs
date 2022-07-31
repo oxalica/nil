@@ -10,7 +10,7 @@ pub(crate) fn goto_definition(
     db: &dyn DefDatabase,
     file_id: FileId,
     pos: TextSize,
-) -> Option<NavigationTarget> {
+) -> Option<Vec<NavigationTarget>> {
     let parse = db.parse(file_id).value;
     let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
     if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT) {
@@ -29,7 +29,7 @@ pub(crate) fn goto_definition(
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(ptr)?;
 
-    let (focus_range, full_range) = match db.resolve_name(file_id, expr_id)? {
+    match db.resolve_name(file_id, expr_id)? {
         ResolveResult::NameDef(def) => {
             let name_node = source_map.name_def_node(def)?.to_node(&parse.syntax_node());
             let full_node = name_node.ancestors().find(|n| {
@@ -38,30 +38,40 @@ pub(crate) fn goto_definition(
                     SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
                 )
             })?;
-            (name_node.text_range(), full_node.text_range())
+            Some(vec![NavigationTarget {
+                file_id,
+                focus_range: name_node.text_range(),
+                full_range: full_node.text_range(),
+            }])
         }
-        ResolveResult::WithEnv(env) => {
-            // with expr; body
-            // ^--^       focus
-            // ^--------^ full
-            let env_node = source_map.expr_node(env)?.to_node(&parse.syntax_node());
-            let with_node = ast::With::cast(env_node.parent()?)?;
-            let with_token_range = with_node.with_token()?.text_range();
-            let with_header_end = with_node
-                .semicolon_token()
-                .map_or_else(|| env_node.text_range(), |tok| tok.text_range());
-            let with_header = with_token_range.cover(with_header_end);
-            (with_token_range, with_header)
+        ResolveResult::WithEnvs(envs) => {
+            let targets = envs
+                .iter()
+                .filter_map(|&env_expr| {
+                    // with expr; body
+                    // ^--^       focus
+                    // ^--------^ full
+                    let env_node = source_map
+                        .expr_node(env_expr)?
+                        .to_node(&parse.syntax_node());
+                    let with_node = ast::With::cast(env_node.parent()?)?;
+                    let with_token_range = with_node.with_token()?.text_range();
+                    let with_header_end = with_node
+                        .semicolon_token()
+                        .map_or_else(|| env_node.text_range(), |tok| tok.text_range());
+                    let with_header = with_token_range.cover(with_header_end);
+                    Some(NavigationTarget {
+                        file_id,
+                        focus_range: with_token_range,
+                        full_range: with_header,
+                    })
+                })
+                .collect();
+            Some(targets)
         }
         // Currently builtin names cannot "goto-definition".
-        ResolveResult::Builtin(_) => return None,
-    };
-
-    Some(NavigationTarget {
-        file_id,
-        focus_range,
-        full_range,
-    })
+        ResolveResult::Builtin(_) => None,
+    }
 }
 
 #[cfg(test)]
@@ -73,17 +83,23 @@ mod tests {
     fn check(fixture: &str, expect: Expect) {
         let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
         let src = db.file_content(file_id);
-        let got = match super::goto_definition(&db, file_id, pos) {
-            None => String::new(),
-            Some(target) => {
+        let targets = super::goto_definition(&db, file_id, pos)
+            .into_iter()
+            .flatten()
+            .map(|target| {
                 assert!(target.full_range.contains_range(target.focus_range));
                 let mut full = src[target.full_range].to_owned();
                 let relative_focus = target.focus_range - target.full_range.start();
                 full.insert(relative_focus.end().into(), '>');
                 full.insert(relative_focus.start().into(), '<');
                 full
-            }
-        };
+            })
+            .collect::<Vec<_>>();
+        let mut got = targets.join("\n");
+        // Prettify.
+        if got.contains('\n') {
+            got += "\n";
+        }
         expect.assert_eq(&got);
     }
 
@@ -91,6 +107,12 @@ mod tests {
     fn not_found() {
         check("$0a", expect![]);
         check("b: $0a", expect![]);
+    }
+
+    #[test]
+    fn invalid_position() {
+        check("1 $0+ 2", expect![]);
+        check("wi$0th 1; 2", expect![]);
     }
 
     #[test]
@@ -104,7 +126,14 @@ mod tests {
 
     #[test]
     fn with_env() {
-        check("with a; $0b", expect!["<with> a;"]);
+        check("with 1; let a = 1; in with 2; $0a", expect!["<a> = 1;"]);
+        check(
+            "with 1; let a = 1; in with 2; $0b",
+            expect![[r#"
+                <with> 2;
+                <with> 1;
+            "#]],
+        );
     }
 
     #[test]
