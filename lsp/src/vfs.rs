@@ -46,10 +46,6 @@ impl fmt::Debug for Vfs {
 }
 
 impl Vfs {
-    pub fn file_id(&self, path: &VfsPath) -> Option<FileId> {
-        self.files.get_index_of(path).map(|id| FileId(id as _))
-    }
-
     pub fn file_path(&self, file_id: FileId) -> Option<&VfsPath> {
         self.files.get_index(file_id.0 as _).map(|(path, _)| path)
     }

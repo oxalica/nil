@@ -43,7 +43,7 @@ impl State {
 
     pub fn apply_change(&mut self, change: Change) {
         if !change.is_empty() {
-            eprintln!("Files changed: {:?}", change);
+            log::debug!("Files changed: {:?}", change);
             self.host.apply_change(change);
         }
     }
@@ -111,7 +111,6 @@ impl<'s> RequestDispatcher<'s> {
             let params = serde_json::from_value::<R::Params>(req.params).unwrap();
             let resp = f(self.0.snapshot(), params);
             let resp = lsp_server::Response::new_ok(req.id, serde_json::to_value(resp).unwrap());
-            eprintln!("Sent message: {:?}", resp);
             self.0.responder.send(resp.into()).unwrap();
         }
         self

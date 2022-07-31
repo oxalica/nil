@@ -7,14 +7,13 @@ use lsp_server::{Connection, Message};
 
 pub fn main_loop(conn: Connection) -> Result<()> {
     let init_params = conn.initialize(serde_json::to_value(&server_capabilities()).unwrap())?;
-    eprintln!("Init params: {}", init_params);
+    log::info!("Init params: {}", init_params);
 
     let mut state = State::new(conn.sender.clone());
 
-    eprintln!("Entering main loop");
+    log::info!("Entering main loop");
 
     for msg in &conn.receiver {
-        eprintln!("Got message: {:?}", msg);
         match msg {
             Message::Request(req) => {
                 if conn.handle_shutdown(&req)? {
@@ -29,8 +28,8 @@ pub fn main_loop(conn: Connection) -> Result<()> {
         }
     }
 
-    // TODO: Force shutdown of pendign requests?
-    eprintln!("Leaving main loop");
+    // TODO: Force shutdown of pending requests?
+    log::info!("Leaving main loop");
 
     Ok(())
 }

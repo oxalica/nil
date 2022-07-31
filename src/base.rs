@@ -1,6 +1,6 @@
 use rowan::{TextRange, TextSize};
 use salsa::Durability;
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 use syntax::Parse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,7 +42,7 @@ fn parse(db: &dyn SourceDatabase, file_id: FileId) -> InFile<Parse> {
     InFile::new(file_id, parse)
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct Change {
     pub file_changes: Vec<(FileId, Option<Arc<str>>)>,
 }
@@ -66,5 +66,20 @@ impl Change {
             // TODO: Better guess of durability?
             db.set_file_content_with_durability(file_id, content, Durability::HIGH);
         }
+    }
+}
+
+impl fmt::Debug for Change {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let modified = self
+            .file_changes
+            .iter()
+            .filter(|(_, content)| content.is_some())
+            .count();
+        let cleared = self.file_changes.len() - modified;
+        f.debug_struct("Change")
+            .field("modified", &modified)
+            .field("cleared", &cleared)
+            .finish_non_exhaustive()
     }
 }
