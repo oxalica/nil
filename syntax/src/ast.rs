@@ -1,13 +1,7 @@
-use super::{
-    NixLanguage,
-    SyntaxKind::{self, *},
-    SyntaxNode, SyntaxToken,
-};
-use crate::SyntaxElementChildren;
-use rowan::ast::{
-    support::{child, children, token},
-    AstChildren, AstNode,
-};
+use crate::SyntaxKind::{self, *};
+use crate::{NixLanguage, SyntaxElementChildren, SyntaxNode, SyntaxToken};
+use rowan::ast::support::{child, children, token};
+use rowan::ast::{AstChildren, AstNode};
 use rowan::NodeOrToken;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

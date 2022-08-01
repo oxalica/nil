@@ -1,8 +1,5 @@
-use crate::{
-    builtin,
-    def::{AstPtr, DefDatabase},
-    FileId,
-};
+use crate::def::{AstPtr, DefDatabase};
+use crate::{builtin, FileId};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use syntax::{ast, match_ast, SyntaxKind, TextRange, TextSize, T};

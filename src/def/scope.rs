@@ -2,7 +2,9 @@ use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Modul
 use crate::{builtin, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
-use std::{collections::HashMap, iter, ops, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::{iter, ops};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ModuleScopes {
@@ -208,10 +210,8 @@ impl ScopeData {
 #[cfg(test)]
 mod tests {
     use super::ScopeKind;
-    use crate::{
-        def::{AstPtr, DefDatabase, ResolveResult, SourceDatabase},
-        tests::TestDB,
-    };
+    use crate::def::{AstPtr, DefDatabase, ResolveResult, SourceDatabase};
+    use crate::tests::TestDB;
     use expect_test::{expect, Expect};
     use rowan::ast::AstNode;
     use syntax::{ast, match_ast};

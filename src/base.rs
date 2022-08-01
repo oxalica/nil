@@ -1,6 +1,7 @@
 use rowan::{TextRange, TextSize};
 use salsa::Durability;
-use std::{fmt, sync::Arc};
+use std::fmt;
+use std::sync::Arc;
 use syntax::Parse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

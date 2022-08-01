@@ -4,14 +4,14 @@ mod scope;
 #[cfg(test)]
 mod tests;
 
-use crate::{
-    base::SourceDatabase,
-    {Diagnostic, FileId},
-};
+use crate::base::SourceDatabase;
+use crate::{Diagnostic, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
-use std::{collections::HashMap, ops, sync::Arc};
+use std::collections::HashMap;
+use std::ops;
+use std::sync::Arc;
 
 pub use self::scope::{ModuleScopes, ResolveResult, ScopeData, ScopeId};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};

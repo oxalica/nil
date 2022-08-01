@@ -1,10 +1,8 @@
-use crate::{
-    ast::SourceFile,
-    lexer, Error,
-    SyntaxKind::{self, *},
-    SyntaxNode,
-};
-use rowan::{ast::AstNode, Checkpoint, GreenNode, GreenNodeBuilder, TextSize};
+use crate::ast::SourceFile;
+use crate::SyntaxKind::{self, *};
+use crate::{lexer, Error, SyntaxNode};
+use rowan::ast::AstNode;
+use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextSize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Parse {

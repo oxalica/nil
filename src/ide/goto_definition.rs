@@ -1,9 +1,8 @@
 use super::NavigationTarget;
-use crate::{
-    def::{AstPtr, DefDatabase, ResolveResult},
-    FileId,
-};
-use rowan::{ast::AstNode, TextSize};
+use crate::def::{AstPtr, DefDatabase, ResolveResult};
+use crate::FileId;
+use rowan::ast::AstNode;
+use rowan::TextSize;
 use syntax::{ast, match_ast, SyntaxKind, T};
 
 pub(crate) fn goto_definition(

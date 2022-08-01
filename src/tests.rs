@@ -1,7 +1,8 @@
 use crate::base::{SourceDatabase, SourceDatabaseStorage};
 use crate::def::DefDatabaseStorage;
 use crate::{Change, FileId};
-use rowan::{ast::AstNode, TextSize};
+use rowan::ast::AstNode;
+use rowan::TextSize;
 use std::ops;
 use syntax::{NixLanguage, SyntaxNode};
 

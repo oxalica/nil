@@ -2,7 +2,9 @@ use indexmap::IndexMap;
 use lsp_types::Url;
 use nil::{Change, FileId, FilePos};
 use std::collections::HashMap;
-use std::{fmt, mem, path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::{fmt, mem};
 use text_size::TextSize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

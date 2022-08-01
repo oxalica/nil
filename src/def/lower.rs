@@ -9,10 +9,8 @@ use rowan::ast::AstNode;
 use rowan::TextRange;
 use smol_str::SmolStr;
 use std::str;
-use syntax::{
-    ast::{self, HasBindings, HasStringParts, LiteralKind},
-    Parse,
-};
+use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
+use syntax::Parse;
 
 pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
     let diagnostics = parse

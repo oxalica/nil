@@ -1,10 +1,8 @@
 use crate::SyntaxKind::{self, *};
 use once_cell::sync::Lazy;
-use regex_automata::{
-    dfa::{dense, Automaton},
-    nfa::thompson,
-    SyntaxConfig,
-};
+use regex_automata::dfa::{dense, Automaton};
+use regex_automata::nfa::thompson;
+use regex_automata::SyntaxConfig;
 use rowan::{TextRange, TextSize};
 use std::ptr;
 

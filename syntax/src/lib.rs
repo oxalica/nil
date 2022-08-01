@@ -10,8 +10,7 @@ mod tests;
 
 use core::fmt;
 
-pub use rowan;
-pub use rowan::{TextRange, TextSize};
+pub use rowan::{self, TextRange, TextSize};
 
 pub use self::kind::SyntaxKind;
 pub use self::parser::{parse_file, Parse};

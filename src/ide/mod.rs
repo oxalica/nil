@@ -1,7 +1,9 @@
 mod completion;
 mod goto_definition;
 
-use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage, Change, FileId, FilePos};
+use crate::base::SourceDatabaseStorage;
+use crate::def::DefDatabaseStorage;
+use crate::{Change, FileId, FilePos};
 use rowan::TextRange;
 use salsa::{Cancelled, Database, Durability, ParallelDatabase};
 use std::fmt;
