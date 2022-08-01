@@ -1,9 +1,12 @@
+mod completion;
+mod goto_definition;
+
 use crate::{base::SourceDatabaseStorage, def::DefDatabaseStorage, Change, FileId, FilePos};
 use rowan::TextRange;
 use salsa::{Cancelled, Database, Durability, ParallelDatabase};
 use std::fmt;
 
-mod goto_definition;
+pub use completion::{CompletionItem, CompletionItemKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationTarget {
@@ -77,5 +80,9 @@ impl Analysis {
 
     pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<Vec<NavigationTarget>>> {
         self.with_db(|db| goto_definition::goto_definition(db, pos.file_id, pos.value))
+    }
+
+    pub fn completions(&self, pos: FilePos) -> Cancellable<Option<Vec<CompletionItem>>> {
+        self.with_db(|db| completion::completions(db, pos.file_id, pos.value))
     }
 }

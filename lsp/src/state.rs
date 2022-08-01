@@ -1,7 +1,7 @@
 use crate::vfs::{Vfs, VfsPath};
 use crossbeam_channel::Sender;
 use lsp_types::{self as lsp, notification as notif, request as req, OneOf, Url};
-use nil::{Analysis, AnalysisHost, Change, FilePos, InFile};
+use nil::{Analysis, AnalysisHost, Change, CompletionItemKind, FilePos, InFile};
 use std::sync::{Arc, RwLock};
 use text_size::TextRange;
 
@@ -15,6 +15,10 @@ pub fn server_capabilities() -> lsp::ServerCapabilities {
             },
         )),
         definition_provider: Some(OneOf::Left(true)),
+        completion_provider: Some(lsp::CompletionOptions {
+            trigger_characters: Some(vec![".".into()]),
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
@@ -79,6 +83,36 @@ impl State {
                     Some(locs) => Some(lsp::GotoDefinitionResponse::Array(locs)),
                     None => Some(lsp::GotoDefinitionResponse::Array(Vec::new())),
                 }
+            })
+            .on::<req::Completion>(|st, params| {
+                let pos = get_file_pos(&st.vfs.read().unwrap(), &params.text_document_position)?;
+                let items = st.analysis.completions(pos).ok()??;
+                let vfs = st.vfs.read().unwrap();
+                let items = items
+                    .into_iter()
+                    .filter_map(|item| {
+                        let kind = match item.kind {
+                            // FIXME: More specific?
+                            CompletionItemKind::Builtin => lsp::CompletionItemKind::KEYWORD,
+                            CompletionItemKind::Binding => lsp::CompletionItemKind::VARIABLE,
+                        };
+                        Some(lsp::CompletionItem {
+                            label: item.label.into(),
+                            kind: Some(kind),
+                            insert_text: None,
+                            insert_text_format: Some(lsp::InsertTextFormat::PLAIN_TEXT),
+                            // We don't support indentation yet.
+                            insert_text_mode: Some(lsp::InsertTextMode::ADJUST_INDENTATION),
+                            text_edit: Some(lsp::CompletionTextEdit::Edit(lsp::TextEdit {
+                                range: to_lsp_range(&vfs, pos.map(|_| item.source_range))?,
+                                new_text: item.replace.into(),
+                            })),
+                            // TODO
+                            ..Default::default()
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                Some(lsp::CompletionResponse::Array(items))
             })
             .finish();
     }
@@ -159,11 +193,14 @@ fn get_file_pos(vfs: &Vfs, params: &lsp::TextDocumentPositionParams) -> Option<F
 
 fn to_lsp_location(vfs: &Vfs, pos: InFile<TextRange>) -> Option<lsp::Location> {
     let url = vfs.file_path(pos.file_id)?.try_into().ok()?;
+    Some(lsp::Location::new(url, to_lsp_range(vfs, pos)?))
+}
+
+fn to_lsp_range(vfs: &Vfs, pos: InFile<TextRange>) -> Option<lsp::Range> {
     let (_, line1, col1) = vfs.get_file_line_col(pos.map(|range| range.start()))?;
     let (_, line2, col2) = vfs.get_file_line_col(pos.map(|range| range.end()))?;
-    let range = lsp::Range::new(
+    Some(lsp::Range::new(
         lsp::Position::new(line1, col1),
         lsp::Position::new(line2, col2),
-    );
-    Some(lsp::Location::new(url, range))
+    ))
 }
