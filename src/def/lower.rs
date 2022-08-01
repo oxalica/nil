@@ -242,8 +242,9 @@ impl LowerCtx {
                     }
                     LiteralKind::SearchPath => {
                         text = &text[1..text.len() - 1]; // Strip '<' and '>'.
-                        let (search_name, path) = text.split_once('/').unwrap();
-                        text = path;
+                        let (search_name, relative_path) =
+                            text.split_once('/').unwrap_or((text, ""));
+                        text = relative_path;
                         PathAnchor::Search(search_name.into())
                     }
                     _ => unreachable!(),
