@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::ops;
 use std::sync::Arc;
 
-pub use self::scope::{ModuleScopes, ResolveResult, ScopeData, ScopeId};
+pub use self::scope::{ModuleScopes, NameReferenceMap, ResolveResult, ScopeData, ScopeId};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
 #[salsa::query_group(DefDatabaseStorage)]
@@ -29,6 +29,9 @@ pub trait DefDatabase: SourceDatabase {
 
     #[salsa::invoke(ModuleScopes::resolve_name_query)]
     fn resolve_name(&self, file_id: FileId, expr_id: ExprId) -> Option<ResolveResult>;
+
+    #[salsa::invoke(NameReferenceMap::name_reference_map_query)]
+    fn name_reference_map(&self, file_id: FileId) -> Arc<NameReferenceMap>;
 }
 
 fn module_with_source_map(
@@ -77,6 +80,10 @@ impl Module {
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
+
+    pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &'_ Expr)> + ExactSizeIterator + '_ {
+        self.exprs.iter()
+    }
 }
 
 pub type AstPtr = rowan::ast::SyntaxNodePtr<syntax::NixLanguage>;
@@ -96,6 +103,10 @@ impl ModuleSourceMap {
 
     pub fn expr_node(&self, expr_id: ExprId) -> Option<AstPtr> {
         self.expr_map_rev.get(&expr_id).cloned()
+    }
+
+    pub fn node_name_def(&self, node: AstPtr) -> Option<NameDefId> {
+        self.name_def_map.get(&node).copied()
     }
 
     pub fn name_def_node(&self, def_id: NameDefId) -> Option<AstPtr> {

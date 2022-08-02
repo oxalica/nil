@@ -179,6 +179,15 @@ pub enum ResolveResult {
     WithEnvs(Vec<ExprId>),
 }
 
+impl ResolveResult {
+    pub fn as_name_def(&self) -> Option<NameDefId> {
+        match self {
+            Self::NameDef(v) => Some(*v),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScopeData {
     parent: Option<ScopeId>,
@@ -204,6 +213,37 @@ impl ScopeData {
             ScopeKind::WithEnv(expr) => Some(expr),
             _ => None,
         }
+    }
+}
+
+/// The map of reverse name resolution, or name references.
+/// It is used for name references lookup, but requires resolution of all names.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct NameReferenceMap {
+    // Assume almost all defs are referenced somewhere.
+    map: ArenaMap<NameDefId, Vec<ExprId>>,
+}
+
+impl NameReferenceMap {
+    pub(crate) fn name_reference_map_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
+        let module = db.module(file_id);
+        let mut this = Self::default();
+        module
+            .exprs()
+            // N.B. Inherited attrs are also translated into Expr::References.
+            // This should cover all cases.
+            .filter(|(_, kind)| matches!(kind, Expr::Reference(_)))
+            .map(|(expr, _)| expr)
+            .filter_map(|expr| Some((expr, db.resolve_name(file_id, expr)?.as_name_def()?)))
+            .for_each(|(expr, def)| match this.map.get_mut(def) {
+                Some(refs) => refs.push(expr),
+                None => this.map.insert(def, vec![expr]),
+            });
+        Arc::new(this)
+    }
+
+    pub fn references(&self, def: NameDefId) -> Option<&[ExprId]> {
+        Some(&**self.map.get(def)?)
     }
 }
 
@@ -291,6 +331,26 @@ mod tests {
         assert_eq!(got, Some(def_pos));
     }
 
+    #[track_caller]
+    fn check_refs(fixture: &str, expect: &[u32]) {
+        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
+        let ptr = AstPtr::new(db.node_at::<ast::Attr>(file_id, pos).syntax());
+        let source_map = db.source_map(file_id);
+        let def = source_map.node_name_def(ptr).expect("Not a name def");
+
+        let ref_map = db.name_reference_map(file_id);
+        let got = ref_map.references(def).map_or_else(Vec::new, |exprs| {
+            exprs
+                .iter()
+                .map(|&expr| {
+                    let pos = source_map.expr_node(expr).unwrap().text_range().start();
+                    u32::from(pos)
+                })
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(got, expect);
+    }
+
     #[test]
     fn top_level() {
         check_scopes(r"$0a", expect![[""]]);
@@ -373,5 +433,20 @@ mod tests {
         check_resolve("let $1true = 1; in with x; $0true + false + falsie");
         check_resolve("let true = 1; in with x; true + $0$1false + falsie");
         check_resolve("let true = 1; in with $1x; true + false + $0falsie");
+    }
+
+    #[test]
+    fn references() {
+        check_refs("let $0a = 1; b = 1; in a", &[21]);
+        check_refs("let a = 1; $0b = 1; in a", &[]);
+
+        check_refs("rec { inherit (b) $0a; b = a; }", &[25]);
+        check_refs("rec { inherit (b) a; $0b = a; }", &[15]);
+
+        check_refs(r#"let $0" " = 1; in { inherit " "; }"#, &[26]);
+        check_refs(
+            r#"let " " = 1; in rec { inherit $0" "; x = { inherit ${" "}; }; }"#,
+            &[49],
+        );
     }
 }
