@@ -44,15 +44,17 @@ impl TestDB {
             .value
             .syntax_node()
             .token_at_offset(pos)
-            .right_biased()
-            .expect("No token")
+            .right_biased()?
             .parent_ancestors()
             .find_map(f)
     }
 
-    pub fn node_at<N: AstNode<Language = NixLanguage>>(&self, file_id: FileId, pos: TextSize) -> N {
+    pub fn node_at<N: AstNode<Language = NixLanguage>>(
+        &self,
+        file_id: FileId,
+        pos: TextSize,
+    ) -> Option<N> {
         self.find_node(file_id, pos, N::cast)
-            .expect("No node found")
     }
 }
 

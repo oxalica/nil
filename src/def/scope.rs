@@ -259,7 +259,11 @@ mod tests {
     #[track_caller]
     fn check_scopes(fixture: &str, expect: Expect) {
         let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
-        let ptr = AstPtr::new(db.node_at::<ast::Expr>(file_id, pos).syntax());
+        let ptr = AstPtr::new(
+            db.node_at::<ast::Expr>(file_id, pos)
+                .expect("No Expr node")
+                .syntax(),
+        );
 
         let source_map = db.source_map(file_id);
         let expr_id = source_map.expr_map[&ptr];
@@ -334,7 +338,11 @@ mod tests {
     #[track_caller]
     fn check_refs(fixture: &str, expect: &[u32]) {
         let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
-        let ptr = AstPtr::new(db.node_at::<ast::Attr>(file_id, pos).syntax());
+        let ptr = AstPtr::new(
+            db.node_at::<ast::Attr>(file_id, pos)
+                .expect("No Attr node")
+                .syntax(),
+        );
         let source_map = db.source_map(file_id);
         let def = source_map.node_name_def(ptr).expect("Not a name def");
 
