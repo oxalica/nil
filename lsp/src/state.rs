@@ -19,6 +19,7 @@ pub fn server_capabilities() -> lsp::ServerCapabilities {
             trigger_characters: Some(vec![".".into()]),
             ..Default::default()
         }),
+        references_provider: Some(OneOf::Left(true)),
         ..Default::default()
     }
 }
@@ -113,6 +114,16 @@ impl State {
                     })
                     .collect::<Vec<_>>();
                 Some(lsp::CompletionResponse::Array(items))
+            })
+            .on::<req::References>(|st, params| {
+                let pos = get_file_pos(&st.vfs.read().unwrap(), &params.text_document_position)?;
+                let refs = st.analysis.references(pos).ok()??;
+                let vfs = st.vfs.read().unwrap();
+                let locs = refs
+                    .iter()
+                    .filter_map(|&file_range| to_lsp_location(&vfs, file_range))
+                    .collect::<Vec<_>>();
+                Some(locs)
             })
             .finish();
     }

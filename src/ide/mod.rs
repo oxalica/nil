@@ -1,9 +1,10 @@
 mod completion;
 mod goto_definition;
+mod references;
 
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
-use crate::{Change, FileId, FilePos};
+use crate::{Change, FileId, FilePos, FileRange};
 use rowan::TextRange;
 use salsa::{Cancelled, Database, Durability, ParallelDatabase};
 use std::fmt;
@@ -86,5 +87,9 @@ impl Analysis {
 
     pub fn completions(&self, pos: FilePos) -> Cancellable<Option<Vec<CompletionItem>>> {
         self.with_db(|db| completion::completions(db, pos.file_id, pos.value))
+    }
+
+    pub fn references(&self, pos: FilePos) -> Cancellable<Option<Vec<FileRange>>> {
+        self.with_db(|db| references::references(db, pos.file_id, pos.value))
     }
 }
