@@ -1,5 +1,20 @@
 nil: Language server of Nix Expression Language
 
+🚧 *This project is under development, but be happy to try it out!*
+
+Super fast incremental analysis! Scans `all-packages.nix` in less then 0.1s and completes with no delay!
+
+## Features
+
+- [x] Goto definition. `textDocument/definition`
+- [x] Find references. `textDocument/reference`
+- [x] Completion. `textDocument/completion`
+  - [x] Builtin names.
+  - [x] Local bindings.
+  - [ ] Attrset fields.
+- [ ] Cross-file analysis.
+- [ ] Multi-threaded.
+
 ## Installation
 
 1. Have the latest stable version of Rust installed.
