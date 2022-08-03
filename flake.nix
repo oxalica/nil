@@ -31,6 +31,7 @@
       nil = naersk-lib.buildPackage {
         pname = "nil";
         root = ./.;
+        cargoBuildOptions = x: x ++ [ "-p" "lsp" ];
       };
       default = self.packages.${system}.nil;
     });
