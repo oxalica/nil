@@ -8,6 +8,8 @@ Super fast incremental analysis! Scans `all-packages.nix` in less then 0.1s and 
 
 - [x] Goto definition. `textDocument/definition`
 - [x] Find references. `textDocument/reference`
+  - [x] Local binding references.
+  - [x] With expression references.
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
   - [x] Local bindings.
