@@ -8,42 +8,35 @@
     naersk.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    utils,
-    naersk,
-  }: let
-    supportedSystems = [
-      "aarch64-darwin"
-      "aarch64-linux"
-      "x86_64-darwin"
-      "x86_64-linux"
-    ];
+  outputs = { self, nixpkgs, utils, naersk, }:
+    let
+      supportedSystems = [
+        "aarch64-darwin"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "x86_64-linux"
+      ];
 
-    genSystems = nixpkgs.lib.genAttrs supportedSystems;
+      genSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-    pkgsFor = nixpkgs.legacyPackages;
-  in {
-    packages = genSystems (system: let
-      naersk-lib = naersk.lib.${system};
-    in {
-      nil = naersk-lib.buildPackage {
-        pname = "nil";
-        root = ./.;
-        cargoBuildOptions = x: x ++ [ "-p" "lsp" ];
-      };
-      default = self.packages.${system}.nil;
-    });
+      pkgsFor = nixpkgs.legacyPackages;
+    in
+    {
+      packages = genSystems (system:
+        let
+          naersk-lib = naersk.lib.${system};
+        in
+        {
+          nil = naersk-lib.buildPackage {
+            pname = "nil";
+            root = ./.;
+            cargoBuildOptions = x: x ++ [ "-p" "lsp" ];
+          };
+          default = self.packages.${system}.nil;
+        });
 
-    devShells = genSystems (system: {
-      default = pkgsFor.${system}.mkShell {
-        nativeBuildInputs = with pkgsFor.${system}; [
-          rustc
-          cargo
-          gitAndTools.pre-commit
-        ];
-      };
-    });
-  };
+      devShells = genSystems (system: {
+        default = import ./shell.nix { pkgs = pkgsFor.${system}; };
+      });
+    };
 }
