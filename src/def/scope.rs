@@ -68,12 +68,12 @@ impl ModuleScopes {
             return Some(ResolveResult::Builtin(name));
         }
         // 3. "with" exprs.
-        let envs = self
+        let withs = self
             .ancestors(scope)
             .filter_map(|data| data.as_with())
             .collect::<Vec<_>>();
-        if !envs.is_empty() {
-            return Some(ResolveResult::WithEnvs(envs));
+        if !withs.is_empty() {
+            return Some(ResolveResult::WithExprs(withs));
         }
         None
     }
@@ -113,7 +113,7 @@ impl ModuleScopes {
                 self.traverse_expr(module, *env, scope);
                 let scope = self.scopes.alloc(ScopeData {
                     parent: Some(scope),
-                    kind: ScopeKind::WithEnv(*env),
+                    kind: ScopeKind::WithExpr(expr),
                 });
                 self.traverse_expr(module, *body, scope);
             }
@@ -176,7 +176,7 @@ impl ModuleScopes {
 pub enum ResolveResult {
     NameDef(NameDefId),
     Builtin(&'static str),
-    WithEnvs(Vec<ExprId>),
+    WithExprs(Vec<ExprId>),
 }
 
 impl ResolveResult {
@@ -197,7 +197,7 @@ pub struct ScopeData {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ScopeKind {
     NameDefs(HashMap<SmolStr, NameDefId>),
-    WithEnv(ExprId),
+    WithExpr(ExprId),
 }
 
 impl ScopeData {
@@ -210,7 +210,7 @@ impl ScopeData {
 
     pub fn as_with(&self) -> Option<ExprId> {
         match self.kind {
-            ScopeKind::WithEnv(expr) => Some(expr),
+            ScopeKind::WithExpr(expr) => Some(expr),
             _ => None,
         }
     }
@@ -285,7 +285,7 @@ mod tests {
                     names.sort();
                     names.join(" ")
                 }
-                &ScopeKind::WithEnv(expr) => {
+                &ScopeKind::WithExpr(expr) => {
                     let pos = source_map.expr_node(expr).unwrap().text_range().start();
                     format!("with@{}", u32::from(pos))
                 }
@@ -323,8 +323,9 @@ mod tests {
                 .to_node(&parse.syntax_node())
                 .text_range()
                 .start(),
-            ResolveResult::WithEnvs(env) => source_map
-                .expr_node(env[0])
+            ResolveResult::WithExprs(expr) => source_map
+                // Test the innermost one.
+                .expr_node(expr[0])
                 .unwrap()
                 .to_node(&parse.syntax_node())
                 .text_range()
@@ -379,14 +380,14 @@ mod tests {
     fn with() {
         check_scopes(
             r"a: with b; c: with c; $0a (d: with e; a)",
-            expect!["with@19 | c@11 | with@8 | a@0"],
+            expect!["with@14 | c@11 | with@3 | a@0"],
         );
 
         check_resolve(r"$1a: with b; c: $0a");
         check_resolve(r"a: with b; $1c: $0c");
-        check_resolve(r"a: with $1b; c: $0x");
+        check_resolve(r"a: $1with b; c: $0x");
         check_resolve(r"$1x: with a; with b; $0x");
-        check_resolve(r"x: with a; with $1b; $0y");
+        check_resolve(r"x: with a; $1with b; $0y");
     }
 
     #[test]
@@ -440,7 +441,7 @@ mod tests {
     fn builtin() {
         check_resolve("let $1true = 1; in with x; $0true + false + falsie");
         check_resolve("let true = 1; in with x; true + $0$1false + falsie");
-        check_resolve("let true = 1; in with $1x; true + false + $0falsie");
+        check_resolve("let true = 1; in $1with x; true + false + $0falsie");
     }
 
     #[test]

@@ -43,21 +43,22 @@ pub(crate) fn goto_definition(
                 full_range: full_node.text_range(),
             }])
         }
-        ResolveResult::WithEnvs(envs) => {
-            let targets = envs
+        ResolveResult::WithExprs(withs) => {
+            let targets = withs
                 .iter()
-                .filter_map(|&env_expr| {
+                .filter_map(|&with_expr| {
                     // with expr; body
                     // ^--^       focus
                     // ^--------^ full
-                    let env_node = source_map
-                        .expr_node(env_expr)?
+                    let with_node = source_map
+                        .expr_node(with_expr)
+                        .expect("WithExprs must be valid")
                         .to_node(&parse.syntax_node());
-                    let with_node = ast::With::cast(env_node.parent()?)?;
+                    let with_node = ast::With::cast(with_node).expect("WithExprs must be valid");
                     let with_token_range = with_node.with_token()?.text_range();
                     let with_header_end = with_node
                         .semicolon_token()
-                        .map_or_else(|| env_node.text_range(), |tok| tok.text_range());
+                        .map_or_else(|| with_node.syntax().text_range(), |tok| tok.text_range());
                     let with_header = with_token_range.cover(with_header_end);
                     Some(NavigationTarget {
                         file_id,
