@@ -32,9 +32,7 @@ regex_dfa! {
         // The order matters!
         SPACE = r"[ \r\n\t]+",
         COMMENT = r"#.*|/\*([^*]|\*[^/])*\*/",
-        ABSOLUTE_PATH = r"(/[a-zA-Z0-9._+-]+)+",
-        RELATIVE_PATH = r"[a-zA-Z0-9._+-]+(/[a-zA-Z0-9._+-]+)+",
-        HOME_PATH = r"~(/[a-zA-Z0-9._+-]+)+",
+        PATH = r"(~|[a-zA-Z0-9._+-]*)(/[a-zA-Z0-9._+-]+)+",
         SEARCH_PATH = r"<[a-zA-Z0-9._+-]+(/[a-zA-Z0-9._+-]+)*>",
         FLOAT = r"(\d+\.\d*|\.\d+)([Ee][+-]?\d+)?",
         INT = r"\d+",
@@ -240,7 +238,7 @@ mod test {
                 SPACE " "
                 GT ">"
                 SPACE " "
-                RELATIVE_PATH "a/b"
+                PATH "a/b"
                 SPACE " "
                 IDENT "a"
                 SLASH "/"
@@ -249,7 +247,7 @@ mod test {
                 SPACE " "
                 IDENT "a"
                 SPACE " "
-                ABSOLUTE_PATH "/b"
+                PATH "/b"
             "#]],
         );
     }

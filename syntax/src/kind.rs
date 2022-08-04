@@ -87,12 +87,10 @@ def! {
     DOT3 = [...],
 
     // Literals and identifiers.
-    ABSOLUTE_PATH,
     FLOAT,
-    HOME_PATH,
     IDENT,
     INT,
-    RELATIVE_PATH,
+    PATH,
     SEARCH_PATH,
     URI,
 

@@ -227,29 +227,29 @@ impl LowerCtx {
             LiteralKind::Int => Literal::Int(text.parse::<i64>().ok()?),
             LiteralKind::Float => Literal::Float(text.parse::<f64>().unwrap().into()),
             LiteralKind::Uri => Literal::String(text.into()),
-            LiteralKind::RelativePath
-            | LiteralKind::AbsolutePath
-            | LiteralKind::HomePath
-            | LiteralKind::SearchPath => {
-                let anchor = match kind {
-                    LiteralKind::RelativePath => PathAnchor::Relative(self.file_id),
-                    LiteralKind::AbsolutePath => PathAnchor::Absolute,
-                    LiteralKind::HomePath => {
-                        text = &text[2..]; // Strip "~/".
+            LiteralKind::SearchPath => {
+                text = &text[1..text.len() - 1]; // Strip '<' and '>'.
+                let (search_name, relative_path) = text.split_once('/').unwrap_or((text, ""));
+                let anchor = PathAnchor::Search(search_name.into());
+                let (supers, raw_segments) = normalize_path(relative_path);
+                Literal::Path(Path {
+                    anchor,
+                    supers,
+                    raw_segments,
+                })
+            }
+            LiteralKind::Path => {
+                let anchor = match text.as_bytes()[0] {
+                    b'/' => PathAnchor::Absolute,
+                    b'~' => {
+                        text = text.strip_prefix('~').unwrap();
                         PathAnchor::Home
                     }
-                    LiteralKind::SearchPath => {
-                        text = &text[1..text.len() - 1]; // Strip '<' and '>'.
-                        let (search_name, relative_path) =
-                            text.split_once('/').unwrap_or((text, ""));
-                        text = relative_path;
-                        PathAnchor::Search(search_name.into())
-                    }
-                    _ => unreachable!(),
+                    _ => PathAnchor::Relative(self.file_id),
                 };
                 let (mut supers, raw_segments) = normalize_path(text);
-                if kind == LiteralKind::AbsolutePath {
-                    // Extra ".." has no effect for absolute path.
+                // Extra ".." has no effect for absolute path.
+                if anchor == PathAnchor::Absolute {
                     supers = 0;
                 }
                 Literal::Path(Path {

@@ -12,13 +12,13 @@ SOURCE_FILE@0..121
       FLOAT@12..15 "1.2"
     SPACE@15..18 "\n  "
     LITERAL@18..20
-      ABSOLUTE_PATH@18..20 "/a"
+      PATH@18..20 "/a"
     SPACE@20..23 "\n  "
     LITERAL@23..26
-      RELATIVE_PATH@23..26 "a/a"
+      PATH@23..26 "a/a"
     SPACE@26..29 "\n  "
     LITERAL@29..32
-      HOME_PATH@29..32 "~/a"
+      PATH@29..32 "~/a"
     SPACE@32..35 "\n  "
     LITERAL@35..38
       URI@35..38 "a:a"

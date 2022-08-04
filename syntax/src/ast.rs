@@ -71,9 +71,7 @@ pub enum LiteralKind {
     Int,
     Float,
     Uri,
-    RelativePath,
-    AbsolutePath,
-    HomePath,
+    Path,
     SearchPath,
 }
 
@@ -349,10 +347,8 @@ asts! {
                 INT => LiteralKind::Int,
                 FLOAT => LiteralKind::Float,
                 URI => LiteralKind::Uri,
-                ABSOLUTE_PATH => LiteralKind::AbsolutePath,
-                RELATIVE_PATH => LiteralKind::RelativePath,
+                PATH => LiteralKind::Path,
                 SEARCH_PATH => LiteralKind::SearchPath,
-                HOME_PATH => LiteralKind::HomePath,
                 _ => return None,
             })
         }

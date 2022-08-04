@@ -439,7 +439,7 @@ impl<'i> Parser<'i> {
                 self.bump(); // IDENT
                 self.finish_node();
             }
-            Some(INT | FLOAT | RELATIVE_PATH | ABSOLUTE_PATH | HOME_PATH | SEARCH_PATH | URI) => {
+            Some(INT | FLOAT | PATH | SEARCH_PATH | URI) => {
                 self.start_node(LITERAL);
                 self.bump();
                 self.finish_node();
@@ -714,9 +714,7 @@ impl SyntaxKind {
             IDENT
                 | INT
                 | FLOAT
-                | RELATIVE_PATH
-                | ABSOLUTE_PATH
-                | HOME_PATH
+                | PATH
                 | SEARCH_PATH
                 | URI
                 | T!['"']
