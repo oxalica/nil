@@ -95,8 +95,4 @@ let
   '';
 
 in
-pkgs.mkShell {
-  packages = [
-    neovim
-  ];
-}
+  neovim

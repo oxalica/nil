@@ -1,4 +1,4 @@
-nil: Language server of Nix Expression Language
+nil: Language server for Nix Expression Language
 
 🚧 *This project is under development, but be happy to try it out!*
 
@@ -19,8 +19,23 @@ Super fast incremental analysis! Scans `all-packages.nix` in less then 0.1s and 
 
 ## Installation
 
-1. Have the latest stable version of Rust installed.
-2. `cargo install --git https://github.com/oxalica/nil.git`
+**TODO: Beginner friendly instructions.**
+
+This repo is packaged via [Nix flakes][nix-flakes], the language server binary package is
+available through the default flake output `github:oxalica/nil#` with the path `bin/nil`.
+
+Flake output structure:
+```
+├───devShells
+│   └───(...)
+└───packages
+    ├───x86_64-linux
+    │   ├───default: package 'nil-unstable-2022-08-04'
+    │   └───nil: package 'nil-unstable-2022-08-04'
+    └───(...)
+```
+
+[nix-flakes]: https://nixos.wiki/wiki/Flakes
 
 ### For neovim `nvim-lspconfig` user
 
@@ -30,8 +45,8 @@ Add the following vimscript to your configuration.
 lua <<EOF
   require('lspconfig').rnix.setup {
     autostart = true,
-    -- Set to the path to `nil` binary you installed.
-    cmd = { vim.env.HOME .. "/.local/bin/nil" },
+    -- Change it to the path to the `nil` binary you installed.
+    cmd = { "/run/current-system/sw/bin/bin/nil" },
   }
 EOF
 ```
