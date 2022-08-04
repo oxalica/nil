@@ -439,11 +439,15 @@ impl<'i> Parser<'i> {
                 self.bump(); // IDENT
                 self.finish_node();
             }
-            Some(INT | FLOAT | PATH | SEARCH_PATH | URI) => {
+            Some(k @ (INT | FLOAT | PATH | SEARCH_PATH | URI)) => {
+                if k == PATH {
+                    self.validate_path_fragment(false);
+                }
                 self.start_node(LITERAL);
                 self.bump();
                 self.finish_node();
             }
+            Some(PATH_START) => self.path_interpolation(),
             Some(T!['"']) => self.string(STRING),
             Some(T!["''"]) => self.string(INDENT_STRING),
             Some(T!['(']) => {
@@ -502,6 +506,51 @@ impl<'i> Parser<'i> {
             _ => {
                 self.error(Error::UnexpectedToken);
             }
+        }
+    }
+
+    fn path_interpolation(&mut self) {
+        assert_eq!(self.peek(), Some(PATH_START));
+        self.start_node(PATH_INTERPOLATION);
+        self.bump();
+        // No skipping whitespace.
+        while let Some(tok) = self.peek() {
+            match tok {
+                PATH_END => {
+                    self.bump();
+                    break;
+                }
+                PATH_FRAGMENT => {
+                    let is_last =
+                        matches!(self.tokens.get(self.tokens.len() - 2), Some((PATH_END, _)));
+                    self.validate_path_fragment(!is_last);
+                    self.bump();
+                }
+                T!["${"] => self.dynamic(),
+                _ => unreachable!(),
+            }
+        }
+        self.finish_node();
+    }
+
+    /// Validate the next path fragment and emit errors about slashes.
+    fn validate_path_fragment(&mut self, allow_trailing_slash: bool) {
+        let range = match self.tokens.last() {
+            Some((PATH_FRAGMENT | PATH, range)) => *range,
+            _ => unreachable!(),
+        };
+        let mut last_is_slash = false;
+        for (ch, i) in self.src[range].chars().zip(0u32..) {
+            let cur_is_slash = ch == '/';
+            if last_is_slash && cur_is_slash {
+                let pos = range.start() + TextSize::from(i);
+                self.errors.push((Error::PathDuplicatedSlashes, pos));
+            }
+            last_is_slash = cur_is_slash;
+        }
+        if !allow_trailing_slash && last_is_slash {
+            let pos = range.end() - TextSize::from(1);
+            self.errors.push((Error::PathTrailingSlash, pos));
         }
     }
 
@@ -716,6 +765,7 @@ impl SyntaxKind {
                 | FLOAT
                 | PATH
                 | SEARCH_PATH
+                | PATH_START
                 | URI
                 | T!['"']
                 | T!["''"]

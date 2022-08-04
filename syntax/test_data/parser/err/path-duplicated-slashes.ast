@@ -1,0 +1,22 @@
+Path has duplicated slashes at 7
+Path has duplicated slashes at 20
+SOURCE_FILE@0..25
+  LIST@0..24
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    LITERAL@4..9
+      PATH@4..9 "/a//b"
+    SPACE@9..12 "\n  "
+    PATH_INTERPOLATION@12..22
+      PATH_START@12..12 ""
+      PATH_FRAGMENT@12..14 "/a"
+      DYNAMIC@14..18
+        DOLLAR_L_CURLY@14..16 "${"
+        REF@16..17
+          IDENT@16..17 "b"
+        R_CURLY@17..18 "}"
+      PATH_FRAGMENT@18..22 "c//d"
+      PATH_END@22..22 ""
+    SPACE@22..23 "\n"
+    R_BRACK@23..24 "]"
+  SPACE@24..25 "\n"

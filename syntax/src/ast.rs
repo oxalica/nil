@@ -66,6 +66,26 @@ pub enum StringPart {
     Dynamic(Dynamic),
 }
 
+#[derive(Clone, Debug)]
+pub struct PathPartIter(SyntaxElementChildren);
+
+impl Iterator for PathPartIter {
+    type Item = PathPart;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.find_map(|nt| match (nt.kind(), nt) {
+            (PATH_FRAGMENT, NodeOrToken::Token(t)) => Some(PathPart::Fragment(t)),
+            (DYNAMIC, NodeOrToken::Node(n)) => Some(PathPart::Dynamic(Dynamic(n))),
+            _ => None,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PathPart {
+    Fragment(SyntaxToken),
+    Dynamic(Dynamic),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LiteralKind {
     Int,
@@ -214,6 +234,7 @@ enums! {
         List,
         Literal,
         Paren,
+        PathInterpolation,
         Ref,
         Select,
         String,
@@ -367,6 +388,11 @@ asts! {
         l_brack_token: T!['('],
         expr: Expr,
         r_brack_token: T![')'],
+    },
+    PATH_INTERPOLATION = PathInterpolation {
+        pub fn path_parts(&self) -> PathPartIter {
+            PathPartIter(self.syntax().children_with_tokens())
+        }
     },
     PAT = Pat {
         fields: [PatField],

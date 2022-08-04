@@ -196,6 +196,16 @@ impl LowerCtx {
                 let bindings = set.finish(self);
                 self.alloc_expr(ctor(bindings), ptr)
             }
+            ast::Expr::PathInterpolation(e) => {
+                let parts = e
+                    .path_parts()
+                    .filter_map(|part| match part {
+                        ast::PathPart::Fragment(_) => None,
+                        ast::PathPart::Dynamic(d) => Some(self.lower_expr_opt(d.expr())),
+                    })
+                    .collect();
+                self.alloc_expr(Expr::PathInterpolation(parts), ptr)
+            }
         }
     }
 

@@ -23,6 +23,8 @@ pub enum Error {
     MissingToken(SyntaxKind),
     MissingExpr,
     MissingAttr,
+    PathTrailingSlash,
+    PathDuplicatedSlashes,
 }
 
 impl fmt::Display for Error {
@@ -34,6 +36,8 @@ impl fmt::Display for Error {
             Self::MissingToken(tok) => return write!(f, "Missing {:?}", tok),
             Self::MissingExpr => "Missing expression",
             Self::MissingAttr => "Missing attribute",
+            Self::PathTrailingSlash => "Path has trailing slash",
+            Self::PathDuplicatedSlashes => "Path has duplicated slashes",
         }
         .fmt(f)
     }

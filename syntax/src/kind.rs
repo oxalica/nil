@@ -94,6 +94,11 @@ def! {
     SEARCH_PATH,
     URI,
 
+    // Path interpolation.
+    PATH_START,
+    PATH_END,
+    PATH_FRAGMENT,
+
     // String parts.
     STRING_FRAGMENT,
     STRING_ESCAPE,
@@ -118,6 +123,7 @@ def! {
     PARAM,
     PAREN,
     PAT,
+    PATH_INTERPOLATION,
     PAT_FIELD,
     REF,
     SELECT,

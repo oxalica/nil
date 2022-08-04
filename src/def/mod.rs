@@ -129,6 +129,7 @@ pub enum Expr {
     HasAttr(ExprId, Attrpath),
     Select(ExprId, Attrpath, Option<ExprId>),
     StringInterpolation(Box<[ExprId]>),
+    PathInterpolation(Box<[ExprId]>),
     List(Box<[ExprId]>),
     LetIn(Bindings, ExprId),
     Attrset(Bindings),
@@ -169,7 +170,9 @@ impl Expr {
                     f(e);
                 }
             }
-            Self::StringInterpolation(xs) | Self::List(xs) => xs.iter().copied().for_each(f),
+            Self::StringInterpolation(xs) | Self::List(xs) | Self::PathInterpolation(xs) => {
+                xs.iter().copied().for_each(f)
+            }
             Self::LetIn(bindings, body) => {
                 bindings.walk_child_exprs(&mut f);
                 f(*body);

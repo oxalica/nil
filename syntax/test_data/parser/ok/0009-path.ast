@@ -1,0 +1,33 @@
+SOURCE_FILE@0..46
+  LIST@0..45
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    PATH_INTERPOLATION@4..25
+      PATH_START@4..4 ""
+      PATH_FRAGMENT@4..5 "/"
+      DYNAMIC@5..9
+        DOLLAR_L_CURLY@5..7 "${"
+        REF@7..8
+          IDENT@7..8 "a"
+        R_CURLY@8..9 "}"
+      PATH_FRAGMENT@9..17 "/bar/baz"
+      DYNAMIC@17..21
+        DOLLAR_L_CURLY@17..19 "${"
+        REF@19..20
+          IDENT@19..20 "b"
+        R_CURLY@20..21 "}"
+      PATH_FRAGMENT@21..25 ".nix"
+      PATH_END@25..25 ""
+    SPACE@25..28 "\n  "
+    PATH_INTERPOLATION@28..43
+      PATH_START@28..28 ""
+      PATH_FRAGMENT@28..39 "foo/bar/baz"
+      DYNAMIC@39..43
+        DOLLAR_L_CURLY@39..41 "${"
+        REF@41..42
+          IDENT@41..42 "c"
+        R_CURLY@42..43 "}"
+      PATH_END@43..43 ""
+    SPACE@43..44 "\n"
+    R_BRACK@44..45 "]"
+  SPACE@45..46 "\n"

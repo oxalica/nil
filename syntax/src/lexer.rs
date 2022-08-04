@@ -32,7 +32,13 @@ regex_dfa! {
         // The order matters!
         SPACE = r"[ \r\n\t]+",
         COMMENT = r"#.*|/\*([^*]|\*[^/])*\*/",
-        PATH = r"(~|[a-zA-Z0-9._+-]*)(/[a-zA-Z0-9._+-]+)+",
+        // N.B. Nix somehow accepts multiple slashes in path interpolation except the first
+        // slash, but the first path fragment accepts at most 2 continuous slashes.
+        //
+        // Here we try to accept multiple and trailing slashes except the first one,
+        // and phrase them out in the parser to avoid parser abuse :)
+        PATH_START = r"(~|[a-zA-Z0-9._+-]*)/([a-zA-Z0-9._+-][/a-zA-Z0-9._+-]*)?\$\{",
+        PATH = r"(~|[a-zA-Z0-9._+-]*)/[a-zA-Z0-9._+-][/a-zA-Z0-9._+-]*",
         SEARCH_PATH = r"<[a-zA-Z0-9._+-]+(/[a-zA-Z0-9._+-]+)*>",
         FLOAT = r"(\d+\.\d*|\.\d+)([Ee][+-]?\d+)?",
         INT = r"\d+",
@@ -103,6 +109,13 @@ regex_dfa! {
     }
 }
 
+regex_dfa! {
+    PATH_TOKEN_DFA, PATH_TOKEN_MAP {
+        DOLLAR_L_CURLY = r"\$\{",
+        PATH_FRAGMENT = r"[/a-zA-Z0-9._+-]+",
+    }
+}
+
 pub type LexTokens = Vec<(SyntaxKind, TextRange)>;
 
 pub fn lex(src: &[u8]) -> LexTokens {
@@ -111,6 +124,7 @@ pub fn lex(src: &[u8]) -> LexTokens {
     let default_ctx = (&*DEFAULT_TOKEN_DFA, DEFAULT_TOKEN_MAP);
     let string_ctx = (&*STRING_TOKEN_DFA, STRING_TOKEN_MAP);
     let indent_string_ctx = (&*INDENT_STRING_TOKEN_DFA, INDENT_STRING_TOKEN_MAP);
+    let path_ctx = (&*PATH_TOKEN_DFA, PATH_TOKEN_MAP);
 
     let mut out = Vec::new();
     let mut ctxs = Vec::new();
@@ -120,12 +134,17 @@ pub fn lex(src: &[u8]) -> LexTokens {
         let (dfa, map) = ctxs.last().copied().unwrap_or(default_ctx);
 
         let rest = &src[usize::from(offset)..];
-        let (mut tok, len) = match dfa.find_leftmost_fwd(rest).expect("No quit byte") {
+        let (mut tok, mut len) = match dfa.find_leftmost_fwd(rest).expect("No quit byte") {
             // The length of src is checked before.
             Some(m) => (
                 map[m.pattern().as_usize()],
                 TextSize::from(m.offset() as u32),
             ),
+            None if ptr::eq(dfa, path_ctx.0) => {
+                ctxs.pop().expect("In path");
+                out.push((PATH_END, TextRange::empty(offset)));
+                continue;
+            }
             None => {
                 out.push((ERROR, TextRange::at(offset, 1.into())));
                 offset += TextSize::from(1);
@@ -158,11 +177,21 @@ pub fn lex(src: &[u8]) -> LexTokens {
                     _ => IDENT,
                 };
             }
+            PATH_START => {
+                len -= TextSize::of("${");
+                ctxs.push(path_ctx);
+                out.push((PATH_START, TextRange::empty(offset)));
+                tok = PATH_FRAGMENT;
+            }
             _ => {}
         }
 
         out.push((tok, TextRange::at(offset, len)));
         offset += len;
+    }
+
+    if matches!(ctxs.last(), Some((dfa, _)) if ptr::eq(*dfa, path_ctx.0)) {
+        out.push((PATH_END, TextRange::empty(total_len)));
     }
 
     out
@@ -249,6 +278,110 @@ mod test {
                 SPACE " "
                 PATH "/b"
             "#]],
+        );
+    }
+
+    #[test]
+    fn path_duplicated_slashes() {
+        check_lex(
+            "/a//b/ a/b//c /${x}//d",
+            expect![[r#"
+                PATH "/a//b/"
+                SPACE " "
+                PATH "a/b//c"
+                SPACE " "
+                PATH_START ""
+                PATH_FRAGMENT "/"
+                DOLLAR_L_CURLY "${"
+                IDENT "x"
+                R_CURLY "}"
+                PATH_FRAGMENT "//d"
+                PATH_END ""
+            "#]],
+        );
+    }
+
+    #[test]
+    fn path_trailing_slash() {
+        check_lex(
+            "a/b/ /a/ ~/a/",
+            expect![[r#"
+                PATH "a/b/"
+                SPACE " "
+                PATH "/a/"
+                SPACE " "
+                PATH "~/a/"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn path_interpolation() {
+        check_lex(
+            "/${1}${2}/${3}a/${4}/a${5}a/a${6}/a/${7}",
+            expect![[r#"
+                PATH_START ""
+                PATH_FRAGMENT "/"
+                DOLLAR_L_CURLY "${"
+                INT "1"
+                R_CURLY "}"
+                DOLLAR_L_CURLY "${"
+                INT "2"
+                R_CURLY "}"
+                PATH_FRAGMENT "/"
+                DOLLAR_L_CURLY "${"
+                INT "3"
+                R_CURLY "}"
+                PATH_FRAGMENT "a/"
+                DOLLAR_L_CURLY "${"
+                INT "4"
+                R_CURLY "}"
+                PATH_FRAGMENT "/a"
+                DOLLAR_L_CURLY "${"
+                INT "5"
+                R_CURLY "}"
+                PATH_FRAGMENT "a/a"
+                DOLLAR_L_CURLY "${"
+                INT "6"
+                R_CURLY "}"
+                PATH_FRAGMENT "/a/"
+                DOLLAR_L_CURLY "${"
+                INT "7"
+                R_CURLY "}"
+                PATH_END ""
+            "#]],
+        );
+        check_lex(
+            "~/a/${1}/a/a/${2}a/a/a",
+            expect![[r#"
+                PATH_START ""
+                PATH_FRAGMENT "~/a/"
+                DOLLAR_L_CURLY "${"
+                INT "1"
+                R_CURLY "}"
+                PATH_FRAGMENT "/a/a/"
+                DOLLAR_L_CURLY "${"
+                INT "2"
+                R_CURLY "}"
+                PATH_FRAGMENT "a/a/a"
+                PATH_END ""
+            "#]],
+        );
+        check_lex(
+            "foo/bar/${baz}/bux/${qux}/",
+            expect![[r#"
+            PATH_START ""
+            PATH_FRAGMENT "foo/bar/"
+            DOLLAR_L_CURLY "${"
+            IDENT "baz"
+            R_CURLY "}"
+            PATH_FRAGMENT "/bux/"
+            DOLLAR_L_CURLY "${"
+            IDENT "qux"
+            R_CURLY "}"
+            PATH_FRAGMENT "/"
+            PATH_END ""
+        "#]],
         );
     }
 

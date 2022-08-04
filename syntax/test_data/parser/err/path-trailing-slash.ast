@@ -1,0 +1,32 @@
+Path has trailing slash at 6
+Path has trailing slash at 13
+Path has trailing slash at 29
+SOURCE_FILE@0..33
+  LIST@0..32
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    LITERAL@4..7
+      PATH@4..7 "/a/"
+    SPACE@7..10 "\n  "
+    LITERAL@10..14
+      PATH@10..14 "a/b/"
+    SPACE@14..17 "\n  "
+    PATH_INTERPOLATION@17..30
+      PATH_START@17..17 ""
+      PATH_FRAGMENT@17..19 "~/"
+      DYNAMIC@19..23
+        DOLLAR_L_CURLY@19..21 "${"
+        REF@21..22
+          IDENT@21..22 "c"
+        R_CURLY@22..23 "}"
+      PATH_FRAGMENT@23..24 "/"
+      DYNAMIC@24..28
+        DOLLAR_L_CURLY@24..26 "${"
+        REF@26..27
+          IDENT@26..27 "d"
+        R_CURLY@27..28 "}"
+      PATH_FRAGMENT@28..30 "e/"
+      PATH_END@30..30 ""
+    SPACE@30..31 "\n"
+    R_BRACK@31..32 "]"
+  SPACE@32..33 "\n"
