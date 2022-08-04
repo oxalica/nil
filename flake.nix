@@ -41,7 +41,7 @@
           NIXPKGS = nixpkgs;
 
           shellHook = ''
-            export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)"
+            export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/release/nil"
           '';
         };
       });

@@ -46,7 +46,7 @@ lua <<EOF
   require('lspconfig').rnix.setup {
     autostart = true,
     -- Change it to the path to the `nil` binary you installed.
-    cmd = { "/run/current-system/sw/bin/bin/nil" },
+    cmd = { "/run/current-system/sw/bin/nil" },
   }
 EOF
 ```

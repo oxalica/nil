@@ -1,11 +1,11 @@
 # This file provides a configured neovim for debugging the LSP.
-# Run `nvim` inside the shell to test.
+# Run `nvim-test` inside the shell to test.
 # Env vars:
 # - `NIL_PATH`: The path to "nil" LSP binary. Default: `target/debug/nil`
 # - `NIL_LOG_PATH`: Where to redirect LSP's stderr. Default: `/tmp/nil.log`
 { pkgs ? import <nixpkgs> { } }:
 let
-  neovim = pkgs.neovim.override {
+  neovim = (pkgs.neovim.override {
     withPython = false;
     withRuby = false;
 
@@ -25,7 +25,11 @@ let
         nvim-lspconfig
       ];
     };
-  };
+  }).overrideAttrs (old: {
+    buildCommand = old.buildCommand + ''
+      mv $out/bin/nvim{,-test}
+    '';
+  });
 
   # lua
   luaRc = ''
