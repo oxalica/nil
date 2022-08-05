@@ -2,26 +2,16 @@ use super::{
     AstPtr, Attrpath, BindingKey, BindingValue, Bindings, Expr, ExprId, Literal, Module,
     ModuleSourceMap, NameDef, NameDefId, Pat, Path, PathAnchor,
 };
-use crate::{Diagnostic, FileId, FileRange, InFile};
+use crate::{Diagnostic, DiagnosticKind, FileId, InFile};
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
-use rowan::TextRange;
 use smol_str::SmolStr;
 use std::str;
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
-use syntax::Parse;
+use syntax::{Parse, TextRange};
 
 pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
-    let diagnostics = parse
-        .value
-        .errors()
-        .iter()
-        .map(|&(err, pos)| {
-            Diagnostic::SyntaxError(InFile::new(parse.file_id, TextRange::empty(pos)), err)
-        })
-        .collect();
-
     let mut ctx = LowerCtx {
         file_id: parse.file_id,
         module: Module {
@@ -29,7 +19,7 @@ pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
             name_defs: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
-            diagnostics,
+            diagnostics: Vec::new(),
         },
         source_map: ModuleSourceMap::default(),
     };
@@ -61,12 +51,8 @@ impl LowerCtx {
         id
     }
 
-    fn file_range(&self, ptr: &AstPtr) -> FileRange {
-        InFile::new(self.file_id, ptr.text_range())
-    }
-
-    fn push_diagnostic(&mut self, diag: Diagnostic) {
-        self.module.diagnostics.push(diag);
+    fn diagnostic(&mut self, range: TextRange, kind: DiagnosticKind) {
+        self.module.diagnostics.push(Diagnostic { range, kind });
     }
 
     fn lower_name(&mut self, node: ast::Name) -> NameDefId {
@@ -175,8 +161,7 @@ impl LowerCtx {
                 for (key, _) in bindings.entries.iter() {
                     if let BindingKey::Dynamic(expr) = key {
                         if let Some(ptr) = self.source_map.expr_node(*expr) {
-                            let range = self.file_range(&ptr);
-                            self.push_diagnostic(Diagnostic::InvalidDynamic(range));
+                            self.diagnostic(ptr.text_range(), DiagnosticKind::InvalidDynamic);
                         }
                     }
                 }
@@ -413,7 +398,7 @@ impl MergingSet {
             let key = match ctx.lower_key(self.is_rec, attr) {
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 BindingKey::Dynamic(expr) => {
-                    ctx.push_diagnostic(Diagnostic::InvalidDynamic(ctx.file_range(&ptr)));
+                    ctx.diagnostic(ptr.text_range(), DiagnosticKind::InvalidDynamic);
                     self.recover_error(ctx, expr, ptr.clone());
                     continue;
                 }
@@ -537,22 +522,20 @@ impl MergingValue {
     }
 
     fn emit_duplicated_key(&self, ctx: &mut LowerCtx, ptr: &AstPtr) {
-        let cur_range = ctx.file_range(ptr);
+        ctx.diagnostic(ptr.text_range(), DiagnosticKind::DuplicatedKey);
         let prev_range = match self {
             Self::Placeholder => unreachable!(),
-            Self::Attrset(set) => ctx.file_range(&set.ptr),
+            Self::Attrset(set) => set.ptr.text_range(),
             Self::Final(BindingValue::Inherit(prev_expr) | BindingValue::Expr(prev_expr)) => {
                 match ctx.source_map.expr_node(*prev_expr) {
-                    Some(ptr) => ctx.file_range(&ptr),
+                    Some(ptr) => ptr.text_range(),
                     None => return,
                 }
             }
-            Self::Final(BindingValue::InheritFrom(_)) => {
-                // FIXME: Cannot get inherit from attrs.
-                cur_range
-            }
+            // FIXME: Cannot get inherit from attrs.
+            Self::Final(BindingValue::InheritFrom(_)) => return,
         };
-        ctx.push_diagnostic(Diagnostic::DuplicatedKey(prev_range, cur_range));
+        ctx.diagnostic(prev_range, DiagnosticKind::DuplicatedKey);
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
@@ -987,19 +970,19 @@ mod tests {
         check_error(
             "let ${a} = 1; in 1",
             expect![[r#"
-                InvalidDynamic(InFile { file_id: FileId(0), value: 6..7 })
+                Diagnostic { range: 6..7, kind: InvalidDynamic }
             "#]],
         );
         check_error(
             "{ inherit ${a}; }",
             expect![[r#"
-                InvalidDynamic(InFile { file_id: FileId(0), value: 10..14 })
+                Diagnostic { range: 10..14, kind: InvalidDynamic }
             "#]],
         );
         check_error(
             "{ inherit (a) ${a}; }",
             expect![[r#"
-                InvalidDynamic(InFile { file_id: FileId(0), value: 14..18 })
+                Diagnostic { range: 14..18, kind: InvalidDynamic }
             "#]],
         );
     }
@@ -1011,28 +994,46 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                DuplicatedKey(InFile { file_id: FileId(0), value: 6..7 }, InFile { file_id: FileId(0), value: 13..14 })
+                Diagnostic { range: 13..14, kind: DuplicatedKey }
+                Diagnostic { range: 6..7, kind: DuplicatedKey }
             "#]],
         );
         // Set and value.
         check_error(
             "{ a.b = 1; a = 2; }",
             expect![[r#"
-                DuplicatedKey(InFile { file_id: FileId(0), value: 4..5 }, InFile { file_id: FileId(0), value: 15..16 })
+                Diagnostic { range: 15..16, kind: DuplicatedKey }
+                Diagnostic { range: 4..5, kind: DuplicatedKey }
             "#]],
         );
         // Value and set.
         check_error(
             "{ a = 1; a.b = 2; }",
             expect![[r#"
-                DuplicatedKey(InFile { file_id: FileId(0), value: 6..7 }, InFile { file_id: FileId(0), value: 11..12 })
+                Diagnostic { range: 11..12, kind: DuplicatedKey }
+                Diagnostic { range: 6..7, kind: DuplicatedKey }
             "#]],
         );
         // Inherit and value.
         check_error(
             "{ inherit a; a = 1; }",
             expect![[r#"
-                DuplicatedKey(InFile { file_id: FileId(0), value: 10..11 }, InFile { file_id: FileId(0), value: 17..18 })
+                Diagnostic { range: 17..18, kind: DuplicatedKey }
+                Diagnostic { range: 10..11, kind: DuplicatedKey }
+            "#]],
+        );
+    }
+
+    #[test]
+    // FIXME: Errors are duplicated.
+    fn attrset_many_duplicated_error() {
+        check_error(
+            "{ a = 1; a = 2; a = 3; }",
+            expect![[r#"
+                Diagnostic { range: 13..14, kind: DuplicatedKey }
+                Diagnostic { range: 6..7, kind: DuplicatedKey }
+                Diagnostic { range: 20..21, kind: DuplicatedKey }
+                Diagnostic { range: 6..7, kind: DuplicatedKey }
             "#]],
         );
     }

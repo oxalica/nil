@@ -1,13 +1,13 @@
 use crate::ast::SourceFile;
 use crate::SyntaxKind::{self, *};
-use crate::{lexer, Error, SyntaxNode};
+use crate::{lexer, Error, ErrorKind, SyntaxNode};
 use rowan::ast::AstNode;
-use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextSize};
+use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Parse {
     green: GreenNode,
-    errors: Vec<(Error, TextSize)>,
+    errors: Vec<Error>,
 }
 
 impl Parse {
@@ -23,7 +23,7 @@ impl Parse {
         SyntaxNode::new_root(self.green.clone())
     }
 
-    pub fn errors(&self) -> &[(Error, TextSize)] {
+    pub fn errors(&self) -> &[Error] {
         &self.errors
     }
 }
@@ -44,7 +44,7 @@ pub fn parse_file(src: &str) -> Parse {
 struct Parser<'i> {
     tokens: lexer::LexTokens,
     builder: GreenNodeBuilder<'static>,
-    errors: Vec<(Error, TextSize)>,
+    errors: Vec<Error>,
     src: &'i str,
 }
 
@@ -55,7 +55,7 @@ impl<'i> Parser<'i> {
         self.expr_function_opt();
         while self.peek_non_ws().is_some() {
             // Tolerate multiple exprs and just emit errors.
-            self.error(Error::MultipleRoots);
+            self.error(ErrorKind::MultipleRoots);
 
             let prev = self.tokens.len();
             self.expr_function_opt();
@@ -72,13 +72,13 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn error(&mut self, err: Error) {
-        let loc = self
+    fn error(&mut self, kind: ErrorKind) {
+        let range = self
             .tokens
             .last()
-            .map(|(_, range)| range.start())
-            .unwrap_or_else(|| (self.src.len() as u32).into());
-        self.errors.push((err, loc));
+            .map(|&(_, range)| range)
+            .unwrap_or_else(|| TextRange::empty(TextSize::from(self.src.len() as u32)));
+        self.errors.push(Error { range, kind });
     }
 
     fn checkpoint(&mut self) -> Checkpoint {
@@ -135,7 +135,7 @@ impl<'i> Parser<'i> {
         if self.peek_non_ws() == Some(expect) {
             self.bump();
         } else {
-            self.error(Error::MissingToken(expect));
+            self.error(ErrorKind::MissingToken(expect));
         }
     }
 
@@ -148,11 +148,11 @@ impl<'i> Parser<'i> {
                     break;
                 }
                 Some(_) => {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                     self.bump();
                 }
                 None => {
-                    self.error(Error::MissingToken(expect));
+                    self.error(ErrorKind::MissingToken(expect));
                     break;
                 }
             }
@@ -194,7 +194,7 @@ impl<'i> Parser<'i> {
                 if matches!(self.iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt()
                 } else {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                     self.bump();
                 }
             }
@@ -269,7 +269,7 @@ impl<'i> Parser<'i> {
                         if self.peek_non_ws() == Some(T!['{']) {
                             self.pat();
                         } else {
-                            self.error(Error::MissingToken(T!['{']));
+                            self.error(ErrorKind::MissingToken(T!['{']));
                         }
                     }
                     self.finish_node();
@@ -326,7 +326,7 @@ impl<'i> Parser<'i> {
 
             // Tolerate incorrect usage of no associative operators, and just mark them.
             while matches!(self.peek_non_ws(), Some(k) if ops.contains(&k)) {
-                self.error(Error::MultipleNoAssoc);
+                self.error(ErrorKind::MultipleNoAssoc);
                 self.bump();
                 next(self);
             }
@@ -468,7 +468,7 @@ impl<'i> Parser<'i> {
                     self.finish_node();
                 // Otherwise, simply skip one token to help better recovery.
                 } else {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                 }
             }
             Some(T!['{']) => {
@@ -492,11 +492,11 @@ impl<'i> Parser<'i> {
                             continue;
                         }
                         Some(_) => {
-                            self.error(Error::UnexpectedToken);
+                            self.error(ErrorKind::UnexpectedToken);
                             self.bump();
                         }
                         None => {
-                            self.error(Error::MissingToken(T![']']));
+                            self.error(ErrorKind::MissingToken(T![']']));
                             break;
                         }
                     }
@@ -504,7 +504,7 @@ impl<'i> Parser<'i> {
                 self.finish_node();
             }
             _ => {
-                self.error(Error::UnexpectedToken);
+                self.error(ErrorKind::UnexpectedToken);
             }
         }
     }
@@ -539,18 +539,24 @@ impl<'i> Parser<'i> {
             Some((PATH_FRAGMENT | PATH, range)) => *range,
             _ => unreachable!(),
         };
-        let mut last_is_slash = false;
-        for (ch, i) in self.src[range].chars().zip(0u32..) {
-            let cur_is_slash = ch == '/';
-            if last_is_slash && cur_is_slash {
-                let pos = range.start() + TextSize::from(i);
-                self.errors.push((Error::PathDuplicatedSlashes, pos));
-            }
-            last_is_slash = cur_is_slash;
-        }
-        if !allow_trailing_slash && last_is_slash {
-            let pos = range.end() - TextSize::from(1);
-            self.errors.push((Error::PathTrailingSlash, pos));
+        // N.B. Path tokens are ASCII-only, which are verified by the lexer.
+        self.src[range]
+            .as_bytes()
+            .windows(2)
+            .zip(1u32..)
+            .filter(|(w, _)| w == b"//")
+            .for_each(|(_, i)| {
+                self.errors.push(Error {
+                    range: TextRange::at(range.start() + TextSize::from(i), 1.into()),
+                    kind: ErrorKind::PathDuplicatedSlashes,
+                });
+            });
+        let last_char = TextRange::at(range.end() - TextSize::from(1), 1.into());
+        if !allow_trailing_slash && &self.src[last_char] == "/" {
+            self.errors.push(Error {
+                range: last_char,
+                kind: ErrorKind::PathTrailingSlash,
+            });
         }
     }
 
@@ -565,7 +571,7 @@ impl<'i> Parser<'i> {
                 if expect_delimiter {
                     self.bump();
                 } else {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                 }
                 continue;
             }
@@ -582,7 +588,7 @@ impl<'i> Parser<'i> {
                         self.bump();
                         break;
                     }
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                     expect_delimiter = false;
                 }
                 Some(IDENT) => {
@@ -598,7 +604,7 @@ impl<'i> Parser<'i> {
                     expect_delimiter = true;
                 }
                 Some(_) => {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                     self.bump();
                     expect_delimiter = false;
                 }
@@ -613,7 +619,7 @@ impl<'i> Parser<'i> {
         loop {
             match self.peek_non_ws() {
                 None => {
-                    self.error(Error::MissingToken(guard));
+                    self.error(ErrorKind::MissingToken(guard));
                     break;
                 }
                 Some(k) if k == guard => {
@@ -649,7 +655,7 @@ impl<'i> Parser<'i> {
                 // Consume one token if it cannot start an AttrPath and is not the guard.
                 // This can happen for some extra tokens (eg. unfinished exprs) in AttrSet or LetIn.
                 Some(_) => {
-                    self.error(Error::UnexpectedToken);
+                    self.error(ErrorKind::UnexpectedToken);
                     self.bump();
                 }
             }
@@ -678,7 +684,7 @@ impl<'i> Parser<'i> {
             }
             Some(T!["${"]) => self.dynamic(),
             Some(T!['"']) => self.string(STRING),
-            _ => self.error(Error::MissingAttr),
+            _ => self.error(ErrorKind::MissingAttr),
         }
     }
 
@@ -701,7 +707,7 @@ impl<'i> Parser<'i> {
             // No skipping whitespace.
             match self.peek() {
                 None => {
-                    self.error(Error::MissingToken(if node == STRING {
+                    self.error(ErrorKind::MissingToken(if node == STRING {
                         T!['"']
                     } else {
                         T!["''"]

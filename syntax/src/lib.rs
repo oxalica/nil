@@ -16,7 +16,13 @@ pub use self::kind::SyntaxKind;
 pub use self::parser::{parse_file, Parse};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Error {
+pub struct Error {
+    pub range: TextRange,
+    pub kind: ErrorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorKind {
     MultipleRoots,
     UnexpectedToken,
     MultipleNoAssoc,
@@ -27,7 +33,7 @@ pub enum Error {
     PathDuplicatedSlashes,
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MultipleRoots => "Multiple root expressions",
@@ -43,7 +49,19 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} at {}..{}",
+            self.kind,
+            u32::from(self.range.start()),
+            u32::from(self.range.end()),
+        )
+    }
+}
+
+impl std::error::Error for ErrorKind {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NixLanguage {}

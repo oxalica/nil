@@ -8,7 +8,7 @@ mod ide;
 mod tests;
 
 pub use base::{Change, FileId, FilePos, FileRange, InFile};
-pub use diagnostic::Diagnostic;
+pub use diagnostic::{Diagnostic, DiagnosticKind};
 pub use ide::{
     Analysis, AnalysisHost, CompletionItem, CompletionItemKind, NavigationTarget, RootDatabase,
 };

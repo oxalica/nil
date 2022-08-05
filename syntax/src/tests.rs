@@ -26,8 +26,8 @@ fn run_test(dir: &Path, ok: bool) {
 
         let ast = parse_file(&src);
         let mut got = String::new();
-        for (err, loc) in ast.errors() {
-            writeln!(got, "{} at {}", err, u32::from(*loc)).unwrap();
+        for err in ast.errors() {
+            writeln!(got, "{}", err).unwrap();
         }
         write!(got, "{:#?}", ast.syntax_node()).unwrap();
 
@@ -37,7 +37,6 @@ fn run_test(dir: &Path, ok: bool) {
         }
 
         let expect_path = path.with_extension("ast");
-        println!("{:?}", expect_path);
         expect_file![expect_path].assert_eq(&got);
     }
 }

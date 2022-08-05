@@ -1,6 +1,6 @@
-Path has trailing slash at 6
-Path has trailing slash at 13
-Path has trailing slash at 29
+Path has trailing slash at 6..7
+Path has trailing slash at 13..14
+Path has trailing slash at 29..30
 SOURCE_FILE@0..33
   LIST@0..32
     L_BRACK@0..1 "["
