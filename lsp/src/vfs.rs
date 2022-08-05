@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use lsp_types::Url;
-use nil::{Change, FileId, FilePos};
+use nil::{Change, FileId};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -67,23 +67,21 @@ impl Vfs {
         file_id
     }
 
-    pub fn get_file_pos(&self, path: &VfsPath, line: u32, col: u32) -> Option<FilePos> {
+    pub fn get(&self, path: &VfsPath) -> Option<(FileId, &LineMap)> {
         let (id, _, inner) = self.files.get_full(path)?;
         let (_, line_map) = inner.as_ref()?;
-        let pos = line_map.pos(line, col);
-        Some(FilePos::new(FileId(id as _), pos))
+        Some((FileId(id as u32), line_map))
     }
 
-    pub fn get_file_line_col(&self, file_pos: FilePos) -> Option<(&VfsPath, u32, u32)> {
-        let (path, inner) = self.files.get_index(file_pos.file_id.0 as usize)?;
+    pub fn file_line_map(&self, file_id: FileId) -> Option<&LineMap> {
+        let (_, inner) = self.files.get_index(file_id.0 as usize)?;
         let (_, line_map) = inner.as_ref()?;
-        let (line, col) = line_map.line_col(file_pos.value);
-        Some((path, line, col))
+        Some(line_map)
     }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-struct LineMap {
+pub struct LineMap {
     line_starts: Vec<u32>,
     char_diffs: HashMap<u32, Vec<(u32, CodeUnitsDiff)>>,
 }
@@ -141,7 +139,7 @@ impl LineMap {
         Some((text, this))
     }
 
-    fn pos(&self, line: u32, mut col: u32) -> TextSize {
+    pub fn pos(&self, line: u32, mut col: u32) -> TextSize {
         let pos = self.line_starts.get(line as usize).copied().unwrap_or(0);
         if let Some(diffs) = self.char_diffs.get(&line) {
             for &(char_pos, diff) in diffs {
@@ -153,7 +151,7 @@ impl LineMap {
         (pos + col).into()
     }
 
-    fn line_col(&self, pos: TextSize) -> (u32, u32) {
+    pub fn line_col(&self, pos: TextSize) -> (u32, u32) {
         let pos = u32::from(pos);
         let line = self
             .line_starts
