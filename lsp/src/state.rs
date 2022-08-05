@@ -1,16 +1,16 @@
-use crate::{handler, Vfs, VfsPath};
+use crate::{convert, handler, Vfs, VfsPath};
 use anyhow::{bail, Result};
 use crossbeam_channel::{Receiver, Sender};
 use lsp_server::{ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::Notification as _;
-use lsp_types::{notification as notif, request as req, Url};
-use nil::{Analysis, AnalysisHost, Change};
+use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
+use nil::{Analysis, AnalysisHost};
 use std::sync::{Arc, RwLock};
 
 pub struct State {
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
-    responder: Sender<Message>,
+    sender: Sender<Message>,
     is_shutdown: bool,
 }
 
@@ -19,7 +19,7 @@ impl State {
         Self {
             host: Default::default(),
             vfs: Default::default(),
-            responder,
+            sender: responder,
             is_shutdown: false,
         }
     }
@@ -47,7 +47,7 @@ impl State {
                 ErrorCode::InvalidRequest as i32,
                 "Shutdown already requested.".into(),
             );
-            self.responder.send(resp.into()).unwrap();
+            self.sender.send(resp.into()).unwrap();
             return;
         }
 
@@ -77,6 +77,12 @@ impl State {
             .finish();
     }
 
+    fn send_notification<N: notif::Notification>(&self, params: N::Params) {
+        self.sender
+            .send(Notification::new(N::METHOD.into(), params).into())
+            .unwrap();
+    }
+
     fn snapshot(&self) -> StateSnapshot {
         StateSnapshot {
             analysis: self.host.snapshot(),
@@ -84,19 +90,33 @@ impl State {
         }
     }
 
-    fn apply_change(&mut self, change: Change) {
-        if !change.is_empty() {
-            log::debug!("Files changed: {:?}", change);
-            self.host.apply_change(change);
-        }
-    }
-
     fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) {
         if let Ok(path) = VfsPath::try_from(uri) {
-            self.apply_change({
-                let mut vfs = self.vfs.write().unwrap();
-                vfs.set_file_content(path, text);
-                vfs.take_change()
+            let mut vfs = self.vfs.write().unwrap();
+            vfs.set_file_content(path, text);
+
+            let change = vfs.take_change();
+            log::debug!("Files changed: {:?}", change);
+            self.host.apply_change(change.clone());
+
+            // Currently we push down changes immediately.
+            assert_eq!(change.file_changes.len(), 1);
+            let (file, text) = &change.file_changes[0];
+            let line_map = vfs.file_line_map(*file).unwrap();
+            let diagnostics = text
+                .as_ref()
+                .and_then(|_| self.host.snapshot().diagnostics(*file).ok())
+                .map(|diags| {
+                    diags
+                        .into_iter()
+                        .filter_map(|diag| convert::to_diagnostic(line_map, diag))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+                uri: uri.clone(),
+                diagnostics,
+                version: None,
             });
         }
     }
@@ -112,7 +132,7 @@ impl<'s> RequestDispatcher<'s> {
             let params = serde_json::from_value::<R::Params>(req.params).unwrap();
             let resp = f(self.0, params);
             let resp = Response::new_ok(req.id, serde_json::to_value(resp).unwrap());
-            self.0.responder.send(resp.into()).unwrap();
+            self.0.sender.send(resp.into()).unwrap();
         }
         self
     }
@@ -124,7 +144,7 @@ impl<'s> RequestDispatcher<'s> {
             let params = serde_json::from_value::<R::Params>(req.params).unwrap();
             let resp = f(self.0.snapshot(), params);
             let resp = Response::new_ok(req.id, serde_json::to_value(resp).unwrap());
-            self.0.responder.send(resp.into()).unwrap();
+            self.0.sender.send(resp.into()).unwrap();
         }
         self
     }
@@ -132,7 +152,7 @@ impl<'s> RequestDispatcher<'s> {
     fn finish(self) {
         if let Some(req) = self.1 {
             let resp = Response::new_err(req.id, ErrorCode::MethodNotFound as _, String::new());
-            self.0.responder.send(resp.into()).unwrap();
+            self.0.sender.send(resp.into()).unwrap();
         }
     }
 }

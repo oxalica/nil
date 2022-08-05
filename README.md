@@ -14,6 +14,11 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] Builtin names.
   - [x] Local bindings.
   - [ ] Attrset fields.
+- [x] Diagnostics. `textDocument/publishDiagnostics`
+  - Syntax errors. 
+    - Incomplete syntax errors are currently suppressed to avoid noisy outputs during typing.
+  - [x] Hard semantic errors reported as parse errors by Nix, like duplicated keys in attrsets.
+  - [ ] Client pulled diagnostics.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 

@@ -1,3 +1,4 @@
+use std::fmt;
 use syntax::{ErrorKind as SynErrorKind, TextRange};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,5 +52,17 @@ impl From<syntax::Error> for Diagnostic {
             range: err.range,
             kind: DiagnosticKind::SyntaxError(err.kind),
         }
+    }
+}
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} at {}..{}",
+            self.message(),
+            u32::from(self.range.start()),
+            u32::from(self.range.end()),
+        )
     }
 }

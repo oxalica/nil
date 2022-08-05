@@ -1,10 +1,11 @@
 mod completion;
+mod diagnostics;
 mod goto_definition;
 mod references;
 
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
-use crate::{Change, FileId, FilePos, FileRange};
+use crate::{Change, Diagnostic, FileId, FilePos, FileRange};
 use rowan::TextRange;
 use salsa::{Cancelled, Database, Durability, ParallelDatabase};
 use std::fmt;
@@ -79,6 +80,10 @@ impl Analysis {
         F: FnOnce(&RootDatabase) -> T + std::panic::UnwindSafe,
     {
         Cancelled::catch(|| f(&self.db))
+    }
+
+    pub fn diagnostics(&self, file: FileId) -> Cancellable<Vec<Diagnostic>> {
+        self.with_db(|db| diagnostics::diagnostics(db, file))
     }
 
     pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<Vec<NavigationTarget>>> {
