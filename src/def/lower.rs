@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use std::str;
+use std::{mem, str};
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
 use syntax::{Parse, TextRange};
 
@@ -155,16 +155,9 @@ impl LowerCtx {
                 self.alloc_expr(Expr::List(elements), ptr)
             }
             ast::Expr::LetIn(e) => {
-                let mut set = MergingSet::new(true, ptr.clone());
-                set.merge_bindings(self, &e);
+                let mut set = MergingSet::new(true);
+                set.merge_bindings(self, &e, false);
                 let bindings = set.finish(self);
-                for (key, _) in bindings.entries.iter() {
-                    if let BindingKey::Dynamic(expr) = key {
-                        if let Some(ptr) = self.source_map.expr_node(*expr) {
-                            self.diagnostic(ptr.text_range(), DiagnosticKind::InvalidDynamic);
-                        }
-                    }
-                }
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
             }
@@ -176,8 +169,8 @@ impl LowerCtx {
                 } else {
                     (false, Expr::Attrset)
                 };
-                let mut set = MergingSet::new(is_rec, ptr.clone());
-                set.merge_bindings(self, &e);
+                let mut set = MergingSet::new(is_rec);
+                set.merge_bindings(self, &e, true);
                 let bindings = set.finish(self);
                 self.alloc_expr(ctor(bindings), ptr)
             }
@@ -346,24 +339,40 @@ impl LowerCtx {
 
 struct MergingSet {
     is_rec: bool,
-    ptr: AstPtr,
-    entries: IndexMap<BindingKey, MergingValue>,
+    entries: IndexMap<BindingKey, MergingEntry>,
     inherit_froms: Vec<ExprId>,
 }
 
-#[derive(Default)]
+struct MergingEntry {
+    /// The definition location of this entry.
+    def_ptr: AstPtr,
+    /// Whether this entry is considered duplicated and the error is already reported.
+    is_duplicated: bool,
+    value: MergingValue,
+}
+
 enum MergingValue {
-    #[default]
     Placeholder,
     Attrset(MergingSet),
     Final(BindingValue),
 }
 
+impl From<MergingSet> for MergingValue {
+    fn from(set: MergingSet) -> Self {
+        Self::Attrset(set)
+    }
+}
+
+impl From<BindingValue> for MergingValue {
+    fn from(value: BindingValue) -> Self {
+        Self::Final(value)
+    }
+}
+
 impl MergingSet {
-    fn new(is_rec: bool, ptr: AstPtr) -> Self {
+    fn new(is_rec: bool) -> Self {
         Self {
             is_rec,
-            ptr,
             entries: Default::default(),
             inherit_froms: Vec::new(),
         }
@@ -371,16 +380,23 @@ impl MergingSet {
 
     // Place an orphaned Expr as dynamic-attrs for error recovery.
     fn recover_error(&mut self, ctx: &mut LowerCtx, expr: ExprId, ptr: AstPtr) {
-        let k = BindingKey::Dynamic(ctx.alloc_expr(Expr::Missing, ptr));
-        let v = MergingValue::Final(BindingValue::Expr(expr));
-        self.entries.insert(k, v);
+        let key = BindingKey::Dynamic(ctx.alloc_expr(Expr::Missing, ptr.clone()));
+        let ent = MergingEntry {
+            def_ptr: ptr,
+            // This doesn't matter since dynamic keys can never be duplicated.
+            is_duplicated: true,
+            value: BindingValue::Expr(expr).into(),
+        };
+        self.entries.insert(key, ent);
     }
 
-    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindings) {
+    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindings, allow_dynamic: bool) {
         for b in n.bindings() {
             match b {
                 ast::Binding::Inherit(i) => self.merge_inherit(ctx, i),
-                ast::Binding::AttrpathValue(entry) => self.merge_path_value(ctx, entry),
+                ast::Binding::AttrpathValue(entry) => {
+                    self.merge_path_value(ctx, entry, allow_dynamic)
+                }
             }
         }
     }
@@ -406,32 +422,37 @@ impl MergingSet {
             };
 
             // Inherited names never merge other values. It must be an error.
-            if let Some(v) = self.entries.get(&key) {
+            if let Some(v) = self.entries.get_mut(&key) {
                 v.emit_duplicated_key(ctx, &ptr);
                 continue;
             }
 
             let value = match from_expr {
-                Some(id) => MergingValue::Final(BindingValue::InheritFrom(id)),
+                Some(id) => BindingValue::InheritFrom(id),
                 None => {
                     let name = match &key {
                         BindingKey::NameDef(def) => ctx.module[*def].name.clone(),
                         BindingKey::Name(s) => s.clone(),
                         BindingKey::Dynamic(_) => unreachable!(),
                     };
-                    let ref_expr = ctx.alloc_expr(Expr::Reference(name), ptr);
-                    MergingValue::Final(BindingValue::Inherit(ref_expr))
+                    let ref_expr = ctx.alloc_expr(Expr::Reference(name), ptr.clone());
+                    BindingValue::Inherit(ref_expr)
                 }
             };
-            self.entries.insert(key, value);
+            let entry = MergingEntry {
+                def_ptr: ptr,
+                is_duplicated: false,
+                value: value.into(),
+            };
+            self.entries.insert(key, entry);
         }
     }
 
     fn merge_path_value(
         mut self: &mut Self,
-        // &mut self,
         ctx: &mut LowerCtx,
         entry: ast::AttrpathValue,
+        allow_dynamic: bool,
     ) {
         let mut attrs = entry.attrpath().into_iter().flat_map(|path| path.attrs());
         let mut next_attr = match attrs.next() {
@@ -446,15 +467,24 @@ impl MergingSet {
         };
 
         loop {
+            let attr_ptr = AstPtr::new(next_attr.syntax());
             let key = ctx.lower_key(self.is_rec, next_attr);
-            let deep = self.entries.entry(key).or_default();
+            if let (false, BindingKey::Dynamic(_)) = (allow_dynamic, &key) {
+                ctx.diagnostic(attr_ptr.text_range(), DiagnosticKind::InvalidDynamic);
+                // We don't skip the RHS but still process it as a recovery.
+            }
+            let deep = self.entries.entry(key).or_insert_with(|| MergingEntry {
+                def_ptr: attr_ptr.clone(),
+                is_duplicated: false,
+                value: MergingValue::Placeholder,
+            });
             match attrs.next() {
                 Some(attr) => {
-                    self = deep.make_attrset(ctx, false, AstPtr::new(attr.syntax()));
+                    self = deep.make_attrset(ctx, false, &attr_ptr);
                     next_attr = attr;
                 }
                 None => {
-                    deep.merge_ast(ctx, entry.value());
+                    deep.merge_ast(ctx, &attr_ptr, entry.value());
                     return;
                 }
             }
@@ -473,79 +503,77 @@ impl MergingSet {
     }
 }
 
-impl MergingValue {
-    fn make_attrset(&mut self, ctx: &mut LowerCtx, is_rec: bool, ptr: AstPtr) -> &mut MergingSet {
-        match self {
+impl MergingEntry {
+    fn make_attrset(
+        &mut self,
+        ctx: &mut LowerCtx,
+        is_rec: bool,
+        def_ptr: &AstPtr,
+    ) -> &mut MergingSet {
+        match &mut self.value {
+            MergingValue::Placeholder => {
+                self.value = MergingSet::new(is_rec).into();
+            }
             // TODO: Report warnings if set.is_rec
-            Self::Attrset(set) => return set,
-            Self::Placeholder => *self = Self::Attrset(MergingSet::new(is_rec, ptr)),
-            // We prefer to become a Attrset as a guess, which supports further merging.
-            Self::Final(v) => {
-                let mut set = MergingSet::new(is_rec, ptr.clone());
-                if let BindingValue::Expr(expr) = *v {
-                    if let Some(prev_ptr) = ctx.source_map.expr_node(expr) {
-                        set.recover_error(ctx, expr, prev_ptr);
-                    }
+            MergingValue::Attrset(_) => {}
+            // We prefer to become a Attrset as a guess, which allows further merging.
+            MergingValue::Final(value) => {
+                let mut set = MergingSet::new(is_rec);
+                if let BindingValue::Expr(expr) = value {
+                    set.recover_error(ctx, *expr, self.def_ptr.clone());
                 }
-                self.emit_duplicated_key(ctx, &ptr);
-                *self = Self::Attrset(set);
+                self.emit_duplicated_key(ctx, def_ptr);
+                self.def_ptr = def_ptr.clone();
+                self.value = set.into();
             }
         }
-        match self {
-            Self::Attrset(set) => set,
+        match &mut self.value {
+            MergingValue::Attrset(set) => set,
             _ => unreachable!(),
         }
     }
 
-    fn merge_ast(&mut self, ctx: &mut LowerCtx, mut e: Option<ast::Expr>) {
+    fn merge_ast(&mut self, ctx: &mut LowerCtx, def_ptr: &AstPtr, mut e: Option<ast::Expr>) {
         loop {
             match e {
                 Some(ast::Expr::Paren(p)) => e = p.expr(),
                 Some(ast::Expr::AttrSet(e)) if e.let_token().is_none() => {
                     return self
-                        .make_attrset(ctx, e.rec_token().is_some(), AstPtr::new(e.syntax()))
-                        .merge_bindings(ctx, &e);
+                        .make_attrset(ctx, e.rec_token().is_some(), &AstPtr::new(e.syntax()))
+                        .merge_bindings(ctx, &e, true);
                 }
                 _ => break,
             }
         }
         // Here we got an unmergable non-Attrset Expr.
-        match self {
-            Self::Placeholder => *self = Self::Final(BindingValue::Expr(ctx.lower_expr_opt(e))),
-            Self::Attrset(_) | Self::Final(_) => {
-                // Only emit errors if there is RHS.
-                if let Some(e) = e {
-                    self.emit_duplicated_key(ctx, &AstPtr::new(e.syntax()));
+        match &mut self.value {
+            MergingValue::Placeholder => {
+                self.value = BindingValue::Expr(ctx.lower_expr_opt(e)).into();
+            }
+            MergingValue::Attrset(_) | MergingValue::Final { .. } => {
+                // Suppress errors when there is no RHS, which happens during typing.
+                if e.is_some() {
+                    self.emit_duplicated_key(ctx, def_ptr);
                 }
             }
         }
     }
 
-    fn emit_duplicated_key(&self, ctx: &mut LowerCtx, ptr: &AstPtr) {
+    fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, ptr: &AstPtr) {
+        if !mem::replace(&mut self.is_duplicated, true) {
+            // Don't emit twice at previouse key.
+            ctx.diagnostic(self.def_ptr.text_range(), DiagnosticKind::DuplicatedKey);
+        }
         ctx.diagnostic(ptr.text_range(), DiagnosticKind::DuplicatedKey);
-        let prev_range = match self {
-            Self::Placeholder => unreachable!(),
-            Self::Attrset(set) => set.ptr.text_range(),
-            Self::Final(BindingValue::Inherit(prev_expr) | BindingValue::Expr(prev_expr)) => {
-                match ctx.source_map.expr_node(*prev_expr) {
-                    Some(ptr) => ptr.text_range(),
-                    None => return,
-                }
-            }
-            // FIXME: Cannot get inherit from attrs.
-            Self::Final(BindingValue::InheritFrom(_)) => return,
-        };
-        ctx.diagnostic(prev_range, DiagnosticKind::DuplicatedKey);
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
-        match self {
-            Self::Placeholder => unreachable!("Should be processed"),
-            Self::Final(k) => k,
-            Self::Attrset(set) => {
-                let ptr = set.ptr.clone();
+        match self.value {
+            MergingValue::Placeholder => unreachable!(),
+            MergingValue::Final(value) => value,
+            MergingValue::Attrset(set) => {
                 let bindings = set.finish(ctx);
-                let expr = ctx.alloc_expr(Expr::Attrset(bindings), ptr);
+                let expr = ctx.alloc_expr(Expr::Attrset(bindings), self.def_ptr);
                 BindingValue::Expr(expr)
             }
         }
@@ -970,7 +998,7 @@ mod tests {
         check_error(
             "let ${a} = 1; in 1",
             expect![[r#"
-                Diagnostic { range: 6..7, kind: InvalidDynamic }
+                Diagnostic { range: 4..8, kind: InvalidDynamic }
             "#]],
         );
         check_error(
@@ -994,46 +1022,52 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                Diagnostic { range: 13..14, kind: DuplicatedKey }
-                Diagnostic { range: 6..7, kind: DuplicatedKey }
+                Diagnostic { range: 2..3, kind: DuplicatedKey }
+                Diagnostic { range: 9..10, kind: DuplicatedKey }
             "#]],
         );
         // Set and value.
         check_error(
             "{ a.b = 1; a = 2; }",
             expect![[r#"
-                Diagnostic { range: 15..16, kind: DuplicatedKey }
-                Diagnostic { range: 4..5, kind: DuplicatedKey }
+                Diagnostic { range: 2..3, kind: DuplicatedKey }
+                Diagnostic { range: 11..12, kind: DuplicatedKey }
             "#]],
         );
         // Value and set.
         check_error(
             "{ a = 1; a.b = 2; }",
             expect![[r#"
-                Diagnostic { range: 11..12, kind: DuplicatedKey }
-                Diagnostic { range: 6..7, kind: DuplicatedKey }
+                Diagnostic { range: 2..3, kind: DuplicatedKey }
+                Diagnostic { range: 9..10, kind: DuplicatedKey }
             "#]],
         );
         // Inherit and value.
         check_error(
             "{ inherit a; a = 1; }",
             expect![[r#"
-                Diagnostic { range: 17..18, kind: DuplicatedKey }
                 Diagnostic { range: 10..11, kind: DuplicatedKey }
+                Diagnostic { range: 13..14, kind: DuplicatedKey }
+            "#]],
+        );
+        // Inherit-from and value.
+        check_error(
+            "{ inherit (1) a; a = 1; }",
+            expect![[r#"
+                Diagnostic { range: 14..15, kind: DuplicatedKey }
+                Diagnostic { range: 17..18, kind: DuplicatedKey }
             "#]],
         );
     }
 
     #[test]
-    // FIXME: Errors are duplicated.
-    fn attrset_many_duplicated_error() {
+    fn attrset_no_duplicated_duplicated_error() {
         check_error(
             "{ a = 1; a = 2; a = 3; }",
             expect![[r#"
-                Diagnostic { range: 13..14, kind: DuplicatedKey }
-                Diagnostic { range: 6..7, kind: DuplicatedKey }
-                Diagnostic { range: 20..21, kind: DuplicatedKey }
-                Diagnostic { range: 6..7, kind: DuplicatedKey }
+                Diagnostic { range: 2..3, kind: DuplicatedKey }
+                Diagnostic { range: 9..10, kind: DuplicatedKey }
+                Diagnostic { range: 16..17, kind: DuplicatedKey }
             "#]],
         );
     }
