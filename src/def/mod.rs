@@ -259,5 +259,8 @@ impl Bindings {
                 BindingValue::InheritFrom(_) => {}
             }
         }
+        for &e in self.inherit_froms.iter() {
+            f(e);
+        }
     }
 }
