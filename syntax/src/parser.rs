@@ -720,7 +720,10 @@ impl<'i> Parser<'i> {
                 }
                 Some(STRING_ESCAPE | STRING_FRAGMENT | ERROR) => self.bump(),
                 Some(T!["${"]) => self.dynamic(),
-                Some(k) => unreachable!("{:?}", k),
+                // Dynamic "${" may be unpaired, thus we might somehow
+                // get unsynchronized with lexer states.
+                // Here we simply go back to normal states.
+                Some(_) => break,
             }
         }
         self.finish_node();

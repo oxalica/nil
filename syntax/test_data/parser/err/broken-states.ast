@@ -1,0 +1,43 @@
+Unexpected token at 16..17
+Unexpected token at 16..17
+Unexpected token at 18..20
+Unexpected token at 21..22
+Unexpected token at 25..28
+Unexpected token at 29..30
+Unexpected token at 31..32
+Unexpected token at 32..34
+Unexpected token at 34..36
+Unexpected token at 36..37
+Unexpected token at 41..42
+Missing KW_IN at 43..43
+Unexpected token at 43..43
+SOURCE_FILE@0..43
+  LET_IN@0..43
+    KW_LET@0..3 "let"
+    SPACE@3..6 "\n  "
+    INHERIT@6..40
+      KW_INHERIT@6..13 "inherit"
+      SPACE@13..14 " "
+      DYNAMIC@14..38
+        DOLLAR_L_CURLY@14..16 "${"
+        SEMICOLON@16..17 ";"
+        SPACE@17..18 "\n"
+        KW_IN@18..20 "in"
+        SPACE@20..21 " "
+        L_CURLY@21..22 "{"
+        SPACE@22..25 "\n  "
+        IDENT@25..28 "foo"
+        SPACE@28..29 " "
+        EQ@29..30 "="
+        SPACE@30..31 " "
+        DQUOTE@31..32 "\""
+        STRING_FRAGMENT@32..34 "a-"
+        DOLLAR_L_CURLY@34..36 "${"
+        IDENT@36..37 "b"
+        R_CURLY@37..38 "}"
+      STRING@38..39
+        DQUOTE@38..39 "\""
+      SEMICOLON@39..40 ";"
+    SPACE@40..41 "\n"
+    R_CURLY@41..42 "}"
+    SPACE@42..43 "\n"
