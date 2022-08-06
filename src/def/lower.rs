@@ -160,6 +160,15 @@ impl LowerCtx {
                 let mut set = MergingSet::new(Some(NameDefKind::LetIn));
                 set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
+                if bindings.entries.is_empty() && bindings.inherit_froms.is_empty() {
+                    let let_tok_range = e
+                        .let_token()
+                        .map_or(e.syntax().text_range(), |tok| tok.text_range());
+                    let let_in_header = e
+                        .in_token()
+                        .map_or(let_tok_range, |tok| tok.text_range().cover(let_tok_range));
+                    self.diagnostic(let_in_header, DiagnosticKind::EmptyLetIn);
+                }
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
             }
@@ -1116,6 +1125,19 @@ mod tests {
                 4: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 5: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
                 6: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(4))), (Dynamic(Idx::<Expr>(2)), Expr(Idx::<Expr>(5)))], inherit_froms: [] })
+            "#]],
+        );
+    }
+
+    #[test]
+    fn let_empty() {
+        check_lower(
+            "let in 1",
+            expect![[r#"
+                Diagnostic { range: 0..6, kind: EmptyLetIn }
+
+                0: Literal(Int(1))
+                1: LetIn(Bindings { entries: [], inherit_froms: [] }, Idx::<Expr>(0))
             "#]],
         );
     }

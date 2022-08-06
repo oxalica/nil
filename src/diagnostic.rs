@@ -16,6 +16,7 @@ pub enum DiagnosticKind {
     InvalidDynamic,
     DuplicatedKey,
     EmptyInherit,
+    EmptyLetIn,
     LetAttrset,
     UriLiteral,
     MergePlainRecAttrset,
@@ -34,6 +35,7 @@ impl Diagnostic {
         match self.kind {
             DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
             DiagnosticKind::EmptyInherit
+            | DiagnosticKind::EmptyLetIn
             | DiagnosticKind::LetAttrset
             | DiagnosticKind::UriLiteral
             | DiagnosticKind::MergePlainRecAttrset
@@ -53,24 +55,26 @@ impl Diagnostic {
 
     pub fn message(&self) -> String {
         match self.kind {
-            DiagnosticKind::SyntaxError(kind) => kind.to_string(),
+            DiagnosticKind::SyntaxError(kind) => return kind.to_string(),
 
-            DiagnosticKind::InvalidDynamic => "Invalid location of dynamic attribute".into(),
-            DiagnosticKind::DuplicatedKey => "Duplicated name definition".into(),
-            DiagnosticKind::EmptyInherit => "Nothing inherited".into(),
+            DiagnosticKind::InvalidDynamic => "Invalid location of dynamic attribute",
+            DiagnosticKind::DuplicatedKey => "Duplicated name definition",
+            DiagnosticKind::EmptyInherit => "Nothing inherited",
+            DiagnosticKind::EmptyLetIn => "Empty let-in",
             DiagnosticKind::LetAttrset => {
-                "`let { ... }` is deprecated. Use `let ... in ...` instead".into()
+                "`let { ... }` is deprecated. Use `let ... in ...` instead"
             }
             DiagnosticKind::UriLiteral => {
-                "URL literal is confusing and deprecated. Use strings instead".into()
+                "URL literal is confusing and deprecated. Use strings instead"
             }
             DiagnosticKind::MergePlainRecAttrset => {
-                "Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored".into()
+                "Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored"
             }
             DiagnosticKind::MergeRecAttrset => {
-                "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`.".into()
+                "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`."
             }
         }
+        .into()
     }
 
     pub fn is_unnecessary(&self) -> bool {

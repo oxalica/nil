@@ -19,6 +19,7 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
     - Incomplete syntax errors are currently suppressed to avoid noisy outputs during typing.
   - [x] Hard semantic errors reported as parse errors by Nix, like duplicated keys in attrsets.
   - [x] Warnings of legacy syntax.
+  - [x] Warnings of unnecessary syntax.
   - [ ] Client pulled diagnostics.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
