@@ -117,7 +117,7 @@ impl ModuleScopes {
                 });
                 self.traverse_expr(module, *body, scope);
             }
-            Expr::Attrset(bindings) | Expr::LetAttrset(bindings) => {
+            Expr::Attrset(bindings) | Expr::RecAttrset(bindings) | Expr::LetAttrset(bindings) => {
                 self.traverse_bindings(module, bindings, scope);
             }
             Expr::LetIn(bindings, body) => {

@@ -134,6 +134,7 @@ pub enum Expr {
     LetIn(Bindings, ExprId),
     Attrset(Bindings),
     LetAttrset(Bindings),
+    RecAttrset(Bindings),
 }
 
 impl Expr {
@@ -177,7 +178,7 @@ impl Expr {
                 bindings.walk_child_exprs(&mut f);
                 f(*body);
             }
-            Self::Attrset(bindings) | Self::LetAttrset(bindings) => {
+            Self::Attrset(bindings) | Self::RecAttrset(bindings) | Self::LetAttrset(bindings) => {
                 bindings.walk_child_exprs(f);
             }
         }

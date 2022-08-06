@@ -166,7 +166,7 @@ impl LowerCtx {
             ast::Expr::AttrSet(e) => {
                 // RecAttrset is popular than LetAttrset, and is preferred.
                 let (def_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
-                    (Some(NameDefKind::RecAttrset), Expr::Attrset)
+                    (Some(NameDefKind::RecAttrset), Expr::RecAttrset)
                 } else if e.let_token().is_some() {
                     self.diagnostic(e.syntax().text_range(), DiagnosticKind::LetAttrset);
                     (Some(NameDefKind::RecAttrset), Expr::LetAttrset)
@@ -603,8 +603,14 @@ impl MergingEntry {
             MergingValue::Placeholder => unreachable!(),
             MergingValue::Final(value) => value,
             MergingValue::Attrset(set) => {
+                let is_rec = set.def_kind.is_some();
                 let bindings = set.finish(ctx);
-                let expr = ctx.alloc_expr(Expr::Attrset(bindings), self.def_ptr);
+                let expr = if is_rec {
+                    Expr::RecAttrset(bindings)
+                } else {
+                    Expr::Attrset(bindings)
+                };
+                let expr = ctx.alloc_expr(expr, self.def_ptr);
                 BindingValue::Expr(expr)
             }
         }
@@ -983,7 +989,7 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
@@ -999,7 +1005,7 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
@@ -1041,7 +1047,7 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
@@ -1057,7 +1063,7 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
-                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
 
                 0: NameDef { name: "a", kind: RecAttrset }
             "#]],
@@ -1071,7 +1077,7 @@ mod tests {
             "{ a.b = rec { c = 1; }; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
+                1: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
                 2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
 
