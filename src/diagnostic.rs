@@ -9,20 +9,31 @@ pub struct Diagnostic {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticKind {
+    // Syntax.
     SyntaxError(SynErrorKind),
+
+    // Lowering.
     InvalidDynamic,
     DuplicatedKey,
+    EmptyInherit,
+    LetAttrset,
+    UriLiteral,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Severity {
     Error,
+    Warning,
     IncompleteSyntax,
 }
 
 impl Diagnostic {
     pub fn severity(&self) -> Severity {
         match self.kind {
+            DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
+            DiagnosticKind::EmptyInherit
+            | DiagnosticKind::LetAttrset
+            | DiagnosticKind::UriLiteral => Severity::Warning,
             DiagnosticKind::SyntaxError(kind) => match kind {
                 SynErrorKind::MultipleRoots
                 | SynErrorKind::PathTrailingSlash
@@ -33,16 +44,34 @@ impl Diagnostic {
                 | SynErrorKind::MissingExpr
                 | SynErrorKind::MissingAttr => Severity::IncompleteSyntax,
             },
-            DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
         }
     }
 
     pub fn message(&self) -> String {
         match self.kind {
             DiagnosticKind::SyntaxError(kind) => kind.to_string(),
+
             DiagnosticKind::InvalidDynamic => "Invalid location of dynamic attribute".into(),
             DiagnosticKind::DuplicatedKey => "Duplicated name definition".into(),
+            DiagnosticKind::EmptyInherit => "Nothing inherited".into(),
+            DiagnosticKind::LetAttrset => {
+                "`let { ... }` is deprecated. Use `let ... in ...` instead".into()
+            }
+            DiagnosticKind::UriLiteral => {
+                "URL literal is confusing and deprecated. Use strings instead".into()
+            }
         }
+    }
+
+    pub fn is_unnecessary(&self) -> bool {
+        matches!(self.kind, DiagnosticKind::EmptyInherit)
+    }
+
+    pub fn is_deprecated(&self) -> bool {
+        matches!(
+            self.kind,
+            DiagnosticKind::LetAttrset | DiagnosticKind::UriLiteral
+        )
     }
 }
 

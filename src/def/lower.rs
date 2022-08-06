@@ -165,6 +165,7 @@ impl LowerCtx {
                 let (is_rec, ctor): (bool, fn(_) -> _) = if e.rec_token().is_some() {
                     (true, Expr::Attrset)
                 } else if e.let_token().is_some() {
+                    self.diagnostic(e.syntax().text_range(), DiagnosticKind::LetAttrset);
                     (true, Expr::LetAttrset)
                 } else {
                     (false, Expr::Attrset)
@@ -214,7 +215,10 @@ impl LowerCtx {
         Some(match kind {
             LiteralKind::Int => Literal::Int(text.parse::<i64>().ok()?),
             LiteralKind::Float => Literal::Float(text.parse::<f64>().unwrap().into()),
-            LiteralKind::Uri => Literal::String(text.into()),
+            LiteralKind::Uri => {
+                self.diagnostic(lit.syntax().text_range(), DiagnosticKind::UriLiteral);
+                Literal::String(text.into())
+            }
             LiteralKind::SearchPath => {
                 text = &text[1..text.len() - 1]; // Strip '<' and '>'.
                 let (search_name, relative_path) = text.split_once('/').unwrap_or((text, ""));
@@ -409,7 +413,10 @@ impl MergingSet {
             from_id
         });
 
+        let mut no_attrs = true;
         for attr in i.attrs() {
+            no_attrs = false;
+
             let ptr = AstPtr::new(attr.syntax());
             let key = match ctx.lower_key(self.is_rec, attr) {
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
@@ -445,6 +452,10 @@ impl MergingSet {
                 value: value.into(),
             };
             self.entries.insert(key, entry);
+        }
+
+        if no_attrs {
+            ctx.diagnostic(i.syntax().text_range(), DiagnosticKind::EmptyInherit);
         }
     }
 
@@ -592,6 +603,12 @@ mod tests {
         let parse = parse_file(src);
         let (module, _source_map) = lower(InFile::new(FileId(0), parse));
         let mut got = String::new();
+        for diag in module.diagnostics() {
+            writeln!(got, "{:?}", diag).unwrap();
+        }
+        if !module.diagnostics.is_empty() {
+            writeln!(got).unwrap();
+        }
         for (i, e) in module.exprs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), e).unwrap();
         }
@@ -601,7 +618,6 @@ mod tests {
         for (i, def) in module.name_defs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), def).unwrap();
         }
-        assert!(module.diagnostics().is_empty());
         expect.assert_eq(&got);
     }
 
@@ -632,6 +648,8 @@ mod tests {
         check_lower(
             "a:b",
             expect![[r#"
+                Diagnostic { range: 0..3, kind: UriLiteral }
+
                 0: Literal(String("a:b"))
             "#]],
         );
@@ -822,6 +840,18 @@ mod tests {
     }
 
     #[test]
+    fn uri() {
+        check_lower(
+            "foo:bar",
+            expect![[r#"
+                Diagnostic { range: 0..7, kind: UriLiteral }
+
+                0: Literal(String("foo:bar"))
+            "#]],
+        );
+    }
+
+    #[test]
     fn attrpath() {
         check_lower(
             r#"a.b."c".${d} or e"#,
@@ -866,6 +896,9 @@ mod tests {
         check_lower(
             r#"{ inherit; inherit a "b" ${("c")}; inherit (d); inherit (e) f g; }"#,
             expect![[r#"
+                Diagnostic { range: 2..10, kind: EmptyInherit }
+                Diagnostic { range: 35..47, kind: EmptyInherit }
+
                 0: Reference("a")
                 1: Reference("b")
                 2: Reference("c")
@@ -966,6 +999,8 @@ mod tests {
         check_lower(
             "{ a.b = let { c.d = 1; }; }",
             expect![[r#"
+                Diagnostic { range: 8..24, kind: LetAttrset }
+
                 0: Literal(Int(1))
                 1: Attrset(Bindings { entries: [(Name("d"), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
                 2: LetAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
