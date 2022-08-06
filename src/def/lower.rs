@@ -1,6 +1,6 @@
 use super::{
     AstPtr, Attrpath, BindingKey, BindingValue, Bindings, Expr, ExprId, Literal, Module,
-    ModuleSourceMap, NameDef, NameDefId, Pat, Path, PathAnchor,
+    ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, Path, PathAnchor,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId, InFile};
 use indexmap::IndexMap;
@@ -44,8 +44,8 @@ impl LowerCtx {
         id
     }
 
-    fn alloc_name_def(&mut self, name: SmolStr, ptr: AstPtr) -> NameDefId {
-        let id = self.module.name_defs.alloc(NameDef { name });
+    fn alloc_name_def(&mut self, name: SmolStr, kind: NameDefKind, ptr: AstPtr) -> NameDefId {
+        let id = self.module.name_defs.alloc(NameDef { name, kind });
         self.source_map.name_def_map.insert(ptr.clone(), id);
         self.source_map.name_def_map_rev.insert(id, ptr);
         id
@@ -55,12 +55,12 @@ impl LowerCtx {
         self.module.diagnostics.push(Diagnostic { range, kind });
     }
 
-    fn lower_name(&mut self, node: ast::Name) -> NameDefId {
+    fn lower_name(&mut self, node: ast::Name, kind: NameDefKind) -> NameDefId {
         let name = node
             .token()
             .map_or_else(Default::default, |tok| tok.text().into());
         let ptr = AstPtr::new(node.syntax());
-        self.alloc_name_def(name, ptr)
+        self.alloc_name_def(name, kind, ptr)
     }
 
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
@@ -92,12 +92,14 @@ impl LowerCtx {
             ast::Expr::Paren(e) => self.lower_expr_opt(e.expr()),
             ast::Expr::Lambda(e) => {
                 let (param, pat) = e.param().map_or((None, None), |param| {
-                    let name = param.name().map(|n| self.lower_name(n));
+                    let name = param.name().map(|n| self.lower_name(n, NameDefKind::Param));
                     let pat = param.pat().map(|pat| {
                         let fields = pat
                             .fields()
                             .map(|field| {
-                                let field_name = field.name().map(|n| self.lower_name(n));
+                                let field_name = field
+                                    .name()
+                                    .map(|n| self.lower_name(n, NameDefKind::PatField));
                                 let default_expr = field.default_expr().map(|e| self.lower_expr(e));
                                 (field_name, default_expr)
                             })
@@ -155,23 +157,24 @@ impl LowerCtx {
                 self.alloc_expr(Expr::List(elements), ptr)
             }
             ast::Expr::LetIn(e) => {
-                let mut set = MergingSet::new(true);
-                set.merge_bindings(self, &e, false);
+                let mut set = MergingSet::new(Some(NameDefKind::LetIn));
+                set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
             }
             ast::Expr::AttrSet(e) => {
-                let (is_rec, ctor): (bool, fn(_) -> _) = if e.rec_token().is_some() {
-                    (true, Expr::Attrset)
+                // RecAttrset is popular than LetAttrset, and is preferred.
+                let (def_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
+                    (Some(NameDefKind::RecAttrset), Expr::Attrset)
                 } else if e.let_token().is_some() {
                     self.diagnostic(e.syntax().text_range(), DiagnosticKind::LetAttrset);
-                    (true, Expr::LetAttrset)
+                    (Some(NameDefKind::RecAttrset), Expr::LetAttrset)
                 } else {
-                    (false, Expr::Attrset)
+                    (None, Expr::Attrset)
                 };
-                let mut set = MergingSet::new(is_rec);
-                set.merge_bindings(self, &e, true);
+                let mut set = MergingSet::new(def_kind);
+                set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
                 self.alloc_expr(ctor(bindings), ptr)
             }
@@ -288,16 +291,20 @@ impl LowerCtx {
         self.alloc_expr(Expr::StringInterpolation(parts), ptr)
     }
 
-    fn lower_key(&mut self, is_rec: bool, attr: ast::Attr) -> BindingKey {
+    fn lower_key(&mut self, attr: ast::Attr, def_kind: Option<NameDefKind>) -> BindingKey {
         let ast_string = match attr {
-            ast::Attr::Name(n) if is_rec => return BindingKey::NameDef(self.lower_name(n)),
-            ast::Attr::Name(n) => {
-                return BindingKey::Name(
-                    n.token()
-                        .map_or_else(Default::default, |tok| tok.text().into()),
-                )
-            }
             ast::Attr::String(s) => s,
+            ast::Attr::Name(n) => match def_kind {
+                Some(kind) => return BindingKey::NameDef(self.lower_name(n, kind)),
+                None => {
+                    return BindingKey::Name(
+                        n.token()
+                            .map_or_else(Default::default, |tok| tok.text().into()),
+                    )
+                }
+            },
+            // Unwrap parenthesis around string literals.
+            // `{ ${(("foo"))} = 1; }` => `{ "foo" = 1; }`
             ast::Attr::Dynamic(d) => {
                 let mut e = d.expr();
                 loop {
@@ -330,10 +337,11 @@ impl LowerCtx {
                         _ => unreachable!("Verified by the lexer"),
                     },
                 });
-            if is_rec {
-                return BindingKey::NameDef(self.alloc_name_def(content.into(), ptr));
-            } else {
-                return BindingKey::Name(content.into());
+            match def_kind {
+                Some(kind) => {
+                    return BindingKey::NameDef(self.alloc_name_def(content.into(), kind, ptr))
+                }
+                None => return BindingKey::Name(content.into()),
             }
         }
 
@@ -342,7 +350,7 @@ impl LowerCtx {
 }
 
 struct MergingSet {
-    is_rec: bool,
+    def_kind: Option<NameDefKind>,
     entries: IndexMap<BindingKey, MergingEntry>,
     inherit_froms: Vec<ExprId>,
 }
@@ -374,9 +382,9 @@ impl From<BindingValue> for MergingValue {
 }
 
 impl MergingSet {
-    fn new(is_rec: bool) -> Self {
+    fn new(def_kind: Option<NameDefKind>) -> Self {
         Self {
-            is_rec,
+            def_kind,
             entries: Default::default(),
             inherit_froms: Vec::new(),
         }
@@ -394,13 +402,11 @@ impl MergingSet {
         self.entries.insert(key, ent);
     }
 
-    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindings, allow_dynamic: bool) {
+    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindings) {
         for b in n.bindings() {
             match b {
                 ast::Binding::Inherit(i) => self.merge_inherit(ctx, i),
-                ast::Binding::AttrpathValue(entry) => {
-                    self.merge_path_value(ctx, entry, allow_dynamic)
-                }
+                ast::Binding::AttrpathValue(entry) => self.merge_path_value(ctx, entry),
             }
         }
     }
@@ -418,7 +424,7 @@ impl MergingSet {
             no_attrs = false;
 
             let ptr = AstPtr::new(attr.syntax());
-            let key = match ctx.lower_key(self.is_rec, attr) {
+            let key = match ctx.lower_key(attr, self.def_kind) {
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 BindingKey::Dynamic(expr) => {
                     ctx.diagnostic(ptr.text_range(), DiagnosticKind::InvalidDynamic);
@@ -459,12 +465,7 @@ impl MergingSet {
         }
     }
 
-    fn merge_path_value(
-        mut self: &mut Self,
-        ctx: &mut LowerCtx,
-        entry: ast::AttrpathValue,
-        allow_dynamic: bool,
-    ) {
+    fn merge_path_value(mut self: &mut Self, ctx: &mut LowerCtx, entry: ast::AttrpathValue) {
         let mut attrs = entry.attrpath().into_iter().flat_map(|path| path.attrs());
         let mut next_attr = match attrs.next() {
             Some(first_attr) => first_attr,
@@ -479,11 +480,14 @@ impl MergingSet {
 
         loop {
             let attr_ptr = AstPtr::new(next_attr.syntax());
-            let key = ctx.lower_key(self.is_rec, next_attr);
-            if let (false, BindingKey::Dynamic(_)) = (allow_dynamic, &key) {
+            let key = ctx.lower_key(next_attr, self.def_kind);
+
+            // LetIn doesn't allow dynamic attrs.
+            if let (Some(NameDefKind::LetIn), BindingKey::Dynamic(_)) = (self.def_kind, &key) {
                 ctx.diagnostic(attr_ptr.text_range(), DiagnosticKind::InvalidDynamic);
                 // We don't skip the RHS but still process it as a recovery.
             }
+
             let deep = self.entries.entry(key).or_insert_with(|| MergingEntry {
                 def_ptr: attr_ptr.clone(),
                 is_duplicated: false,
@@ -491,7 +495,8 @@ impl MergingSet {
             });
             match attrs.next() {
                 Some(attr) => {
-                    self = deep.make_attrset(ctx, false, &attr_ptr);
+                    // Deeper attrsets created via attrpath is not `rec`.
+                    self = deep.make_attrset(ctx, &attr_ptr, None);
                     next_attr = attr;
                 }
                 None => {
@@ -518,18 +523,25 @@ impl MergingEntry {
     fn make_attrset(
         &mut self,
         ctx: &mut LowerCtx,
-        is_rec: bool,
         def_ptr: &AstPtr,
+        def_kind: Option<NameDefKind>,
     ) -> &mut MergingSet {
         match &mut self.value {
             MergingValue::Placeholder => {
-                self.value = MergingSet::new(is_rec).into();
+                self.value = MergingSet::new(def_kind).into();
             }
-            // TODO: Report warnings if set.is_rec
-            MergingValue::Attrset(_) => {}
+            MergingValue::Attrset(prev_set) => {
+                let prev_is_rec = prev_set.def_kind.is_some();
+                let this_is_rec = def_kind.is_some();
+                if prev_is_rec {
+                    ctx.diagnostic(def_ptr.text_range(), DiagnosticKind::MergeRecAttrset);
+                } else if this_is_rec {
+                    ctx.diagnostic(def_ptr.text_range(), DiagnosticKind::MergePlainRecAttrset);
+                }
+            }
             // We prefer to become a Attrset as a guess, which allows further merging.
             MergingValue::Final(value) => {
-                let mut set = MergingSet::new(is_rec);
+                let mut set = MergingSet::new(def_kind);
                 if let BindingValue::Expr(expr) = value {
                     set.recover_error(ctx, *expr, self.def_ptr.clone());
                 }
@@ -546,12 +558,20 @@ impl MergingEntry {
 
     fn merge_ast(&mut self, ctx: &mut LowerCtx, def_ptr: &AstPtr, mut e: Option<ast::Expr>) {
         loop {
-            match e {
+            match &e {
                 Some(ast::Expr::Paren(p)) => e = p.expr(),
-                Some(ast::Expr::AttrSet(e)) if e.let_token().is_none() => {
+                Some(ast::Expr::AttrSet(e)) => {
+                    // RecAttrset is popular than LetAttrset, and is preferred.
+                    let def_kind = if e.rec_token().is_some() {
+                        Some(NameDefKind::RecAttrset)
+                    } else if e.let_token().is_some() {
+                        break;
+                    } else {
+                        None
+                    };
                     return self
-                        .make_attrset(ctx, e.rec_token().is_some(), &AstPtr::new(e.syntax()))
-                        .merge_bindings(ctx, &e, true);
+                        .make_attrset(ctx, &AstPtr::new(e.syntax()), def_kind)
+                        .merge_bindings(ctx, e);
                 }
                 _ => break,
             }
@@ -703,7 +723,7 @@ mod tests {
                 0: Literal(Int(0))
                 1: Lambda(Some(Idx::<NameDef>(0)), None, Idx::<Expr>(0))
 
-                0: NameDef { name: "a" }
+                0: NameDef { name: "a", kind: Param }
             "#]],
         );
         check_lower(
@@ -719,7 +739,7 @@ mod tests {
                 0: Literal(Int(0))
                 1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: true }), Idx::<Expr>(0))
 
-                0: NameDef { name: "a" }
+                0: NameDef { name: "a", kind: Param }
             "#]],
         );
         check_lower(
@@ -728,7 +748,7 @@ mod tests {
                 0: Literal(Int(0))
                 1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))
 
-                0: NameDef { name: "a" }
+                0: NameDef { name: "a", kind: Param }
             "#]],
         );
         check_lower(
@@ -738,8 +758,8 @@ mod tests {
                 1: Literal(Int(0))
                 2: Lambda(None, Some(Pat { fields: [(Some(Idx::<NameDef>(0)), None), (Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0)))], ellipsis: true }), Idx::<Expr>(1))
 
-                0: NameDef { name: "a" }
-                1: NameDef { name: "b" }
+                0: NameDef { name: "a", kind: PatField }
+                1: NameDef { name: "b", kind: PatField }
             "#]],
         );
         check_lower(
@@ -749,9 +769,9 @@ mod tests {
                 1: Literal(Int(0))
                 2: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [(Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0))), (Some(Idx::<NameDef>(2)), None)], ellipsis: false }), Idx::<Expr>(1))
 
-                0: NameDef { name: "c" }
-                1: NameDef { name: "a" }
-                2: NameDef { name: "b" }
+                0: NameDef { name: "c", kind: Param }
+                1: NameDef { name: "a", kind: PatField }
+                2: NameDef { name: "b", kind: PatField }
             "#]],
         );
     }
@@ -957,25 +977,75 @@ mod tests {
     fn attrset_merge_rec() {
         // Rec and non-rec.
         check_lower(
-            "{ a = rec { b = 1; }; a.c = 2; }",
+            "{ a = rec { b = 1; }; a = { c = 2; }; }",
             expect![[r#"
+                Diagnostic { range: 26..36, kind: MergeRecAttrset }
+
                 0: Literal(Int(1))
                 1: Literal(Int(2))
                 2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
 
-                0: NameDef { name: "b" }
-                1: NameDef { name: "c" }
+                0: NameDef { name: "b", kind: RecAttrset }
+                1: NameDef { name: "c", kind: RecAttrset }
             "#]],
         );
+
+        // Rec and path.
+        check_lower(
+            "{ a = rec { b = 1; }; a.c = 2; }",
+            expect![[r#"
+                Diagnostic { range: 22..23, kind: MergeRecAttrset }
+
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+
+                0: NameDef { name: "b", kind: RecAttrset }
+                1: NameDef { name: "c", kind: RecAttrset }
+            "#]],
+        );
+
         // Non-rec and rec.
         check_lower(
             "{ a = { b = 1; }; a = rec { c = 2; }; }",
             expect![[r#"
+                Diagnostic { range: 22..36, kind: MergePlainRecAttrset }
+
                 0: Literal(Int(1))
                 1: Literal(Int(2))
                 2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+            "#]],
+        );
+
+        // Path and rec.
+        check_lower(
+            "{ a.b = 1; a = rec { c = 2; }; }",
+            expect![[r#"
+                Diagnostic { range: 15..29, kind: MergePlainRecAttrset }
+
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+            "#]],
+        );
+
+        // Rec and rec.
+        check_lower(
+            "{ a = rec { b = 1; }; a = rec { c = 2; }; }",
+            expect![[r#"
+                Diagnostic { range: 26..40, kind: MergeRecAttrset }
+
+                0: Literal(Int(1))
+                1: Literal(Int(2))
+                2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+
+                0: NameDef { name: "b", kind: RecAttrset }
+                1: NameDef { name: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -989,7 +1059,23 @@ mod tests {
                 1: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
                 2: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
 
-                0: NameDef { name: "a" }
+                0: NameDef { name: "a", kind: RecAttrset }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn attrset_rec_single() {
+        // This should not warn.
+        check_lower(
+            "{ a.b = rec { c = 1; }; }",
+            expect![[r#"
+                0: Literal(Int(1))
+                1: Attrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+
+                0: NameDef { name: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1007,7 +1093,7 @@ mod tests {
                 3: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
                 4: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
 
-                0: NameDef { name: "c" }
+                0: NameDef { name: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1024,6 +1110,22 @@ mod tests {
                 4: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
                 5: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
                 6: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(4))), (Dynamic(Idx::<Expr>(2)), Expr(Idx::<Expr>(5)))], inherit_froms: [] })
+            "#]],
+        );
+    }
+
+    #[test]
+    fn let_dynamic_deep() {
+        check_lower(
+            "let a.${a} = 1; in 1",
+            expect![[r#"
+                0: Reference("a")
+                1: Literal(Int(1))
+                2: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                3: Literal(Int(1))
+                4: LetIn(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [] }, Idx::<Expr>(3))
+
+                0: NameDef { name: "a", kind: LetIn }
             "#]],
         );
     }

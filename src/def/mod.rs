@@ -184,9 +184,18 @@ impl Expr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NameDef {
     pub name: SmolStr,
+    pub kind: NameDefKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NameDefKind {
+    LetIn,
+    RecAttrset,
+    Param,
+    PatField,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

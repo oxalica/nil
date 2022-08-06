@@ -18,6 +18,8 @@ pub enum DiagnosticKind {
     EmptyInherit,
     LetAttrset,
     UriLiteral,
+    MergePlainRecAttrset,
+    MergeRecAttrset,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -33,7 +35,9 @@ impl Diagnostic {
             DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
             DiagnosticKind::EmptyInherit
             | DiagnosticKind::LetAttrset
-            | DiagnosticKind::UriLiteral => Severity::Warning,
+            | DiagnosticKind::UriLiteral
+            | DiagnosticKind::MergePlainRecAttrset
+            | DiagnosticKind::MergeRecAttrset => Severity::Warning,
             DiagnosticKind::SyntaxError(kind) => match kind {
                 SynErrorKind::MultipleRoots
                 | SynErrorKind::PathTrailingSlash
@@ -59,6 +63,12 @@ impl Diagnostic {
             }
             DiagnosticKind::UriLiteral => {
                 "URL literal is confusing and deprecated. Use strings instead".into()
+            }
+            DiagnosticKind::MergePlainRecAttrset => {
+                "Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored".into()
+            }
+            DiagnosticKind::MergeRecAttrset => {
+                "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`.".into()
             }
         }
     }
