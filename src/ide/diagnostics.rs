@@ -4,7 +4,7 @@ use crate::{Diagnostic, FileId};
 const MAX_DIAGNOSTIC_CNT: usize = 128;
 
 pub(crate) fn diagnostics(db: &dyn DefDatabase, file: FileId) -> Vec<Diagnostic> {
-    let parse = db.parse(file).value;
+    let parse = db.parse(file);
     let module = db.module(file);
     parse
         .errors()

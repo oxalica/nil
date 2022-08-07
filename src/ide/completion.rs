@@ -29,7 +29,7 @@ pub(crate) fn completions(
     file_id: FileId,
     pos: TextSize,
 ) -> Option<Vec<CompletionItem>> {
-    let parse = db.parse(file_id).value;
+    let parse = db.parse(file_id);
 
     let tok = parse.syntax_node().token_at_offset(pos).left_biased()?;
     let source_range = match tok.kind() {

@@ -9,7 +9,7 @@ pub(crate) fn references(
     file_id: FileId,
     pos: TextSize,
 ) -> Option<Vec<FileRange>> {
-    let parse = db.parse(file_id).value;
+    let parse = db.parse(file_id);
     let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
     if !matches!(
         tok.kind(),

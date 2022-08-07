@@ -41,7 +41,6 @@ impl TestDB {
         f: impl FnMut(SyntaxNode) -> Option<T>,
     ) -> Option<T> {
         self.parse(file_id)
-            .value
             .syntax_node()
             .token_at_offset(pos)
             .right_biased()?

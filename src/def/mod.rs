@@ -39,7 +39,7 @@ fn module_with_source_map(
     file_id: FileId,
 ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
     let parse = db.parse(file_id);
-    let (module, source_map) = lower::lower(parse);
+    let (module, source_map) = lower::lower(file_id, parse);
     (Arc::new(module), Arc::new(source_map))
 }
 

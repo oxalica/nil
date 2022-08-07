@@ -324,7 +324,7 @@ mod tests {
             })
             .expect("No Attr or Expr found");
 
-        let parse = db.parse(file_id).value;
+        let parse = db.parse(file_id);
         let source_map = db.source_map(file_id);
         let expr_id = source_map.expr_map[&ptr];
         let got = db.resolve_name(file_id, expr_id).map(|ret| match ret {

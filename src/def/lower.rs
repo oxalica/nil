@@ -2,7 +2,7 @@ use super::{
     AstPtr, Attrpath, BindingKey, BindingValue, Bindings, Expr, ExprId, Literal, Module,
     ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, Path, PathAnchor,
 };
-use crate::{Diagnostic, DiagnosticKind, FileId, InFile};
+use crate::{Diagnostic, DiagnosticKind, FileId};
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
@@ -11,9 +11,9 @@ use std::{mem, str};
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
 use syntax::{Parse, TextRange};
 
-pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
+pub(super) fn lower(file_id: FileId, parse: Parse) -> (Module, ModuleSourceMap) {
     let mut ctx = LowerCtx {
-        file_id: parse.file_id,
+        file_id,
         module: Module {
             exprs: Arena::new(),
             name_defs: Arena::new(),
@@ -24,7 +24,7 @@ pub(super) fn lower(parse: InFile<Parse>) -> (Module, ModuleSourceMap) {
         source_map: ModuleSourceMap::default(),
     };
 
-    let entry = ctx.lower_expr_opt(parse.value.root().expr());
+    let entry = ctx.lower_expr_opt(parse.root().expr());
     let mut module = ctx.module;
     module.entry_expr = entry;
     (module, ctx.source_map)
@@ -629,14 +629,14 @@ impl MergingEntry {
 #[cfg(test)]
 mod tests {
     use super::lower;
-    use crate::base::{FileId, InFile};
+    use crate::base::FileId;
     use expect_test::{expect, Expect};
     use std::fmt::Write;
     use syntax::parse_file;
 
     fn check_lower(src: &str, expect: Expect) {
         let parse = parse_file(src);
-        let (module, _source_map) = lower(InFile::new(FileId(0), parse));
+        let (module, _source_map) = lower(FileId(0), parse);
         let mut got = String::new();
         for diag in module.diagnostics() {
             writeln!(got, "{:?}", diag).unwrap();
@@ -658,7 +658,7 @@ mod tests {
 
     fn check_error(src: &str, expect: Expect) {
         let parse = parse_file(src);
-        let (module, _source_map) = lower(InFile::new(FileId(0), parse));
+        let (module, _source_map) = lower(FileId(0), parse);
         let mut got = String::new();
         for diag in module.diagnostics() {
             writeln!(got, "{:?}", diag).unwrap();
@@ -1241,6 +1241,6 @@ mod tests {
     fn attrset_malformed_no_panic() {
         let src = "{ } @ y: y { cc, extraPackages ? optional (cc.isGNU) }: 1";
         let parse = parse_file(src);
-        let (_module, _source_map) = lower(InFile::new(FileId(0), parse));
+        let (_module, _source_map) = lower(FileId(0), parse);
     }
 }

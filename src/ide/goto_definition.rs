@@ -10,7 +10,7 @@ pub(crate) fn goto_definition(
     file_id: FileId,
     pos: TextSize,
 ) -> Option<Vec<NavigationTarget>> {
-    let parse = db.parse(file_id).value;
+    let parse = db.parse(file_id);
     let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
     if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT) {
         return None;

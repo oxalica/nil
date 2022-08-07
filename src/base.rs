@@ -34,13 +34,12 @@ pub trait SourceDatabase {
     #[salsa::input]
     fn file_content(&self, file_id: FileId) -> Arc<str>;
 
-    fn parse(&self, file_id: FileId) -> InFile<Parse>;
+    fn parse(&self, file_id: FileId) -> Parse;
 }
 
-fn parse(db: &dyn SourceDatabase, file_id: FileId) -> InFile<Parse> {
+fn parse(db: &dyn SourceDatabase, file_id: FileId) -> Parse {
     let content = db.file_content(file_id);
-    let parse = syntax::parse_file(&content);
-    InFile::new(file_id, parse)
+    syntax::parse_file(&content)
 }
 
 #[derive(Default, Clone, PartialEq, Eq)]
