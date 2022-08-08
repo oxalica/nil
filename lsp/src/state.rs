@@ -104,16 +104,17 @@ impl State {
             // Currently we push down changes immediately.
             assert_eq!(change.file_changes.len(), 1);
             let (file, text) = &change.file_changes[0];
-            let line_map = vfs.file_line_map(*file).unwrap();
-            let diagnostics = text
-                .as_ref()
-                .and_then(|_| self.host.snapshot().diagnostics(*file).ok())
-                .map(|diags| {
-                    diags
+            let diagnostics = vfs
+                .file_line_map(*file)
+                .and_then(|line_map| {
+                    let _ = text.as_deref()?;
+                    let diags = self.host.snapshot().diagnostics(*file).ok()?;
+                    let diags = diags
                         .into_iter()
                         .take(MAX_DIAGNOSTICS_CNT)
                         .filter_map(|diag| convert::to_diagnostic(line_map, diag))
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    Some(diags)
                 })
                 .unwrap_or_default();
             self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
