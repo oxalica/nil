@@ -1,6 +1,6 @@
 use super::{
-    AstPtr, Attrpath, BindingKey, BindingValue, Bindings, Expr, ExprId, Literal, Module,
-    ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, Path, PathAnchor,
+    AstPtr, Attrpath, Binding, BindingId, BindingKey, BindingValue, Bindings, Expr, ExprId,
+    Literal, Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, Path, PathAnchor,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use indexmap::IndexMap;
@@ -17,6 +17,7 @@ pub(super) fn lower(file_id: FileId, parse: Parse) -> (Module, ModuleSourceMap) 
         module: Module {
             exprs: Arena::new(),
             name_defs: Arena::new(),
+            bindings: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
             diagnostics: Vec::new(),
@@ -49,6 +50,10 @@ impl LowerCtx {
         self.source_map.name_def_map.insert(ptr.clone(), id);
         self.source_map.name_def_map_rev.insert(id, ptr);
         id
+    }
+
+    fn alloc_binding(&mut self, key: BindingKey, value: BindingValue) -> BindingId {
+        self.module.bindings.alloc(Binding { key, value })
     }
 
     fn diagnostic(&mut self, range: TextRange, kind: DiagnosticKind) {
@@ -521,7 +526,10 @@ impl MergingSet {
             entries: self
                 .entries
                 .into_iter()
-                .map(|(k, v)| (k, v.finish(ctx)))
+                .map(|(k, v)| {
+                    let v = v.finish(ctx);
+                    ctx.alloc_binding(k, v)
+                })
                 .collect(),
             inherit_froms: self.inherit_froms.into(),
         }
@@ -646,6 +654,12 @@ mod tests {
         }
         for (i, e) in module.exprs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), e).unwrap();
+        }
+        if !module.bindings.is_empty() {
+            writeln!(got).unwrap();
+        }
+        for (i, b) in module.bindings.iter() {
+            writeln!(got, "{}: {:?}", i.into_raw(), b).unwrap();
         }
         if !module.name_defs.is_empty() {
             writeln!(got).unwrap();
@@ -921,7 +935,12 @@ mod tests {
                 2: Literal(Int(2))
                 3: Literal(Int(3))
                 4: Literal(Int(4))
-                5: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(0))), (Dynamic(Idx::<Expr>(1)), Expr(Idx::<Expr>(2))), (Name("c"), Expr(Idx::<Expr>(3))), (Name("\n"), Expr(Idx::<Expr>(4)))], inherit_froms: [] })
+                5: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1), Idx::<Binding>(2), Idx::<Binding>(3)], inherit_froms: [] })
+
+                0: Binding { key: Name("a"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Dynamic(Idx::<Expr>(1)), value: Expr(Idx::<Expr>(2)) }
+                2: Binding { key: Name("c"), value: Expr(Idx::<Expr>(3)) }
+                3: Binding { key: Name("\n"), value: Expr(Idx::<Expr>(4)) }
             "#]],
         );
     }
@@ -939,7 +958,13 @@ mod tests {
                 2: Reference("c")
                 3: Reference("d")
                 4: Reference("e")
-                5: Attrset(Bindings { entries: [(Name("a"), Inherit(Idx::<Expr>(0))), (Name("b"), Inherit(Idx::<Expr>(1))), (Name("c"), Inherit(Idx::<Expr>(2))), (Name("f"), InheritFrom(1)), (Name("g"), InheritFrom(1))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)] })
+                5: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1), Idx::<Binding>(2), Idx::<Binding>(3), Idx::<Binding>(4)], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)] })
+
+                0: Binding { key: Name("a"), value: Inherit(Idx::<Expr>(0)) }
+                1: Binding { key: Name("b"), value: Inherit(Idx::<Expr>(1)) }
+                2: Binding { key: Name("c"), value: Inherit(Idx::<Expr>(2)) }
+                3: Binding { key: Name("f"), value: InheritFrom(1) }
+                4: Binding { key: Name("g"), value: InheritFrom(1) }
             "#]],
         );
     }
@@ -952,8 +977,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
         // Path and attrset.
@@ -962,8 +991,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
         // Attrset and path.
@@ -972,8 +1005,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
         // Attrset and attrset.
@@ -982,8 +1019,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
     }
@@ -998,8 +1039,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1014,8 +1059,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1030,8 +1079,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
 
@@ -1043,8 +1096,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
             "#]],
         );
 
@@ -1056,8 +1113,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1071,8 +1132,11 @@ mod tests {
             "rec { a.b = 1; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
-                2: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                1: Attrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
+                2: RecAttrset(Bindings { entries: [Idx::<Binding>(1)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(1)) }
 
                 0: NameDef { name: "a", kind: RecAttrset }
             "#]],
@@ -1086,9 +1150,13 @@ mod tests {
             "{ a.b = rec { c = 1; }; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: RecAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
-                2: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
+                1: RecAttrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+
+                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: Name("b"), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
 
                 0: NameDef { name: "c", kind: RecAttrset }
             "#]],
@@ -1103,10 +1171,15 @@ mod tests {
                 Diagnostic { range: 8..24, kind: LetAttrset }
 
                 0: Literal(Int(1))
-                1: Attrset(Bindings { entries: [(Name("d"), Expr(Idx::<Expr>(0)))], inherit_froms: [] })
-                2: LetAttrset(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                3: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(2)))], inherit_froms: [] })
-                4: Attrset(Bindings { entries: [(Name("a"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
+                1: Attrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
+                2: LetAttrset(Bindings { entries: [Idx::<Binding>(1)], inherit_froms: [] })
+                3: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+                4: Attrset(Bindings { entries: [Idx::<Binding>(3)], inherit_froms: [] })
+
+                0: Binding { key: Name("d"), value: Expr(Idx::<Expr>(0)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(1)) }
+                2: Binding { key: Name("b"), value: Expr(Idx::<Expr>(2)) }
+                3: Binding { key: Name("a"), value: Expr(Idx::<Expr>(3)) }
 
                 0: NameDef { name: "c", kind: RecAttrset }
             "#]],
@@ -1122,9 +1195,14 @@ mod tests {
                 1: Literal(Int(1))
                 2: Reference("a")
                 3: Literal(Int(2))
-                4: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
-                5: Attrset(Bindings { entries: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [] })
-                6: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(4))), (Dynamic(Idx::<Expr>(2)), Expr(Idx::<Expr>(5)))], inherit_froms: [] })
+                4: Attrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
+                5: Attrset(Bindings { entries: [Idx::<Binding>(2)], inherit_froms: [] })
+                6: Attrset(Bindings { entries: [Idx::<Binding>(1), Idx::<Binding>(3)], inherit_froms: [] })
+
+                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(1)) }
+                1: Binding { key: Dynamic(Idx::<Expr>(0)), value: Expr(Idx::<Expr>(4)) }
+                2: Binding { key: Name("b"), value: Expr(Idx::<Expr>(3)) }
+                3: Binding { key: Dynamic(Idx::<Expr>(2)), value: Expr(Idx::<Expr>(5)) }
             "#]],
         );
     }
@@ -1149,9 +1227,12 @@ mod tests {
             expect![[r#"
                 0: Reference("a")
                 1: Literal(Int(1))
-                2: Attrset(Bindings { entries: [(Dynamic(Idx::<Expr>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [] })
+                2: Attrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
                 3: Literal(Int(1))
-                4: LetIn(Bindings { entries: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [] }, Idx::<Expr>(3))
+                4: LetIn(Bindings { entries: [Idx::<Binding>(1)], inherit_froms: [] }, Idx::<Expr>(3))
+
+                0: Binding { key: Dynamic(Idx::<Expr>(0)), value: Expr(Idx::<Expr>(1)) }
+                1: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(2)) }
 
                 0: NameDef { name: "a", kind: LetIn }
             "#]],

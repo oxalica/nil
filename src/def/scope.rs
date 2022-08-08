@@ -124,7 +124,7 @@ impl ModuleScopes {
                 let scope = self.traverse_bindings(module, bindings, scope);
                 self.traverse_expr(module, *body, scope);
             }
-            e => e.walk_child_exprs(|e| self.traverse_expr(module, e, scope)),
+            e => e.walk_child_exprs(module, |e| self.traverse_expr(module, e, scope)),
         }
     }
 
@@ -136,13 +136,14 @@ impl ModuleScopes {
     ) -> ScopeId {
         let mut defs = HashMap::default();
 
-        for (k, v) in bindings.entries.iter() {
-            if let &BindingKey::NameDef(def) = k {
+        for &binding in bindings.entries.iter() {
+            let binding = &module[binding];
+            if let &BindingKey::NameDef(def) = &binding.key {
                 defs.insert(module[def].name.clone(), def);
             }
 
             // Inherited attrs are resolved in the outer scope.
-            if let &BindingValue::Inherit(expr) = v {
+            if let BindingValue::Inherit(expr) = binding.value {
                 assert!(matches!(&module[expr], Expr::Reference(_)));
                 self.traverse_expr(module, expr, scope);
             }
@@ -157,11 +158,12 @@ impl ModuleScopes {
             })
         };
 
-        for (k, v) in bindings.entries.iter() {
-            if let &BindingKey::Dynamic(expr) = k {
+        for &binding in bindings.entries.iter() {
+            let binding = &module[binding];
+            if let BindingKey::Dynamic(expr) = binding.key {
                 self.traverse_expr(module, expr, scope);
             }
-            if let &BindingValue::Expr(expr) = v {
+            if let BindingValue::Expr(expr) = binding.value {
                 self.traverse_expr(module, expr, scope);
             }
         }

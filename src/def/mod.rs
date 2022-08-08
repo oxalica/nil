@@ -55,12 +55,14 @@ fn source_map(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleSourceMap> {
 pub struct Module {
     exprs: Arena<Expr>,
     name_defs: Arena<NameDef>,
+    bindings: Arena<Binding>,
     entry_expr: ExprId,
     diagnostics: Vec<Diagnostic>,
 }
 
 pub type ExprId = Idx<Expr>;
 pub type NameDefId = Idx<NameDef>;
+pub type BindingId = Idx<Binding>;
 
 impl ops::Index<ExprId> for Module {
     type Output = Expr;
@@ -73,6 +75,13 @@ impl ops::Index<NameDefId> for Module {
     type Output = NameDef;
     fn index(&self, index: NameDefId) -> &Self::Output {
         &self.name_defs[index]
+    }
+}
+
+impl ops::Index<BindingId> for Module {
+    type Output = Binding;
+    fn index(&self, index: BindingId) -> &Self::Output {
+        &self.bindings[index]
     }
 }
 
@@ -138,7 +147,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+    pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
         match self {
             Self::Missing | Self::Reference(_) | Self::Literal(_) => {}
             Self::Lambda(_, pat, body) => {
@@ -175,11 +184,11 @@ impl Expr {
                 xs.iter().copied().for_each(f)
             }
             Self::LetIn(bindings, body) => {
-                bindings.walk_child_exprs(&mut f);
+                bindings.walk_child_exprs(module, &mut f);
                 f(*body);
             }
             Self::Attrset(bindings) | Self::RecAttrset(bindings) | Self::LetAttrset(bindings) => {
-                bindings.walk_child_exprs(f);
+                bindings.walk_child_exprs(module, f);
             }
         }
     }
@@ -239,8 +248,14 @@ pub type Attrpath = Box<[ExprId]>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Bindings {
-    pub entries: Box<[(BindingKey, BindingValue)]>,
+    pub entries: Box<[BindingId]>,
     pub inherit_froms: Box<[ExprId]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Binding {
+    pub key: BindingKey,
+    pub value: BindingValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -258,19 +273,25 @@ pub enum BindingValue {
 }
 
 impl Bindings {
-    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
-        for (key, kind) in self.entries.iter() {
-            match key {
-                BindingKey::NameDef(_) | BindingKey::Name(_) => {}
-                &BindingKey::Dynamic(expr) => f(expr),
-            }
-            match *kind {
-                BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
-                BindingValue::InheritFrom(_) => {}
-            }
+    pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
+        for &binding in self.entries.iter() {
+            module[binding].walk_child_exprs(&mut f);
         }
         for &e in self.inherit_froms.iter() {
             f(e);
+        }
+    }
+}
+
+impl Binding {
+    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+        match self.key {
+            BindingKey::NameDef(_) | BindingKey::Name(_) => {}
+            BindingKey::Dynamic(expr) => f(expr),
+        }
+        match self.value {
+            BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
+            BindingValue::InheritFrom(_) => {}
         }
     }
 }
