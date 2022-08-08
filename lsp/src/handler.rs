@@ -64,9 +64,12 @@ pub(crate) fn completion(
         .into_iter()
         .map(|item| {
             let kind = match item.kind {
-                // FIXME: More specific?
-                CompletionItemKind::Builtin => lsp::CompletionItemKind::KEYWORD,
-                CompletionItemKind::Binding => lsp::CompletionItemKind::VARIABLE,
+                CompletionItemKind::Param => lsp::CompletionItemKind::VARIABLE,
+                CompletionItemKind::LetBinding => lsp::CompletionItemKind::VARIABLE,
+                CompletionItemKind::Field => lsp::CompletionItemKind::FIELD,
+                CompletionItemKind::BuiltinConst => lsp::CompletionItemKind::CONSTANT,
+                CompletionItemKind::BuiltinFunction => lsp::CompletionItemKind::FUNCTION,
+                CompletionItemKind::BuiltinAttrset => lsp::CompletionItemKind::CLASS,
             };
             CompletionItem {
                 label: item.label.into(),

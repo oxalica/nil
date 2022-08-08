@@ -1,4 +1,27 @@
-pub static NAMES: phf::Set<&'static str> = phf::phf_set! {
+macro_rules! def {
+    (__impl $name:tt) => {
+        Builtin {
+            name: $name,
+            is_hidden: true,
+            // Ignored.
+            kind: BuiltinKind::Function,
+        }
+    };
+    (__impl $name:tt $kind:tt) => {
+        Builtin {
+            name: $name,
+            is_hidden: false,
+            kind: BuiltinKind::$kind,
+        }
+    };
+    ($($name:literal $(= $kind:tt)?,)*) => {
+        phf::phf_map! {
+            $($name => def!(__impl $name $($kind)?),)*
+        }
+    };
+}
+
+pub static BUILTINS: phf::Map<&'static str, Builtin> = def! {
     "__addErrorContext",
     "__all",
     "__any",
@@ -87,27 +110,41 @@ pub static NAMES: phf::Set<&'static str> = phf::phf_set! {
     "__unsafeDiscardStringContext",
     "__unsafeGetAttrPos",
     "__zipAttrsWith",
-    "abort",
-    "baseNameOf",
-    "break",
-    "builtins",
-    "derivation",
-    "derivationStrict",
-    "dirOf",
-    "false",
-    "fetchGit",
-    "fetchMercurial",
-    "fetchTarball",
-    "fetchTree",
-    "fromTOML",
-    "import",
-    "isNull",
-    "map",
-    "null",
-    "placeholder",
-    "removeAttrs",
-    "scopedImport",
-    "throw",
-    "toString",
-    "true",
+    "abort" = Function,
+    "baseNameOf" = Function,
+    "break" = Function,
+    "builtins" = Attrset,
+    "derivation" = Function,
+    "derivationStrict" = Function,
+    "dirOf" = Function,
+    "false" = Const,
+    "fetchGit" = Function,
+    "fetchMercurial" = Function,
+    "fetchTarball" = Function,
+    "fetchTree" = Function,
+    "fromTOML" = Function,
+    "import" = Function,
+    "isNull" = Function,
+    "map" = Function,
+    "null" = Const,
+    "placeholder" = Function,
+    "removeAttrs" = Function,
+    "scopedImport" = Function,
+    "throw" = Function,
+    "toString" = Function,
+    "true" = Const,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Builtin {
+    pub name: &'static str,
+    pub is_hidden: bool,
+    pub kind: BuiltinKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuiltinKind {
+    Const,
+    Function,
+    Attrset,
+}

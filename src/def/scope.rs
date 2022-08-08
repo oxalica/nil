@@ -64,7 +64,7 @@ impl ModuleScopes {
             return Some(ResolveResult::NameDef(*def));
         }
         // 2. Builtin names.
-        if let Some(name) = builtin::NAMES.get_key(name) {
+        if let Some(name) = builtin::BUILTINS.get_key(name) {
             return Some(ResolveResult::Builtin(name));
         }
         // 3. "with" exprs.

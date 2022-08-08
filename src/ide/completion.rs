@@ -1,4 +1,5 @@
-use crate::def::{AstPtr, DefDatabase};
+use crate::builtin::BuiltinKind;
+use crate::def::{AstPtr, DefDatabase, NameDefKind};
 use crate::{builtin, FileId};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
@@ -20,8 +21,32 @@ pub struct CompletionItem {
 /// The type of the completion item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CompletionItemKind {
-    Builtin,
-    Binding,
+    Param,
+    LetBinding,
+    Field,
+    BuiltinConst,
+    BuiltinFunction,
+    BuiltinAttrset,
+}
+
+impl From<BuiltinKind> for CompletionItemKind {
+    fn from(k: BuiltinKind) -> Self {
+        match k {
+            BuiltinKind::Const => Self::BuiltinConst,
+            BuiltinKind::Function => Self::BuiltinFunction,
+            BuiltinKind::Attrset => Self::BuiltinAttrset,
+        }
+    }
+}
+
+impl From<NameDefKind> for CompletionItemKind {
+    fn from(k: NameDefKind) -> Self {
+        match k {
+            NameDefKind::LetIn => Self::LetBinding,
+            NameDefKind::RecAttrset => Self::Field,
+            NameDefKind::Param | NameDefKind::PatField => Self::Param,
+        }
+    }
 }
 
 pub(crate) fn completions(
@@ -46,6 +71,7 @@ pub(crate) fn completions(
             }
         }
     })?;
+    let module = db.module(file_id);
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(AstPtr::new(ref_node.syntax()))?;
     let scopes = db.scopes(file_id);
@@ -55,19 +81,24 @@ pub(crate) fn completions(
     let mut items = scopes
         .ancestors(scope_id)
         .filter_map(|scope| scope.as_name_defs())
-        .flat_map(|scope| scope.keys())
-        .map(|name| CompletionItem {
+        .flatten()
+        .map(|(name, &def)| CompletionItem {
             label: name.clone(),
             source_range,
             replace: name.clone(),
-            kind: CompletionItemKind::Binding,
+            kind: module[def].kind.into(),
         })
-        .chain(builtin::NAMES.iter().map(|name| CompletionItem {
-            label: name.into(),
-            source_range,
-            replace: name.into(),
-            kind: CompletionItemKind::Builtin,
-        }))
+        .chain(
+            builtin::BUILTINS
+                .values()
+                .filter(|b| !b.is_hidden)
+                .map(|b| CompletionItem {
+                    label: b.name.into(),
+                    source_range,
+                    replace: b.name.into(),
+                    kind: b.kind.into(),
+                }),
+        )
         .collect::<Vec<_>>();
     items.sort_by(|lhs, rhs| lhs.label.cmp(&rhs.label));
     items.dedup_by(|lhs, rhs| lhs.label == rhs.label);
