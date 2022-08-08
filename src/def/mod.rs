@@ -268,30 +268,26 @@ pub enum BindingKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BindingValue {
     Inherit(ExprId),
-    InheritFrom(u32),
+    InheritFrom(ExprId),
     Expr(ExprId),
 }
 
 impl Bindings {
     pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
         for &binding in self.entries.iter() {
-            module[binding].walk_child_exprs(&mut f);
+            let binding = &module[binding];
+            match binding.key {
+                BindingKey::NameDef(_) | BindingKey::Name(_) => {}
+                BindingKey::Dynamic(e) => f(e),
+            }
+            match binding.value {
+                BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
+                // Walking here would be redundant, we traverse them outside `entries` loop.
+                BindingValue::InheritFrom(_) => {}
+            }
         }
         for &e in self.inherit_froms.iter() {
             f(e);
-        }
-    }
-}
-
-impl Binding {
-    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
-        match self.key {
-            BindingKey::NameDef(_) | BindingKey::Name(_) => {}
-            BindingKey::Dynamic(expr) => f(expr),
-        }
-        match self.value {
-            BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
-            BindingValue::InheritFrom(_) => {}
         }
     }
 }

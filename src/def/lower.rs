@@ -428,9 +428,8 @@ impl MergingSet {
     fn merge_inherit(&mut self, ctx: &mut LowerCtx, i: ast::Inherit) {
         let from_expr = i.from_expr().map(|e| {
             let expr = ctx.lower_expr_opt(e.expr());
-            let from_id = self.inherit_froms.len() as u32;
             self.inherit_froms.push(expr);
-            from_id
+            expr
         });
 
         let mut no_attrs = true;
@@ -455,7 +454,7 @@ impl MergingSet {
             }
 
             let value = match from_expr {
-                Some(id) => BindingValue::InheritFrom(id),
+                Some(e) => BindingValue::InheritFrom(e),
                 None => {
                     let name = match &key {
                         BindingKey::NameDef(def) => ctx.module[*def].name.clone(),
@@ -963,8 +962,8 @@ mod tests {
                 0: Binding { key: Name("a"), value: Inherit(Idx::<Expr>(0)) }
                 1: Binding { key: Name("b"), value: Inherit(Idx::<Expr>(1)) }
                 2: Binding { key: Name("c"), value: Inherit(Idx::<Expr>(2)) }
-                3: Binding { key: Name("f"), value: InheritFrom(1) }
-                4: Binding { key: Name("g"), value: InheritFrom(1) }
+                3: Binding { key: Name("f"), value: InheritFrom(Idx::<Expr>(4)) }
+                4: Binding { key: Name("g"), value: InheritFrom(Idx::<Expr>(4)) }
             "#]],
         );
     }
