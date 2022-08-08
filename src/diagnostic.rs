@@ -21,6 +21,11 @@ pub enum DiagnosticKind {
     UriLiteral,
     MergePlainRecAttrset,
     MergeRecAttrset,
+
+    // Liveness.
+    UnusedBinding,
+    UnusedWith,
+    UnusedRec,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -39,7 +44,10 @@ impl Diagnostic {
             | DiagnosticKind::LetAttrset
             | DiagnosticKind::UriLiteral
             | DiagnosticKind::MergePlainRecAttrset
-            | DiagnosticKind::MergeRecAttrset => Severity::Warning,
+            | DiagnosticKind::MergeRecAttrset
+            | DiagnosticKind::UnusedBinding
+            | DiagnosticKind::UnusedWith
+            | DiagnosticKind::UnusedRec => Severity::Warning,
             DiagnosticKind::SyntaxError(kind) => match kind {
                 SynErrorKind::MultipleRoots
                 | SynErrorKind::PathTrailingSlash
@@ -73,12 +81,22 @@ impl Diagnostic {
             DiagnosticKind::MergeRecAttrset => {
                 "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`."
             }
+
+            DiagnosticKind::UnusedBinding => "Unused binding",
+            DiagnosticKind::UnusedWith => "Unused `with`",
+            DiagnosticKind::UnusedRec => "Unused `rec`",
         }
         .into()
     }
 
     pub fn is_unnecessary(&self) -> bool {
-        matches!(self.kind, DiagnosticKind::EmptyInherit)
+        matches!(
+            self.kind,
+            DiagnosticKind::EmptyInherit
+                | DiagnosticKind::UnusedBinding
+                | DiagnosticKind::UnusedWith
+                | DiagnosticKind::UnusedRec
+        )
     }
 
     pub fn is_deprecated(&self) -> bool {

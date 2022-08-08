@@ -1,3 +1,4 @@
+mod liveness;
 mod lower;
 mod scope;
 
@@ -13,6 +14,7 @@ use std::collections::HashMap;
 use std::ops;
 use std::sync::Arc;
 
+pub use self::liveness::LivenessCheck;
 pub use self::scope::{ModuleScopes, NameReferenceMap, ResolveResult, ScopeData, ScopeId};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
@@ -32,6 +34,9 @@ pub trait DefDatabase: SourceDatabase {
 
     #[salsa::invoke(NameReferenceMap::name_reference_map_query)]
     fn name_reference_map(&self, file_id: FileId) -> Arc<NameReferenceMap>;
+
+    #[salsa::invoke(LivenessCheck::liveness_check_query)]
+    fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheck>;
 }
 
 fn module_with_source_map(
@@ -92,6 +97,18 @@ impl Module {
 
     pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &'_ Expr)> + ExactSizeIterator + '_ {
         self.exprs.iter()
+    }
+
+    pub fn name_defs(
+        &self,
+    ) -> impl Iterator<Item = (NameDefId, &'_ NameDef)> + ExactSizeIterator + '_ {
+        self.name_defs.iter()
+    }
+
+    pub fn bindings(
+        &self,
+    ) -> impl Iterator<Item = (BindingId, &'_ Binding)> + ExactSizeIterator + '_ {
+        self.bindings.iter()
     }
 }
 
@@ -288,6 +305,19 @@ impl Bindings {
         }
         for &e in self.inherit_froms.iter() {
             f(e);
+        }
+    }
+
+    pub(crate) fn walk_child_defs(
+        &self,
+        module: &Module,
+        mut f: impl FnMut(NameDefId, &BindingValue),
+    ) {
+        for &binding in self.entries.iter() {
+            let binding = &module[binding];
+            if let &BindingKey::NameDef(def) = &binding.key {
+                f(def, &binding.value);
+            }
         }
     }
 }

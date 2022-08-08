@@ -7,6 +7,8 @@ use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams,
 use nil::{Analysis, AnalysisHost};
 use std::sync::{Arc, RwLock};
 
+const MAX_DIAGNOSTICS_CNT: usize = 128;
+
 pub struct State {
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
@@ -109,6 +111,7 @@ impl State {
                 .map(|diags| {
                     diags
                         .into_iter()
+                        .take(MAX_DIAGNOSTICS_CNT)
                         .filter_map(|diag| convert::to_diagnostic(line_map, diag))
                         .collect::<Vec<_>>()
                 })
