@@ -114,7 +114,7 @@ impl<'a> Traversal<'a> {
                 },
                 // Don't walk LetIn bindings unless referenced.
                 Expr::LetIn(_, body) => self.queue.push(*body),
-                e => e.walk_child_exprs(&self.module, |e| self.queue.push(e)),
+                e => e.walk_child_exprs(self.module, |e| self.queue.push(e)),
             }
         }
 

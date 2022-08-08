@@ -12,7 +12,8 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] With expression references.
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
-  - [x] Local bindings.
+  - [x] Local bindings and rec-attrset fields.
+  - [x] Keywords.
   - [ ] Attrset fields.
 - [x] Diagnostics. `textDocument/publishDiagnostics`
   - Syntax errors. 

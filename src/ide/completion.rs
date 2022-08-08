@@ -1,9 +1,25 @@
 use crate::builtin::BuiltinKind;
 use crate::def::{AstPtr, DefDatabase, NameDefKind};
 use crate::{builtin, FileId};
+use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use syntax::{ast, match_ast, SyntaxKind, TextRange, TextSize, T};
+
+#[rustfmt::skip]
+const EXPR_POS_KEYWORDS: &[&str] = &[
+    "assert",
+    // "else",
+    "if",
+    // "in",
+    // "inherit",
+    "let",
+    "or",
+    "rec",
+    // "then",
+    "with",
+];
+const ATTR_POS_KEYWORDS: &[&str] = &["inherit"];
 
 /// A single completion variant in the editor pop-up.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +37,7 @@ pub struct CompletionItem {
 /// The type of the completion item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CompletionItemKind {
+    Keyword,
     Param,
     LetBinding,
     Field,
@@ -63,22 +80,73 @@ pub(crate) fn completions(
         _ => return None,
     };
 
-    let ref_node = tok.parent_ancestors().find_map(|node| {
+    let node = tok.parent_ancestors().find_map(|node| {
         match_ast! {
             match node {
-                ast::Ref(n) => Some(n),
+                ast::Ref(n) => Some(Left(n)),
+                ast::Name(n) => Some(Right(n)),
                 _ => None,
             }
         }
     })?;
+
+    match node {
+        Left(ref_node) => complete_expr(db, file_id, source_range, ref_node),
+        Right(name_node) => {
+            let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
+            let _entry_node = ast::AttrpathValue::cast(path_node.syntax().parent()?)?;
+            complete_attrpath_def(db, file_id, source_range, path_node, name_node)
+        }
+    }
+}
+
+fn complete_expr(
+    db: &dyn DefDatabase,
+    file_id: FileId,
+    source_range: TextRange,
+    ref_node: ast::Ref,
+) -> Option<Vec<CompletionItem>> {
     let module = db.module(file_id);
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(AstPtr::new(ref_node.syntax()))?;
     let scopes = db.scopes(file_id);
     let scope_id = scopes.scope_by_expr(expr_id)?;
 
-    // TODO: Better sorting.
-    let mut items = scopes
+    let prefix = SmolStr::from(ref_node.token()?.text());
+    let mut items = Vec::new();
+    let mut feed = |compe: CompletionItem| {
+        if can_complete(&prefix, &compe.replace) {
+            items.push(compe);
+        }
+    };
+
+    // Keywords.
+    EXPR_POS_KEYWORDS
+        .iter()
+        .map(|kw| keyword_to_completion(kw, source_range))
+        .for_each(&mut feed);
+
+    // Contectual keywords.
+    if ref_node
+        .syntax()
+        .ancestors()
+        .find_map(ast::IfThenElse::cast)
+        .is_some()
+    {
+        feed(keyword_to_completion("then", source_range));
+        feed(keyword_to_completion("else", source_range));
+    }
+    if ref_node
+        .syntax()
+        .ancestors()
+        .find_map(ast::LetIn::cast)
+        .is_some()
+    {
+        feed(keyword_to_completion("in", source_range));
+    }
+
+    // Names in current scopes.
+    scopes
         .ancestors(scope_id)
         .filter_map(|scope| scope.as_name_defs())
         .flatten()
@@ -88,20 +156,74 @@ pub(crate) fn completions(
             replace: name.clone(),
             kind: module[def].kind.into(),
         })
-        .chain(
-            builtin::BUILTINS
-                .values()
-                .filter(|b| !b.is_hidden)
-                .map(|b| CompletionItem {
-                    label: b.name.into(),
-                    source_range,
-                    replace: b.name.into(),
-                    kind: b.kind.into(),
-                }),
-        )
-        .collect::<Vec<_>>();
+        .for_each(&mut feed);
+
+    // Global builtins.
+    builtin::BUILTINS
+        .values()
+        .filter(|b| !b.is_hidden)
+        .map(|b| CompletionItem {
+            label: b.name.into(),
+            source_range,
+            replace: b.name.into(),
+            kind: b.kind.into(),
+        })
+        .for_each(&mut feed);
+
+    // TODO: Better sorting.
     items.sort_by(|lhs, rhs| lhs.label.cmp(&rhs.label));
     items.dedup_by(|lhs, rhs| lhs.label == rhs.label);
 
     Some(items)
+}
+
+fn complete_attrpath_def(
+    _db: &dyn DefDatabase,
+    _file_id: FileId,
+    source_range: TextRange,
+    path_node: ast::Attrpath,
+    _name_node: ast::Name,
+) -> Option<Vec<CompletionItem>> {
+    if path_node.attrs().count() >= 2 {
+        return None;
+    }
+    let in_let = path_node
+        .syntax()
+        .ancestors()
+        .find_map(ast::LetIn::cast)
+        .is_some();
+    Some(
+        ATTR_POS_KEYWORDS
+            .iter()
+            .copied()
+            .chain(in_let.then_some("in"))
+            .map(|kw| keyword_to_completion(kw, source_range))
+            .collect(),
+    )
+}
+
+fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
+    CompletionItem {
+        label: kw.into(),
+        source_range,
+        replace: kw.into(),
+        kind: CompletionItemKind::Keyword,
+    }
+}
+
+// Subsequence matching.
+fn can_complete(prefix: &str, replace: &str) -> bool {
+    let mut rest = prefix.as_bytes();
+    if rest.is_empty() {
+        return true;
+    }
+    for b in replace.bytes() {
+        if rest.first().unwrap() == &b {
+            rest = &rest[1..];
+            if rest.is_empty() {
+                return true;
+            }
+        }
+    }
+    false
 }

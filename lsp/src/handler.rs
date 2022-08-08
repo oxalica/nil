@@ -64,6 +64,7 @@ pub(crate) fn completion(
         .into_iter()
         .map(|item| {
             let kind = match item.kind {
+                CompletionItemKind::Keyword => lsp::CompletionItemKind::KEYWORD,
                 CompletionItemKind::Param => lsp::CompletionItemKind::VARIABLE,
                 CompletionItemKind::LetBinding => lsp::CompletionItemKind::VARIABLE,
                 CompletionItemKind::Field => lsp::CompletionItemKind::FIELD,
