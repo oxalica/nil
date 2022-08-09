@@ -242,17 +242,24 @@ impl<'i> Parser<'i> {
                 // - '{ } @'
                 // - '{ x ,'
                 // - '{ x ?'
-                // - '{ x }'
-                // - '{ x ...' (This is invalid but may occur when typing.)
+                // - '{ x ...'
+                //   This is invalid but may occur when typing.
+                //
+                // - '{ x } @'
+                // - '{ x } :'
+                //   We reject `{ x }` following tokens other than `@` and `:` as lambda.
+                //   This can occur for incomplete attrsets.
                 let is_lambda = {
                     let mut tok_iter = self.peek_iter_non_ws();
                     tok_iter.next(); // '{'
                     match tok_iter.next() {
                         Some(T![...]) => true,
                         Some(T!['}']) => matches!(tok_iter.next(), Some(T![:] | T![@])),
-                        Some(IDENT) => {
-                            matches!(tok_iter.next(), Some(T![,] | T![?] | T!['}'] | T![...]))
-                        }
+                        Some(IDENT) => match tok_iter.next() {
+                            Some(T![,] | T![?] | T![...]) => true,
+                            Some(T!['}']) => matches!(tok_iter.next(), Some(T![@] | T![:])),
+                            _ => false,
+                        },
                         _ => false,
                     }
                 };

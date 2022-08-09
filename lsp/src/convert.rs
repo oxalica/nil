@@ -3,7 +3,7 @@ use lsp_types::{
     self as lsp, DiagnosticSeverity, DiagnosticTag, Location, Position, Range,
     TextDocumentPositionParams,
 };
-use nil::{Diagnostic, FilePos, InFile, Severity};
+use nil::{CompletionItem, CompletionItemKind, Diagnostic, FilePos, InFile, Severity};
 use text_size::TextRange;
 
 pub(crate) fn from_file_pos(
@@ -53,5 +53,34 @@ pub(crate) fn to_diagnostic(line_map: &LineMap, diag: Diagnostic) -> Option<lsp:
             Some(tags)
         },
         data: None,
+    })
+}
+
+pub(crate) fn to_completion_item(
+    line_map: &LineMap,
+    item: CompletionItem,
+) -> Option<lsp::CompletionItem> {
+    let kind = match item.kind {
+        CompletionItemKind::Keyword => lsp::CompletionItemKind::KEYWORD,
+        CompletionItemKind::Param => lsp::CompletionItemKind::VARIABLE,
+        CompletionItemKind::LetBinding => lsp::CompletionItemKind::VARIABLE,
+        CompletionItemKind::Field => lsp::CompletionItemKind::FIELD,
+        CompletionItemKind::BuiltinConst => lsp::CompletionItemKind::CONSTANT,
+        CompletionItemKind::BuiltinFunction => lsp::CompletionItemKind::FUNCTION,
+        CompletionItemKind::BuiltinAttrset => lsp::CompletionItemKind::CLASS,
+    };
+    Some(lsp::CompletionItem {
+        label: item.label.into(),
+        kind: Some(kind),
+        insert_text: None,
+        insert_text_format: Some(lsp::InsertTextFormat::PLAIN_TEXT),
+        // We don't support indentation yet.
+        insert_text_mode: Some(lsp::InsertTextMode::ADJUST_INDENTATION),
+        text_edit: Some(lsp::CompletionTextEdit::Edit(lsp::TextEdit {
+            range: to_range(line_map, item.source_range),
+            new_text: item.replace.into(),
+        })),
+        // TODO
+        ..Default::default()
     })
 }

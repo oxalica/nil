@@ -159,9 +159,10 @@ fn complete_expr(
         .for_each(&mut feed);
 
     // Global builtins.
+    let show_hidden_builtins = prefix.starts_with("__");
     builtin::BUILTINS
         .values()
-        .filter(|b| !b.is_hidden)
+        .filter(|b| !b.name.starts_with("__") || show_hidden_builtins)
         .map(|b| CompletionItem {
             label: b.name.into(),
             source_range,
@@ -226,4 +227,91 @@ fn can_complete(prefix: &str, replace: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::base::SourceDatabase;
+    use crate::tests::TestDB;
+    use expect_test::{expect, Expect};
+
+    #[track_caller]
+    fn check_no(fixture: &str, label: &str) {
+        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
+        if let Some(compes) = super::completions(&db, file_id, pos) {
+            assert_eq!(compes.iter().find(|item| item.label == label), None);
+        }
+    }
+
+    #[track_caller]
+    fn check(fixture: &str, label: &str, expect: Expect) {
+        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
+        let compes = super::completions(&db, file_id, pos).expect("No completion");
+        let item = compes
+            .iter()
+            .find(|item| item.label == label)
+            .expect("No expected completion");
+
+        let source_range =
+            usize::from(item.source_range.start())..usize::from(item.source_range.end());
+        let mut completed = db.file_content(file_id).to_string();
+        completed.replace_range(source_range, &item.replace);
+        let got = format!("({:?}) {}", item.kind, completed);
+        expect.assert_eq(&got);
+    }
+
+    #[test]
+    fn keyword() {
+        check("l$0", "let", expect!["(Keyword) let"]);
+        check("i$0", "if", expect!["(Keyword) if"]);
+
+        // Cannot complete.
+        check_no("tl$0", "let");
+        // Not in context.
+        check_no("i$0", "in");
+        check_no("th$0", "then");
+
+        check("let i$0", "in", expect!["(Keyword) let in"]);
+        check("if a th$0", "then", expect!["(Keyword) if a then"]);
+    }
+
+    #[test]
+    fn local_binding() {
+        check(
+            "foo: ({ bar ? b$0 }: 0) b",
+            "bar",
+            expect!["(Param) foo: ({ bar ? bar }: 0) b"],
+        );
+        check_no("(foo: ({ bar ? b }: 0) b$0", "bar");
+
+        check(
+            "let foo = b$0; bar = 2;",
+            "bar",
+            expect!["(LetBinding) let foo = bar; bar = 2;"],
+        );
+        check(
+            "rec { foo = b$0; bar = 2; }",
+            "bar",
+            expect!["(Field) rec { foo = bar; bar = 2; }"],
+        );
+    }
+
+    #[test]
+    fn builtin() {
+        check("toS$0", "toString", expect!["(BuiltinFunction) toString"]);
+        check("t$0", "true", expect!["(BuiltinConst) true"]);
+        check("b$0", "builtins", expect!["(BuiltinAttrset) builtins"]);
+
+        check_no("al$0", "__all");
+        check("__al$0", "__all", expect!["(BuiltinFunction) __all"]);
+    }
+
+    #[test]
+    fn inherit() {
+        check("{ i$0 }", "inherit", expect!["(Keyword) { inherit }"]);
+        check("let i$0", "inherit", expect!["(Keyword) let inherit"]);
+        check_no("let a = i$0", "inherit");
+        check_no("let a.i$0", "inherit");
+        check_no("let a.${i$0", "inherit");
+    }
 }

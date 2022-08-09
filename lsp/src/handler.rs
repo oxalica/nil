@@ -1,10 +1,10 @@
 use crate::{convert, StateSnapshot};
 use lsp_types::{
-    self as lsp, CompletionItem, CompletionOptions, CompletionParams, CompletionResponse,
-    GotoDefinitionParams, GotoDefinitionResponse, Location, OneOf, ReferenceParams,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Location, OneOf, ReferenceParams, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
 };
-use nil::{CompletionItemKind, InFile};
+use nil::InFile;
 
 pub(crate) fn server_capabilities() -> ServerCapabilities {
     ServerCapabilities {
@@ -62,31 +62,7 @@ pub(crate) fn completion(
     let line_map = vfs.file_line_map(fpos.file_id)?;
     let items = items
         .into_iter()
-        .map(|item| {
-            let kind = match item.kind {
-                CompletionItemKind::Keyword => lsp::CompletionItemKind::KEYWORD,
-                CompletionItemKind::Param => lsp::CompletionItemKind::VARIABLE,
-                CompletionItemKind::LetBinding => lsp::CompletionItemKind::VARIABLE,
-                CompletionItemKind::Field => lsp::CompletionItemKind::FIELD,
-                CompletionItemKind::BuiltinConst => lsp::CompletionItemKind::CONSTANT,
-                CompletionItemKind::BuiltinFunction => lsp::CompletionItemKind::FUNCTION,
-                CompletionItemKind::BuiltinAttrset => lsp::CompletionItemKind::CLASS,
-            };
-            CompletionItem {
-                label: item.label.into(),
-                kind: Some(kind),
-                insert_text: None,
-                insert_text_format: Some(lsp::InsertTextFormat::PLAIN_TEXT),
-                // We don't support indentation yet.
-                insert_text_mode: Some(lsp::InsertTextMode::ADJUST_INDENTATION),
-                text_edit: Some(lsp::CompletionTextEdit::Edit(lsp::TextEdit {
-                    range: convert::to_range(line_map, item.source_range),
-                    new_text: item.replace.into(),
-                })),
-                // TODO
-                ..Default::default()
-            }
-        })
+        .filter_map(|item| convert::to_completion_item(line_map, item))
         .collect::<Vec<_>>();
     Some(CompletionResponse::Array(items))
 }
