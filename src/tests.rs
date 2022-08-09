@@ -1,9 +1,10 @@
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
-use crate::{Change, DefDatabase, FileId};
+use crate::{Change, DefDatabase, FileId, FileSet, SourceRoot, VfsPath};
+use indexmap::IndexMap;
 use rowan::ast::AstNode;
 use rowan::TextSize;
-use std::ops;
+use std::{mem, ops};
 use syntax::{NixLanguage, SyntaxNode};
 
 pub const MARKER_INDICATOR: char = '$';
@@ -25,11 +26,25 @@ impl TestDB {
         Ok((db, file, poses))
     }
 
+    pub fn file_set(fixture: &str) -> Result<(Self, Vec<FileId>), String> {
+        let f = Fixture::file_set(fixture)?;
+        let files = (0..f.files.len())
+            .map(|i| FileId(i as u32))
+            .collect::<Vec<_>>();
+        let db = Self::from_fixture(f);
+        Ok((db, files))
+    }
+
     fn from_fixture(fixture: Fixture) -> Self {
         let mut db = Self::default();
-        let root = FileId(0);
         let mut change = Change::new();
-        change.change_file(root, Some(fixture[root].into()));
+        let mut file_set = FileSet::default();
+        for (i, (path, text)) in (0u32..).zip(fixture.files) {
+            let file = FileId(i);
+            file_set.insert(file, path);
+            change.change_file(file, Some(text.into()));
+        }
+        change.set_roots(vec![SourceRoot::new_local(file_set)]);
         change.apply(&mut db);
         db
     }
@@ -57,19 +72,27 @@ impl TestDB {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct Fixture {
-    texts: Vec<String>,
+    files: IndexMap<VfsPath, String>,
 }
 
 impl ops::Index<FileId> for Fixture {
     type Output = str;
     fn index(&self, index: FileId) -> &Self::Output {
-        &self.texts[index.0 as usize]
+        &self.files[index.0 as usize]
     }
 }
 
 impl Fixture {
+    fn insert_file(&mut self, path: VfsPath, text: String) -> Result<(), String> {
+        if self.files.insert(path, text).is_none() {
+            Ok(())
+        } else {
+            Err("Duplicated path".into())
+        }
+    }
+
     fn single_file<const MARKERS: usize>(
         fixture: &str,
     ) -> Result<(Self, FileId, [TextSize; MARKERS]), String> {
@@ -101,6 +124,37 @@ impl Fixture {
                 return Err(format!("Marker {} not set", i));
             }
         }
-        Ok((Self { texts: vec![text] }, FileId(0), markers))
+        let mut this = Self::default();
+        this.insert_file(VfsPath::new("/default.nix").unwrap(), text)?;
+        Ok((this, FileId(0), markers))
+    }
+
+    fn file_set(fixture: &str) -> Result<Self, String> {
+        if fixture.len() >= u32::MAX as usize {
+            return Err("Size too large".into());
+        }
+
+        let mut this = Self::default();
+        let mut cur_path = None;
+        let mut cur_text = String::new();
+        for line in fixture.lines().skip_while(|line| line.is_empty()) {
+            if let Some(path) = line.strip_prefix("#- ") {
+                let path = VfsPath::new(path).ok_or_else(|| "Invalid path".to_owned())?;
+                if let Some(prev_path) = cur_path.replace(path) {
+                    this.insert_file(prev_path, mem::take(&mut cur_text))?;
+                }
+            } else {
+                if cur_path.is_none() {
+                    return Err("No path specified".into());
+                }
+                cur_text += line;
+                cur_text += "\n";
+            }
+        }
+        this.insert_file(
+            cur_path.ok_or_else(|| "Empty fixture".to_owned())?,
+            cur_text,
+        )?;
+        Ok(this)
     }
 }

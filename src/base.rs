@@ -16,6 +16,10 @@ pub struct SourceRootId(pub u32);
 pub struct VfsPath(String);
 
 impl VfsPath {
+    pub fn root() -> Self {
+        Self(String::new())
+    }
+
     pub fn from_path(p: &Path) -> Option<Self> {
         Self::new(p.to_str()?)
     }
@@ -23,7 +27,7 @@ impl VfsPath {
     pub fn new(s: impl Into<String>) -> Option<Self> {
         let mut s: String = s.into();
         if s.is_empty() || s == "/" {
-            return Some(Self(String::new()));
+            return Some(Self::root());
         }
         if s.ends_with('/') || s.as_bytes().windows(2).any(|w| w == b"//") {
             return None;
@@ -36,6 +40,16 @@ impl VfsPath {
 
     pub fn push(&mut self, relative: &Self) {
         self.0.push_str(&relative.0);
+    }
+
+    pub fn push_segment(&mut self, segment: &str) -> Option<()> {
+        if !segment.contains('/') {
+            self.0 += "/";
+            self.0 += segment;
+            Some(())
+        } else {
+            None
+        }
     }
 
     pub fn pop(&mut self) -> Option<()> {

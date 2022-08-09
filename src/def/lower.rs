@@ -698,37 +698,37 @@ mod tests {
         check_path(
             "./.",
             expect![[r#"
-                PathData { anchor: Relative(FileId(0)), supers: 0, raw_segments: "" }
+                PathData { anchor: Relative(FileId(0)), supers: 0, relative: VfsPath("") }
             "#]],
         );
         check_path(
             "../.",
             expect![[r#"
-                PathData { anchor: Relative(FileId(0)), supers: 1, raw_segments: "" }
+                PathData { anchor: Relative(FileId(0)), supers: 1, relative: VfsPath("") }
             "#]],
         );
         check_path(
             "../a/../../.b/./c",
             expect![[r#"
-                PathData { anchor: Relative(FileId(0)), supers: 2, raw_segments: ".b/c" }
+                PathData { anchor: Relative(FileId(0)), supers: 2, relative: VfsPath("/.b/c") }
             "#]],
         );
         check_path(
             "/../a/../../.b/./c",
             expect![[r#"
-                PathData { anchor: Absolute, supers: 0, raw_segments: ".b/c" }
+                PathData { anchor: Absolute, supers: 0, relative: VfsPath("/.b/c") }
             "#]],
         );
         check_path(
             "~/../a/../../.b/./c",
             expect![[r#"
-                PathData { anchor: Home, supers: 2, raw_segments: ".b/c" }
+                PathData { anchor: Home, supers: 2, relative: VfsPath("/.b/c") }
             "#]],
         );
         check_path(
             "<p/../a/../../.b/./c>",
             expect![[r#"
-                PathData { anchor: Search("p"), supers: 2, raw_segments: ".b/c" }
+                PathData { anchor: Search("p"), supers: 2, relative: VfsPath("/.b/c") }
             "#]],
         );
     }

@@ -1,5 +1,5 @@
 use super::DefDatabase;
-use crate::FileId;
+use crate::{FileId, VfsPath};
 use smol_str::SmolStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -15,8 +15,32 @@ impl salsa::InternKey for Path {
 }
 
 impl Path {
+    pub(crate) fn resolve_path_query(db: &dyn DefDatabase, path: Path) -> Option<FileId> {
+        let data = path.data(db);
+        let file = match &data.anchor {
+            &PathAnchor::Relative(file) => file,
+            // TODO
+            PathAnchor::Absolute | PathAnchor::Home | PathAnchor::Search(_) => return None,
+        };
+        let sid = db.file_source_root(file);
+        let root = db.source_root(sid);
+        let mut vpath = root.get_path_for_file(file)?.clone();
+        for _ in 0..(data.supers.saturating_add(1)) {
+            vpath.pop()?;
+        }
+        vpath.push(&data.relative);
+        root.get_file_for_path(&vpath).or_else(|| {
+            vpath.push_segment("default.nix").unwrap();
+            root.get_file_for_path(&vpath)
+        })
+    }
+
     pub fn data(self, db: &dyn DefDatabase) -> PathData {
         db.lookup_intern_path(self)
+    }
+
+    pub fn resolve(self, db: &dyn DefDatabase) -> Option<FileId> {
+        db.resolve_path(self)
     }
 }
 
@@ -24,50 +48,30 @@ impl Path {
 pub struct PathData {
     anchor: PathAnchor,
     supers: u8,
-    // Normalized path separated by `/`, with no `.` or `..` segments.
-    raw_segments: SmolStr,
+    // Normalized relative path.
+    relative: VfsPath,
 }
 
 impl PathData {
     pub(crate) fn normalize(anchor: PathAnchor, segments: &str) -> Self {
-        let mut raw_segments = String::new();
+        let mut relative = VfsPath::root();
         let mut supers = 0u8;
         for seg in segments
             .split('/')
             .filter(|&seg| !seg.is_empty() && seg != ".")
         {
             if seg != ".." {
-                if !raw_segments.is_empty() {
-                    raw_segments.push('/');
-                }
-                raw_segments.push_str(seg);
-            } else if raw_segments.is_empty() {
-                // Extra ".." has no effect for absolute path.
-                if anchor != PathAnchor::Absolute {
-                    supers = supers.saturating_add(1);
-                }
-            } else {
-                let last_slash = raw_segments.bytes().rposition(|c| c == b'/').unwrap_or(0);
-                raw_segments.truncate(last_slash);
+                relative.push_segment(seg).expect("Checked by lexer");
+            // Extra ".." has no effect for absolute path.
+            } else if relative.pop().is_none() && anchor != PathAnchor::Absolute {
+                supers = supers.saturating_add(1);
             }
         }
         Self {
             anchor,
             supers,
-            raw_segments: raw_segments.into(),
+            relative,
         }
-    }
-
-    pub fn anchor(&self) -> &PathAnchor {
-        &self.anchor
-    }
-
-    pub fn supers(&self) -> u8 {
-        self.supers
-    }
-
-    pub fn segments(&self) -> impl Iterator<Item = &str> + '_ {
-        self.raw_segments.split(' ').filter(|s| !s.is_empty())
     }
 }
 
@@ -82,19 +86,21 @@ pub enum PathAnchor {
 #[cfg(test)]
 mod tests {
     use super::{PathAnchor, PathData};
-    use crate::FileId;
+    use crate::tests::TestDB;
+    use crate::{DefDatabase, FileId, VfsPath};
 
     #[test]
     #[rustfmt::skip]
     fn normalize_relative() {
         for anchor in [PathAnchor::Relative(FileId(0)), PathAnchor::Home, PathAnchor::Search("foo".into())] {
             let norm = |s| PathData::normalize(anchor.clone(), s);
-            assert_eq!(norm(""), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "".into() });
-            assert_eq!(norm("./."), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "".into() });
-            assert_eq!(norm("./.."), PathData { anchor: anchor.clone(), supers: 1, raw_segments: "".into() });
-            assert_eq!(norm("../."), PathData { anchor: anchor.clone(), supers: 1, raw_segments: "".into() });
-            assert_eq!(norm("foo/./bar/../.baz"), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "foo/.baz".into() });
-            assert_eq!(norm("../../foo"), PathData { anchor: anchor.clone(), supers: 2, raw_segments: "foo".into() });
+            let path = |supers, p: &str| PathData { anchor: anchor.clone(), supers, relative: VfsPath::new(p).unwrap() };
+            assert_eq!(norm(""), path(0, ""));
+            assert_eq!(norm("./."), path(0, ""));
+            assert_eq!(norm("./.."), path(1, ""));
+            assert_eq!(norm("../."), path(1, ""));
+            assert_eq!(norm("foo/./bar/../.baz"), path(0, "foo/.baz"));
+            assert_eq!(norm("../../foo"), path(2, "foo"));
         }
     }
 
@@ -103,10 +109,32 @@ mod tests {
     fn normalize_absolute() {
         let anchor = PathAnchor::Absolute;
         let norm = |s| PathData::normalize(anchor.clone(), s);
-        assert_eq!(norm("/./."), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "".into() });
-        assert_eq!(norm("/./.."), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "".into() });
-        assert_eq!(norm("/../."), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "".into() });
-        assert_eq!(norm("/foo/./bar/../.baz"), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "foo/.baz".into() });
-        assert_eq!(norm("/../../foo"), PathData { anchor: anchor.clone(), supers: 0, raw_segments: "foo".into() });
+            let path = |p: &str| PathData { anchor: anchor.clone(), supers: 0, relative: VfsPath::new(p).unwrap() };
+        assert_eq!(norm("/"), path(""));
+        assert_eq!(norm("./."), path(""));
+        assert_eq!(norm("./.."), path(""));
+        assert_eq!(norm("../."), path(""));
+        assert_eq!(norm("foo/./bar/../.baz"), path("foo/.baz"));
+        assert_eq!(norm("../../foo"), path("foo"));
+    }
+
+    #[test]
+    fn resolve_path() {
+        let (db, files) = TestDB::file_set(
+            "
+#- /default.nix
+./foo/bar.nix
+
+#- /foo/bar.nix
+baz/../../bar.nix
+
+#- bar.nix
+./.
+        ",
+        )
+        .unwrap();
+        assert_eq!(db.module_paths(files[0])[0].resolve(&db), Some(files[1]));
+        assert_eq!(db.module_paths(files[1])[0].resolve(&db), Some(files[2]));
+        assert_eq!(db.module_paths(files[2])[0].resolve(&db), Some(files[0]));
     }
 }

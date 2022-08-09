@@ -1,8 +1,8 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, ResolveResult};
+use crate::def::{AstPtr, Expr, Literal, ResolveResult};
 use crate::{DefDatabase, FileId};
 use rowan::ast::AstNode;
-use rowan::TextSize;
+use rowan::{TextRange, TextSize};
 use syntax::{ast, match_ast, SyntaxKind, T};
 
 pub(crate) fn goto_definition(
@@ -12,7 +12,7 @@ pub(crate) fn goto_definition(
 ) -> Option<Vec<NavigationTarget>> {
     let parse = db.parse(file_id);
     let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
-    if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT) {
+    if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT | SyntaxKind::PATH) {
         return None;
     }
     let ptr = tok.parent_ancestors().find_map(|node| {
@@ -20,6 +20,7 @@ pub(crate) fn goto_definition(
             match node {
                 ast::Ref(n) => Some(AstPtr::new(n.syntax())),
                 ast::Name(n) => Some(AstPtr::new(n.syntax())),
+                ast::Literal(n) => Some(AstPtr::new(n.syntax())),
                 _ => None,
             }
         }
@@ -27,6 +28,22 @@ pub(crate) fn goto_definition(
 
     let source_map = db.source_map(file_id);
     let expr_id = source_map.node_expr(ptr)?;
+
+    if tok.kind() == SyntaxKind::PATH {
+        let module = db.module(file_id);
+        let path = match &module[expr_id] {
+            Expr::Literal(Literal::Path(path)) => path,
+            _ => return None,
+        };
+        let file_id = path.resolve(db)?;
+        let full_range = TextRange::up_to(TextSize::of(&*db.file_content(file_id)));
+        let focus_range = TextRange::default();
+        return Some(vec![NavigationTarget {
+            file_id,
+            focus_range,
+            full_range,
+        }]);
+    }
 
     match db.resolve_name(file_id, expr_id)? {
         ResolveResult::NameDef(def) => {
@@ -156,5 +173,11 @@ mod tests {
     fn builtin() {
         check("let true = 1; in $0true && false", expect!["<true> = 1;"]);
         check("let true = 1; in true && $0false", expect![""]);
+    }
+
+    // TODO: Multi-files test.
+    #[test]
+    fn path() {
+        check("1 + $0./.", expect!["<>1 + ./."]);
     }
 }

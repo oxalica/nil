@@ -37,6 +37,9 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(Module::module_paths_query)]
     fn module_paths(&self, file_id: FileId) -> Arc<[Path]>;
 
+    #[salsa::invoke(Path::resolve_path_query)]
+    fn resolve_path(&self, path: Path) -> Option<FileId>;
+
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 
