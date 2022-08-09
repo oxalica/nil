@@ -1,0 +1,39 @@
+Unexpected token at 5..8
+Missing L_CURLY at 20..21
+SOURCE_FILE@0..25
+  APPLY@0..25
+    PAREN@0..14
+      L_PAREN@0..1 "("
+      LAMBDA@1..13
+        PARAM@1..10
+          PAT@1..10
+            L_CURLY@1..2 "{"
+            SPACE@2..3 " "
+            PAT_FIELD@3..5
+              NAME@3..4
+                IDENT@3..4 "a"
+              SPACE@4..5 " "
+            DOT3@5..8 "..."
+            SPACE@8..9 " "
+            R_CURLY@9..10 "}"
+        COLON@10..11 ":"
+        SPACE@11..12 " "
+        REF@12..13
+          IDENT@12..13 "a"
+      R_PAREN@13..14 ")"
+    SPACE@14..15 "\n"
+    PAREN@15..24
+      L_PAREN@15..16 "("
+      LAMBDA@16..23
+        PARAM@16..20
+          NAME@16..17
+            IDENT@16..17 "a"
+          SPACE@17..18 " "
+          AT@18..19 "@"
+          SPACE@19..20 " "
+        COLON@20..21 ":"
+        SPACE@21..22 " "
+        LITERAL@22..23
+          INT@22..23 "1"
+      R_PAREN@23..24 ")"
+    SPACE@24..25 "\n"

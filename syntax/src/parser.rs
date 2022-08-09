@@ -601,6 +601,7 @@ impl<'i> Parser<'i> {
                     self.error(ErrorKind::UnexpectedToken);
                 }
                 self.bump();
+                expect_delimiter = false;
                 continue;
             }
 
@@ -611,13 +612,18 @@ impl<'i> Parser<'i> {
                     break;
                 }
                 Some(T![...]) => {
+                    // Must have a `,` before `...`. But we tolerate this.
+                    if expect_delimiter {
+                        self.error(ErrorKind::UnexpectedToken);
+                    }
+
                     self.bump(); // ...
                     if self.peek_non_ws() == Some(T!['}']) {
                         self.bump();
                         break;
                     }
                     self.error(ErrorKind::UnexpectedToken);
-                    expect_delimiter = false;
+                    expect_delimiter = true;
                 }
                 Some(IDENT) => {
                     self.start_node(PAT_FIELD);

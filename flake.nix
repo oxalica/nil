@@ -49,8 +49,16 @@
           packages = [
             rustPkgs.rust-nightly_2022-08-01
             pkgs.cargo-fuzz
+            pkgs.llvmPackages_14.llvm
+            pkgs.jq
+            pkgs.gnugrep
           ];
           RUST_BACKTRACE = 1;
+
+          # bash
+          shellHook = ''
+            export CARGO_TARGET_DIR=~/.cache/targets-syntax
+          '';
         };
       });
 }

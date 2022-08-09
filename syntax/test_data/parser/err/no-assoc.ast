@@ -1,0 +1,60 @@
+Invalid usage of no-associative operators at 26..27
+Invalid usage of no-associative operators at 41..43
+SOURCE_FILE@0..49
+  LIST@0..48
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    PAREN@4..16
+      L_PAREN@4..5 "("
+      BINARY_OP@5..15
+        BINARY_OP@5..11
+          LITERAL@5..6
+            INT@5..6 "1"
+          SPACE@6..7 " "
+          LT@7..8 "<"
+          SPACE@8..9 " "
+          LITERAL@9..10
+            INT@9..10 "2"
+          SPACE@10..11 " "
+        EQ2@11..13 "=="
+        SPACE@13..14 " "
+        LITERAL@14..15
+          INT@14..15 "3"
+      R_PAREN@15..16 ")"
+    SPACE@16..19 "\n  "
+    PAREN@19..30
+      L_PAREN@19..20 "("
+      BINARY_OP@20..29
+        LITERAL@20..21
+          INT@20..21 "1"
+        SPACE@21..22 " "
+        LT@22..23 "<"
+        SPACE@23..24 " "
+        LITERAL@24..25
+          INT@24..25 "2"
+        SPACE@25..26 " "
+        GT@26..27 ">"
+        SPACE@27..28 " "
+        LITERAL@28..29
+          INT@28..29 "3"
+      R_PAREN@29..30 ")"
+    SPACE@30..33 "\n  "
+    PAREN@33..46
+      L_PAREN@33..34 "("
+      BINARY_OP@34..45
+        LITERAL@34..35
+          INT@34..35 "1"
+        SPACE@35..36 " "
+        EQ2@36..38 "=="
+        SPACE@38..39 " "
+        LITERAL@39..40
+          INT@39..40 "2"
+        SPACE@40..41 " "
+        NOT_EQ@41..43 "!="
+        SPACE@43..44 " "
+        LITERAL@44..45
+          INT@44..45 "3"
+      R_PAREN@45..46 ")"
+    SPACE@46..47 "\n"
+    R_BRACK@47..48 "]"
+  SPACE@48..49 "\n"

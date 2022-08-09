@@ -1,0 +1,29 @@
+Missing SEMICOLON at 14..15
+Unexpected token at 14..15
+Unexpected token at 16..18
+Unexpected token at 18..19
+Missing attribute at 27..28
+Unexpected token at 29..30
+Missing SEMICOLON at 29..30
+SOURCE_FILE@0..31
+  ATTR_SET@0..30
+    L_CURLY@0..1 "{"
+    SPACE@1..4 "\n  "
+    INHERIT@4..14
+      KW_INHERIT@4..11 "inherit"
+      SPACE@11..14 "\n  "
+    EQ@14..15 "="
+    SPACE@15..16 " "
+    INT@16..18 "42"
+    SEMICOLON@18..19 ";"
+    SPACE@19..22 "\n  "
+    ATTR_PATH_VALUE@22..29
+      ATTR_PATH@22..27
+        NAME@22..25
+          IDENT@22..25 "bar"
+        DOT@25..26 "."
+        SPACE@26..27 " "
+      EQ@27..28 "="
+      SPACE@28..29 "\n"
+    R_CURLY@29..30 "}"
+  SPACE@30..31 "\n"

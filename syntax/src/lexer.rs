@@ -524,10 +524,16 @@ mod tests {
     #[test]
     fn error_utf8() {
         check_lex(
-            "lݟ",
+            "1`2£3ह4𐍈",
             expect![[r#"
-                IDENT "l"
-                ERROR "ݟ"
+                INT "1"
+                ERROR "`"
+                INT "2"
+                ERROR "£"
+                INT "3"
+                ERROR "ह"
+                INT "4"
+                ERROR "𐍈"
             "#]],
         )
     }

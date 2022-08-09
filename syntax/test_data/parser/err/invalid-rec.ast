@@ -1,0 +1,17 @@
+Unexpected token at 8..11
+Missing SEMICOLON at 12..12
+Missing KW_IN at 12..12
+Unexpected token at 12..12
+SOURCE_FILE@0..12
+  LET_IN@0..12
+    KW_LET@0..3 "let"
+    SPACE@3..4 " "
+    ATTR_PATH_VALUE@4..12
+      ATTR_PATH@4..6
+        NAME@4..5
+          IDENT@4..5 "a"
+        SPACE@5..6 " "
+      EQ@6..7 "="
+      SPACE@7..8 " "
+      KW_REC@8..11 "rec"
+      SPACE@11..12 "\n"

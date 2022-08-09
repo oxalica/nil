@@ -1,0 +1,5 @@
+Missing QUOTE2 at 6..6
+SOURCE_FILE@0..6
+  INDENT_STRING@0..6
+    QUOTE2@0..2 "''"
+    STRING_FRAGMENT@2..6 "foo\n"
