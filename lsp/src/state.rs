@@ -1,10 +1,11 @@
-use crate::{convert, handler, Vfs, VfsPath};
+use crate::{convert, handler, Vfs};
 use anyhow::{bail, Result};
 use crossbeam_channel::{Receiver, Sender};
 use lsp_server::{ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
 use nil::{Analysis, AnalysisHost};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
@@ -17,10 +18,11 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(responder: Sender<Message>) -> Self {
+    pub fn new(responder: Sender<Message>, workspace_root: Option<PathBuf>) -> Self {
+        let vfs = Vfs::new(workspace_root.unwrap_or_else(|| PathBuf::from("/")));
         Self {
             host: Default::default(),
-            vfs: Default::default(),
+            vfs: Arc::new(RwLock::new(vfs)),
             sender: responder,
             is_shutdown: false,
         }
@@ -93,36 +95,31 @@ impl State {
     }
 
     fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) {
-        if let Ok(path) = VfsPath::try_from(uri) {
-            let mut vfs = self.vfs.write().unwrap();
-            vfs.set_file_content(path, text);
+        let mut vfs = self.vfs.write().unwrap();
+        let file = vfs.set_uri_content(uri, text);
 
-            let change = vfs.take_change();
-            log::debug!("Files changed: {:?}", change);
-            self.host.apply_change(change.clone());
+        let change = vfs.take_change();
+        log::debug!("Change: {:?}", change);
+        self.host.apply_change(change);
 
-            // Currently we push down changes immediately.
-            assert_eq!(change.file_changes.len(), 1);
-            let (file, text) = &change.file_changes[0];
-            let diagnostics = vfs
-                .file_line_map(*file)
-                .and_then(|line_map| {
-                    let _ = text.as_deref()?;
-                    let diags = self.host.snapshot().diagnostics(*file).ok()?;
-                    let diags = diags
-                        .into_iter()
-                        .take(MAX_DIAGNOSTICS_CNT)
-                        .filter_map(|diag| convert::to_diagnostic(line_map, diag))
-                        .collect::<Vec<_>>();
-                    Some(diags)
-                })
-                .unwrap_or_default();
-            self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                uri: uri.clone(),
-                diagnostics,
-                version: None,
-            });
-        }
+        // Currently we push down changes immediately.
+        let diagnostics = file
+            .and_then(|file| {
+                let line_map = vfs.get_line_map(file)?;
+                let diags = self.host.snapshot().diagnostics(file).ok()?;
+                let diags = diags
+                    .into_iter()
+                    .take(MAX_DIAGNOSTICS_CNT)
+                    .filter_map(|diag| convert::to_diagnostic(line_map, diag))
+                    .collect::<Vec<_>>();
+                Some(diags)
+            })
+            .unwrap_or_default();
+        self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+            uri: uri.clone(),
+            diagnostics,
+            version: None,
+        });
     }
 }
 

@@ -612,9 +612,8 @@ impl MergingEntry {
 #[cfg(test)]
 mod tests {
     use super::lower;
-    use crate::base::FileId;
-    use crate::def::DefDatabase;
     use crate::tests::TestDB;
+    use crate::{DefDatabase, FileId};
     use expect_test::{expect, Expect};
     use std::fmt::Write;
     use syntax::parse_file;

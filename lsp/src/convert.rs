@@ -1,4 +1,4 @@
-use crate::{LineMap, StateSnapshot, Vfs, VfsPath};
+use crate::{LineMap, StateSnapshot, Vfs};
 use lsp_types::{
     self as lsp, DiagnosticSeverity, DiagnosticTag, Location, Position, Range,
     TextDocumentPositionParams,
@@ -10,17 +10,17 @@ pub(crate) fn from_file_pos(
     snap: &StateSnapshot,
     params: &TextDocumentPositionParams,
 ) -> Option<FilePos> {
-    let path = VfsPath::try_from(&params.text_document.uri).ok()?;
     let vfs = snap.vfs.read().unwrap();
-    let (file, line_map) = vfs.get(&path)?;
+    let file = vfs.get_file_for_uri(&params.text_document.uri)?;
+    let line_map = vfs.get_line_map(file)?;
     let pos = line_map.pos(params.position.line, params.position.character);
     Some(FilePos::new(file, pos))
 }
 
 pub(crate) fn to_location(vfs: &Vfs, frange: InFile<TextRange>) -> Option<Location> {
-    let url = vfs.file_path(frange.file_id)?.try_into().ok()?;
-    let line_map = vfs.file_line_map(frange.file_id)?;
-    Some(Location::new(url, to_range(line_map, frange.value)))
+    let uri = vfs.get_uri_for_file(frange.file_id)?;
+    let line_map = vfs.get_line_map(frange.file_id)?;
+    Some(Location::new(uri, to_range(line_map, frange.value)))
 }
 
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {

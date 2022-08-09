@@ -1,5 +1,5 @@
-use crate::def::{AstPtr, DefDatabase};
-use crate::{FileId, FileRange, InFile};
+use crate::def::AstPtr;
+use crate::{DefDatabase, FileId, FileRange, InFile};
 use rowan::ast::AstNode;
 use rowan::TextSize;
 use syntax::{ast, match_ast, SyntaxKind, T};

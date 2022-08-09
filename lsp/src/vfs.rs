@@ -1,82 +1,101 @@
-use indexmap::IndexMap;
 use lsp_types::Url;
-use nil::{Change, FileId};
+use nil::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, mem};
 use text_size::TextSize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct VfsPath(PathBuf);
-
-impl<'a> TryFrom<&'a Url> for VfsPath {
-    type Error = ();
-    fn try_from(url: &'a Url) -> Result<Self, Self::Error> {
-        url.to_file_path().map(Self)
-    }
-}
-
-impl<'a> From<&'a VfsPath> for Url {
-    fn from(path: &'a VfsPath) -> Self {
-        Url::from_file_path(&path.0).unwrap()
-    }
-}
-
-#[derive(Default)]
 pub struct Vfs {
-    files: IndexMap<VfsPath, Option<(Arc<str>, LineMap)>>,
+    // FIXME: Currently this list is append-only.
+    files: Vec<Option<(Arc<str>, LineMap)>>,
+    local_root: PathBuf,
+    local_file_set: FileSet,
+    root_changed: bool,
     change: Change,
 }
 
 impl fmt::Debug for Vfs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Files(Vec<(usize, VfsPath)>);
-        impl fmt::Debug for Files {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.debug_map()
-                    .entries(self.0.iter().map(|(k, v)| (k, v)))
-                    .finish()
-            }
-        }
-
-        let files = Files(self.files.keys().cloned().enumerate().collect());
         f.debug_struct("Vfs")
-            .field("files", &files)
+            .field("file_cnt", &self.files.len())
+            .field("local_root", &self.local_root)
             .finish_non_exhaustive()
     }
 }
 
 impl Vfs {
-    pub fn file_path(&self, file_id: FileId) -> Option<&VfsPath> {
-        self.files.get_index(file_id.0 as _).map(|(path, _)| path)
+    pub fn new(local_root: PathBuf) -> Self {
+        Self {
+            files: Vec::new(),
+            local_root,
+            local_file_set: FileSet::default(),
+            root_changed: false,
+            change: Change::default(),
+        }
+    }
+
+    fn alloc_file_id(&mut self) -> FileId {
+        let id = u32::try_from(self.files.len()).expect("Length overflow");
+        self.files.push(None);
+        FileId(id)
+    }
+
+    fn uri_to_vpath(&self, uri: &Url) -> Option<VfsPath> {
+        let path = uri.to_file_path().ok()?;
+        let relative_path = path.strip_prefix(&self.local_root).ok()?;
+        VfsPath::from_path(relative_path)
+    }
+
+    pub fn set_uri_content(&mut self, uri: &Url, text: Option<String>) -> Option<FileId> {
+        let vpath = self.uri_to_vpath(uri)?;
+        let content = text.and_then(LineMap::normalize);
+        let (file, (text, line_map)) =
+            match (self.local_file_set.get_file_for_path(&vpath), content) {
+                (Some(file), None) => {
+                    self.local_file_set.remove_file(file);
+                    self.root_changed = true;
+                    self.files[file.0 as usize] = None;
+                    return None;
+                }
+                (None, None) => return None,
+                (Some(file), Some(content)) => (file, content),
+                (None, Some(content)) => {
+                    let file = self.alloc_file_id();
+                    self.local_file_set.insert(file, vpath);
+                    self.root_changed = true;
+                    (file, content)
+                }
+            };
+        let text = <Arc<str>>::from(text);
+        self.change.change_file(file, Some(text.clone()));
+        self.files[file.0 as usize] = Some((text, line_map));
+        Some(file)
+    }
+
+    pub fn get_file_for_uri(&self, uri: &Url) -> Option<FileId> {
+        let vpath = self.uri_to_vpath(uri)?;
+        self.local_file_set.get_file_for_path(&vpath)
+    }
+
+    pub fn get_uri_for_file(&self, file: FileId) -> Option<Url> {
+        let vpath = self.local_file_set.get_path_for_file(file)?.as_str();
+        assert!(!vpath.is_empty(), "Root is a directory");
+        let path = self.local_root.join(vpath.strip_prefix('/')?);
+        Url::from_file_path(path).ok()
     }
 
     pub fn take_change(&mut self) -> Change {
-        mem::take(&mut self.change)
+        let mut change = mem::take(&mut self.change);
+        if self.root_changed {
+            self.root_changed = false;
+            change.set_roots(vec![SourceRoot::new_local(self.local_file_set.clone())]);
+        }
+        change
     }
 
-    pub fn set_file_content(&mut self, path: VfsPath, content: Option<String>) -> FileId {
-        let text_with_map = content
-            .and_then(LineMap::normalize)
-            .map(|(text, map)| (text.into(), map));
-        let text = text_with_map.as_ref().map(|(text, _)| Arc::clone(text));
-        let id = self.files.insert_full(path, text_with_map).0;
-        let file_id = FileId(u32::try_from(id).unwrap());
-        self.change.change_file(file_id, text);
-        file_id
-    }
-
-    pub fn get(&self, path: &VfsPath) -> Option<(FileId, &LineMap)> {
-        let (id, _, inner) = self.files.get_full(path)?;
-        let (_, line_map) = inner.as_ref()?;
-        Some((FileId(id as u32), line_map))
-    }
-
-    pub fn file_line_map(&self, file_id: FileId) -> Option<&LineMap> {
-        let (_, inner) = self.files.get_index(file_id.0 as usize)?;
-        let (_, line_map) = inner.as_ref()?;
-        Some(line_map)
+    pub fn get_line_map(&self, file_id: FileId) -> Option<&LineMap> {
+        Some(&self.files.get(file_id.0 as usize)?.as_ref()?.1)
     }
 }
 

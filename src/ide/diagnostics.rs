@@ -1,5 +1,4 @@
-use crate::def::DefDatabase;
-use crate::{Diagnostic, DiagnosticKind, FileId};
+use crate::{DefDatabase, Diagnostic, DiagnosticKind, FileId};
 use rowan::ast::AstNode;
 use syntax::ast;
 

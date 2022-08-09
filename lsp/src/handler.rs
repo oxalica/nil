@@ -59,7 +59,7 @@ pub(crate) fn completion(
     let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
     let items = snap.analysis.completions(fpos).ok()??;
     let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.file_line_map(fpos.file_id)?;
+    let line_map = vfs.get_line_map(fpos.file_id)?;
     let items = items
         .into_iter()
         .filter_map(|item| convert::to_completion_item(line_map, item))

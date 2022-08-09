@@ -14,6 +14,7 @@ use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::ops;
 use std::sync::Arc;
+use syntax::Parse;
 
 pub use self::liveness::LivenessCheck;
 pub use self::path::{Path, PathAnchor, PathData};
@@ -23,7 +24,9 @@ pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
     #[salsa::interned]
-    fn intern_path(&self, path: PathData) -> Path;
+    fn intern_path(&self, path_data: PathData) -> Path;
+
+    fn parse(&self, file_id: FileId) -> Parse;
 
     fn module_with_source_map(&self, file_id: FileId) -> (Arc<Module>, Arc<ModuleSourceMap>);
 
@@ -45,6 +48,11 @@ pub trait DefDatabase: SourceDatabase {
 
     #[salsa::invoke(LivenessCheck::liveness_check_query)]
     fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheck>;
+}
+
+fn parse(db: &dyn DefDatabase, file_id: FileId) -> Parse {
+    let content = db.file_content(file_id);
+    syntax::parse_file(&content)
 }
 
 fn module_with_source_map(

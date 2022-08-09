@@ -1,6 +1,6 @@
-use crate::base::{SourceDatabase, SourceDatabaseStorage};
+use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
-use crate::{Change, FileId};
+use crate::{Change, DefDatabase, FileId};
 use rowan::ast::AstNode;
 use rowan::TextSize;
 use std::ops;

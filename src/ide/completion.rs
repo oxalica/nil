@@ -1,6 +1,6 @@
 use crate::builtin::BuiltinKind;
-use crate::def::{AstPtr, DefDatabase, NameDefKind};
-use crate::{builtin, FileId};
+use crate::def::{AstPtr, NameDefKind};
+use crate::{builtin, DefDatabase, FileId};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;

@@ -263,7 +263,7 @@ impl NameReferenceMap {
 #[cfg(test)]
 mod tests {
     use super::ScopeKind;
-    use crate::def::{AstPtr, DefDatabase, ResolveResult, SourceDatabase};
+    use crate::def::{AstPtr, DefDatabase, ResolveResult};
     use crate::tests::TestDB;
     use expect_test::{expect, Expect};
     use rowan::ast::AstNode;

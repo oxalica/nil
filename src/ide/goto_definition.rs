@@ -1,6 +1,6 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, DefDatabase, ResolveResult};
-use crate::FileId;
+use crate::def::{AstPtr, ResolveResult};
+use crate::{DefDatabase, FileId};
 use rowan::ast::AstNode;
 use rowan::TextSize;
 use syntax::{ast, match_ast, SyntaxKind, T};

@@ -178,8 +178,8 @@ impl<'a> Traversal<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::def::DefDatabase;
     use crate::tests::TestDB;
+    use crate::DefDatabase;
     use expect_test::{expect, Expect};
 
     #[track_caller]
