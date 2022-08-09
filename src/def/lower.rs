@@ -1,6 +1,7 @@
 use super::{
-    AstPtr, Attrpath, Binding, BindingId, BindingKey, BindingValue, Bindings, Expr, ExprId,
-    Literal, Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, Path, PathAnchor,
+    AstPtr, Attrpath, Binding, BindingId, BindingKey, BindingValue, Bindings, DefDatabase, Expr,
+    ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, PathAnchor,
+    PathData,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use indexmap::IndexMap;
@@ -11,8 +12,13 @@ use std::{mem, str};
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
 use syntax::{Parse, TextRange};
 
-pub(super) fn lower(file_id: FileId, parse: Parse) -> (Module, ModuleSourceMap) {
+pub(super) fn lower(
+    db: &dyn DefDatabase,
+    file_id: FileId,
+    parse: Parse,
+) -> (Module, ModuleSourceMap) {
     let mut ctx = LowerCtx {
+        db,
         file_id,
         module: Module {
             exprs: Arena::new(),
@@ -31,13 +37,14 @@ pub(super) fn lower(file_id: FileId, parse: Parse) -> (Module, ModuleSourceMap) 
     (module, ctx.source_map)
 }
 
-struct LowerCtx {
+struct LowerCtx<'a> {
+    db: &'a dyn DefDatabase,
     file_id: FileId,
     module: Module,
     source_map: ModuleSourceMap,
 }
 
-impl LowerCtx {
+impl LowerCtx<'_> {
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr) -> ExprId {
         let id = self.module.exprs.alloc(expr);
         self.source_map.expr_map.insert(ptr.clone(), id);
@@ -210,25 +217,6 @@ impl LowerCtx {
         let tok = lit.token().unwrap();
         let mut text = tok.text();
 
-        fn normalize_path(path: &str) -> (usize, SmolStr) {
-            let mut ret = String::new();
-            let mut supers = 0usize;
-            for seg in path.split('/').filter(|&seg| !seg.is_empty() && seg != ".") {
-                if seg != ".." {
-                    if !ret.is_empty() {
-                        ret.push('/');
-                    }
-                    ret.push_str(seg);
-                } else if ret.is_empty() {
-                    supers += 1;
-                } else {
-                    let last_slash = ret.bytes().rposition(|c| c != b'/').unwrap_or(0);
-                    ret.truncate(last_slash);
-                }
-            }
-            (supers, ret.into())
-        }
-
         Some(match kind {
             LiteralKind::Int => Literal::Int(text.parse::<i64>().ok()?),
             LiteralKind::Float => Literal::Float(text.parse::<f64>().unwrap().into()),
@@ -238,14 +226,10 @@ impl LowerCtx {
             }
             LiteralKind::SearchPath => {
                 text = &text[1..text.len() - 1]; // Strip '<' and '>'.
-                let (search_name, relative_path) = text.split_once('/').unwrap_or((text, ""));
+                let (search_name, text) = text.split_once('/').unwrap_or((text, ""));
                 let anchor = PathAnchor::Search(search_name.into());
-                let (supers, raw_segments) = normalize_path(relative_path);
-                Literal::Path(Path {
-                    anchor,
-                    supers,
-                    raw_segments,
-                })
+                let path = self.db.intern_path(PathData::normalize(anchor, text));
+                Literal::Path(path)
             }
             LiteralKind::Path => {
                 let anchor = match text.as_bytes()[0] {
@@ -256,16 +240,8 @@ impl LowerCtx {
                     }
                     _ => PathAnchor::Relative(self.file_id),
                 };
-                let (mut supers, raw_segments) = normalize_path(text);
-                // Extra ".." has no effect for absolute path.
-                if anchor == PathAnchor::Absolute {
-                    supers = 0;
-                }
-                Literal::Path(Path {
-                    anchor,
-                    supers,
-                    raw_segments,
-                })
+                let path = self.db.intern_path(PathData::normalize(anchor, text));
+                Literal::Path(path)
             }
         })
     }
@@ -637,13 +613,16 @@ impl MergingEntry {
 mod tests {
     use super::lower;
     use crate::base::FileId;
+    use crate::def::DefDatabase;
+    use crate::tests::TestDB;
     use expect_test::{expect, Expect};
     use std::fmt::Write;
     use syntax::parse_file;
 
+    #[track_caller]
     fn check_lower(src: &str, expect: Expect) {
-        let parse = parse_file(src);
-        let (module, _source_map) = lower(FileId(0), parse);
+        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
             writeln!(got, "{:?}", diag).unwrap();
@@ -669,9 +648,21 @@ mod tests {
         expect.assert_eq(&got);
     }
 
+    #[track_caller]
+    fn check_path(src: &str, expect: Expect) {
+        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let _module = db.module(file_id);
+        let mut got = String::new();
+        for &p in db.module_paths(file_id).iter() {
+            writeln!(got, "{:?}", p.data(&db)).unwrap();
+        }
+        expect.assert_eq(&got);
+    }
+
+    #[track_caller]
     fn check_error(src: &str, expect: Expect) {
-        let parse = parse_file(src);
-        let (module, _source_map) = lower(FileId(0), parse);
+        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
             writeln!(got, "{:?}", diag).unwrap();
@@ -705,40 +696,40 @@ mod tests {
 
     #[test]
     fn path() {
-        check_lower(
+        check_path(
             "./.",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Relative(FileId(0)), supers: 0, raw_segments: "" }))
+                PathData { anchor: Relative(FileId(0)), supers: 0, raw_segments: "" }
             "#]],
         );
-        check_lower(
+        check_path(
             "../.",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Relative(FileId(0)), supers: 1, raw_segments: "" }))
+                PathData { anchor: Relative(FileId(0)), supers: 1, raw_segments: "" }
             "#]],
         );
-        check_lower(
+        check_path(
             "../a/../../.b/./c",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Relative(FileId(0)), supers: 2, raw_segments: ".b/c" }))
+                PathData { anchor: Relative(FileId(0)), supers: 2, raw_segments: ".b/c" }
             "#]],
         );
-        check_lower(
+        check_path(
             "/../a/../../.b/./c",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Absolute, supers: 0, raw_segments: ".b/c" }))
+                PathData { anchor: Absolute, supers: 0, raw_segments: ".b/c" }
             "#]],
         );
-        check_lower(
+        check_path(
             "~/../a/../../.b/./c",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Home, supers: 2, raw_segments: ".b/c" }))
+                PathData { anchor: Home, supers: 2, raw_segments: ".b/c" }
             "#]],
         );
-        check_lower(
+        check_path(
             "<p/../a/../../.b/./c>",
             expect![[r#"
-                0: Literal(Path(Path { anchor: Search("p"), supers: 2, raw_segments: ".b/c" }))
+                PathData { anchor: Search("p"), supers: 2, raw_segments: ".b/c" }
             "#]],
         );
     }
@@ -1321,6 +1312,7 @@ mod tests {
     fn attrset_malformed_no_panic() {
         let src = "{ } @ y: y { cc, extraPackages ? optional (cc.isGNU) }: 1";
         let parse = parse_file(src);
-        let (_module, _source_map) = lower(FileId(0), parse);
+        let db = TestDB::default();
+        let _ = lower(&db, FileId(0), parse);
     }
 }

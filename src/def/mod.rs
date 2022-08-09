@@ -1,5 +1,6 @@
 mod liveness;
 mod lower;
+mod path;
 mod scope;
 
 #[cfg(test)]
@@ -15,16 +16,23 @@ use std::ops;
 use std::sync::Arc;
 
 pub use self::liveness::LivenessCheck;
+pub use self::path::{Path, PathAnchor, PathData};
 pub use self::scope::{ModuleScopes, NameReferenceMap, ResolveResult, ScopeData, ScopeId};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
+    #[salsa::interned]
+    fn intern_path(&self, path: PathData) -> Path;
+
     fn module_with_source_map(&self, file_id: FileId) -> (Arc<Module>, Arc<ModuleSourceMap>);
 
     fn module(&self, file_id: FileId) -> Arc<Module>;
 
     fn source_map(&self, file_id: FileId) -> Arc<ModuleSourceMap>;
+
+    #[salsa::invoke(Module::module_paths_query)]
+    fn module_paths(&self, file_id: FileId) -> Arc<[Path]>;
 
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
@@ -44,7 +52,7 @@ fn module_with_source_map(
     file_id: FileId,
 ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
     let parse = db.parse(file_id);
-    let (module, source_map) = lower::lower(file_id, parse);
+    let (module, source_map) = lower::lower(db, file_id, parse);
     (Arc::new(module), Arc::new(source_map))
 }
 
@@ -109,6 +117,20 @@ impl Module {
         &self,
     ) -> impl Iterator<Item = (BindingId, &'_ Binding)> + ExactSizeIterator + '_ {
         self.bindings.iter()
+    }
+
+    pub(crate) fn module_paths_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<[Path]> {
+        let module = db.module(file_id);
+        let mut paths = module
+            .exprs()
+            .filter_map(|(_, kind)| match kind {
+                &Expr::Literal(Literal::Path(p)) => Some(p),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        paths.sort_unstable();
+        paths.dedup();
+        paths.into()
     }
 }
 
@@ -231,28 +253,6 @@ pub enum Literal {
     Float(OrderedFloat<f64>),
     String(SmolStr),
     Path(Path),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Path {
-    pub anchor: PathAnchor,
-    pub supers: usize,
-    // Normalized path separated by `/`, with no `.` or `..` segments.
-    pub raw_segments: SmolStr,
-}
-
-impl Path {
-    pub fn segments(&self) -> impl Iterator<Item = &str> + '_ {
-        self.raw_segments.split(' ').filter(|s| !s.is_empty())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PathAnchor {
-    Relative(FileId),
-    Absolute,
-    Home,
-    Search(SmolStr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
