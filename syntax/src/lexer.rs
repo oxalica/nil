@@ -146,8 +146,14 @@ pub fn lex(src: &[u8]) -> LexTokens {
                 continue;
             }
             None => {
-                out.push((ERROR, TextRange::at(offset, 1.into())));
-                offset += TextSize::from(1);
+                let char_len = match rest[0] {
+                    0b0000_0000..=0b0111_1111 => TextSize::from(1),
+                    0b1100_0000..=0b1101_1111 => TextSize::from(2),
+                    0b1110_0000..=0b1110_1111 => TextSize::from(3),
+                    _ => TextSize::from(4),
+                };
+                out.push((ERROR, TextRange::at(offset, char_len)));
+                offset += char_len;
                 continue;
             }
         };
@@ -198,12 +204,13 @@ pub fn lex(src: &[u8]) -> LexTokens {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use expect_test::{expect, Expect};
 
     fn check_lex(src: &str, expect: Expect) {
         let toks = lex(src.as_bytes());
+        dbg!(&toks);
         let out = toks
             .iter()
             .map(|(tok, range)| format!("{:?} {:?}\n", tok, &src[*range]))
@@ -425,7 +432,6 @@ mod test {
             "#]],
         );
 
-        // '𐍈' U+10348 b"\xF0\x90\x8D\x88"
         check_lex(
             r#""\n\_\
 \ΣΣ""#,
@@ -479,7 +485,6 @@ mod test {
             "#]],
         );
 
-        // '𐍈' U+10348 b"\xF0\x90\x8D\x88"
         check_lex(
             r#"''''\n''\_''\
 ''\ΣΣ''"#,
@@ -514,5 +519,16 @@ mod test {
                 KW_OR "or"
             "#]],
         );
+    }
+
+    #[test]
+    fn error_utf8() {
+        check_lex(
+            "lݟ",
+            expect![[r#"
+                IDENT "l"
+                ERROR "ݟ"
+            "#]],
+        )
     }
 }

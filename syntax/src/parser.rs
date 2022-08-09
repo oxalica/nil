@@ -4,6 +4,9 @@ use crate::{lexer, Error, ErrorKind, SyntaxNode};
 use rowan::ast::AstNode;
 use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
+const MAX_STEPS: usize = 100_000_000;
+const MAX_DEPTHS: usize = 500;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Parse {
     green: GreenNode,
@@ -37,6 +40,8 @@ pub fn parse_file(src: &str) -> Parse {
         builder: GreenNodeBuilder::default(),
         errors: Vec::new(),
         src,
+        steps: 0,
+        depth: 0,
     }
     .parse()
 }
@@ -46,6 +51,8 @@ struct Parser<'i> {
     builder: GreenNodeBuilder<'static>,
     errors: Vec<Error>,
     src: &'i str,
+    steps: usize,
+    depth: usize,
 }
 
 impl<'i> Parser<'i> {
@@ -104,8 +111,15 @@ impl<'i> Parser<'i> {
     }
 
     /// Peek the next token, including whitespaces.
-    fn peek(&self) -> Option<SyntaxKind> {
-        self.tokens.last().map(|&(k, _)| k)
+    fn peek_full(&mut self) -> Option<(SyntaxKind, TextRange)> {
+        self.steps += 1;
+        assert!(self.steps < MAX_STEPS);
+        self.tokens.last().copied()
+    }
+
+    /// Like `peek`, but only returns SyntaxKind.
+    fn peek(&mut self) -> Option<SyntaxKind> {
+        self.peek_full().map(|(k, _)| k)
     }
 
     /// Consume all following whitespaces if any, and peek the next token.
@@ -115,7 +129,9 @@ impl<'i> Parser<'i> {
     }
 
     /// Get an iterator of following non-whitespace tokens.
-    fn iter_non_ws(&self) -> impl Iterator<Item = SyntaxKind> + '_ {
+    fn peek_iter_non_ws(&mut self) -> impl Iterator<Item = SyntaxKind> + '_ {
+        self.steps += 1;
+        assert!(self.steps < MAX_STEPS);
         self.tokens
             .iter()
             .rev()
@@ -162,6 +178,17 @@ impl<'i> Parser<'i> {
     /// Function level expression (lowest priority).
     /// Maybe consume nothing.
     fn expr_function_opt(&mut self) {
+        self.depth += 1;
+        if self.depth >= MAX_DEPTHS {
+            self.error(ErrorKind::NestTooDeep);
+            self.start_node(ERROR);
+            while self.peek().is_some() {
+                self.bump();
+            }
+            self.finish_node();
+            return;
+        }
+
         match self.peek_non_ws() {
             Some(T![assert]) => {
                 self.start_node(ASSERT);
@@ -180,7 +207,7 @@ impl<'i> Parser<'i> {
                 self.finish_node()
             }
             Some(T![let]) => {
-                if matches!(self.iter_non_ws().nth(1), Some(T!['{'])) {
+                if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt();
                 } else {
                     self.start_node(LET_IN);
@@ -191,7 +218,7 @@ impl<'i> Parser<'i> {
                 }
             }
             Some(T![rec]) => {
-                if matches!(self.iter_non_ws().nth(1), Some(T!['{'])) {
+                if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt()
                 } else {
                     self.error(ErrorKind::UnexpectedToken);
@@ -218,7 +245,7 @@ impl<'i> Parser<'i> {
                 // - '{ x }'
                 // - '{ x ...' (This is invalid but may occur when typing.)
                 let is_lambda = {
-                    let mut tok_iter = self.iter_non_ws();
+                    let mut tok_iter = self.peek_iter_non_ws();
                     tok_iter.next(); // '{'
                     match tok_iter.next() {
                         Some(T![...]) => true,
@@ -255,7 +282,7 @@ impl<'i> Parser<'i> {
                 // Recognise patterns of LAMBDA starting. Otherwise, it's an REF.
                 // - 'x :'
                 // - 'x @'
-                let is_lambda = matches!(self.iter_non_ws().nth(1), Some(T![:] | T![@]));
+                let is_lambda = matches!(self.peek_iter_non_ws().nth(1), Some(T![:] | T![@]));
 
                 if is_lambda {
                     self.start_node(LAMBDA);
@@ -283,6 +310,8 @@ impl<'i> Parser<'i> {
             }
             _ => self.expr_operator_opt(),
         }
+
+        self.depth -= 1;
     }
 
     /// Operator level expression (low priority).
@@ -521,13 +550,13 @@ impl<'i> Parser<'i> {
                     break;
                 }
                 PATH_FRAGMENT => {
-                    let is_last =
-                        matches!(self.tokens.get(self.tokens.len() - 2), Some((PATH_END, _)));
+                    let is_last = matches!(self.peek_iter_non_ws().nth(1), Some(PATH_END));
                     self.validate_path_fragment(!is_last);
                     self.bump();
                 }
                 T!["${"] => self.dynamic(),
-                _ => unreachable!(),
+                // Unpaired dynamic. Should already trigger errors.
+                _ => break,
             }
         }
         self.finish_node();
@@ -535,8 +564,8 @@ impl<'i> Parser<'i> {
 
     /// Validate the next path fragment and emit errors about slashes.
     fn validate_path_fragment(&mut self, allow_trailing_slash: bool) {
-        let range = match self.tokens.last() {
-            Some((PATH_FRAGMENT | PATH, range)) => *range,
+        let range = match self.peek_full() {
+            Some((PATH_FRAGMENT | PATH, range)) => range,
             _ => unreachable!(),
         };
         // N.B. Path tokens are ASCII-only, which are verified by the lexer.
@@ -568,11 +597,10 @@ impl<'i> Parser<'i> {
         let mut expect_delimiter = false;
         loop {
             if self.peek_non_ws() == Some(T![,]) {
-                if expect_delimiter {
-                    self.bump();
-                } else {
+                if !expect_delimiter {
                     self.error(ErrorKind::UnexpectedToken);
                 }
+                self.bump();
                 continue;
             }
 

@@ -23,6 +23,7 @@ pub struct Error {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
+    NestTooDeep,
     MultipleRoots,
     UnexpectedToken,
     MultipleNoAssoc,
@@ -36,6 +37,7 @@ pub enum ErrorKind {
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NestTooDeep => "Nest too deep",
             Self::MultipleRoots => "Multiple root expressions",
             Self::UnexpectedToken => "Unexpected token",
             Self::MultipleNoAssoc => "Invalid usage of no-associative operators",

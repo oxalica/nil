@@ -46,4 +46,5 @@ fn parser() {
     let dir = Path::new("test_data/parser").canonicalize().unwrap();
     run_test(&dir.join("ok"), true);
     run_test(&dir.join("err"), false);
+    run_test(&dir.join("fuzz"), false);
 }

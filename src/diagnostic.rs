@@ -56,7 +56,8 @@ impl Diagnostic {
                 SynErrorKind::UnexpectedToken
                 | SynErrorKind::MissingToken(_)
                 | SynErrorKind::MissingExpr
-                | SynErrorKind::MissingAttr => Severity::IncompleteSyntax,
+                | SynErrorKind::MissingAttr
+                | SynErrorKind::NestTooDeep => Severity::IncompleteSyntax,
             },
         }
     }

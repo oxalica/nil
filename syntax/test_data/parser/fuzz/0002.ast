@@ -1,0 +1,348 @@
+Multiple root expressions at 7..8
+Multiple root expressions at 17..18
+Unexpected token at 17..18
+Multiple root expressions at 18..19
+Unexpected token at 18..19
+Multiple root expressions at 19..20
+Unexpected token at 20..21
+Unexpected token at 21..22
+Unexpected token at 22..23
+Unexpected token at 50..51
+Unexpected token at 51..52
+Unexpected token at 52..53
+Unexpected token at 53..54
+Unexpected token at 54..55
+Unexpected token at 55..56
+Unexpected token at 56..57
+Unexpected token at 57..58
+Unexpected token at 58..59
+Unexpected token at 59..60
+Unexpected token at 60..61
+Unexpected token at 61..62
+Unexpected token at 62..63
+Unexpected token at 63..64
+Unexpected token at 64..65
+Unexpected token at 65..66
+Unexpected token at 66..67
+Unexpected token at 67..68
+Unexpected token at 68..69
+Unexpected token at 69..70
+Unexpected token at 70..71
+Unexpected token at 71..72
+Unexpected token at 72..73
+Unexpected token at 73..74
+Unexpected token at 74..75
+Unexpected token at 75..76
+Unexpected token at 76..77
+Unexpected token at 77..78
+Unexpected token at 78..79
+Unexpected token at 79..80
+Unexpected token at 80..81
+Unexpected token at 81..82
+Unexpected token at 82..83
+Unexpected token at 83..84
+Unexpected token at 84..85
+Unexpected token at 85..86
+Unexpected token at 86..87
+Unexpected token at 87..88
+Unexpected token at 88..89
+Unexpected token at 89..90
+Unexpected token at 90..91
+Unexpected token at 91..92
+Unexpected token at 92..93
+Unexpected token at 93..94
+Unexpected token at 94..95
+Unexpected token at 95..96
+Unexpected token at 96..97
+Unexpected token at 97..98
+Unexpected token at 98..99
+Unexpected token at 99..100
+Unexpected token at 100..101
+Unexpected token at 101..102
+Unexpected token at 102..103
+Unexpected token at 103..104
+Unexpected token at 104..105
+Unexpected token at 105..106
+Unexpected token at 106..107
+Unexpected token at 107..108
+Unexpected token at 108..109
+Unexpected token at 109..110
+Unexpected token at 110..111
+Unexpected token at 111..112
+Unexpected token at 112..113
+Unexpected token at 113..114
+Unexpected token at 114..115
+Unexpected token at 115..116
+Unexpected token at 116..117
+Unexpected token at 117..118
+Unexpected token at 118..122
+Unexpected token at 122..123
+Unexpected token at 123..124
+Unexpected token at 124..125
+Unexpected token at 125..126
+Unexpected token at 126..127
+Unexpected token at 127..128
+Unexpected token at 128..129
+Unexpected token at 129..130
+Unexpected token at 130..131
+Unexpected token at 131..132
+Unexpected token at 132..133
+Unexpected token at 133..133
+Unexpected token at 133..134
+Unexpected token at 134..136
+Unexpected token at 136..141
+Unexpected token at 141..142
+Unexpected token at 142..143
+Unexpected token at 143..144
+Unexpected token at 144..146
+Unexpected token at 146..147
+Unexpected token at 147..148
+Unexpected token at 148..149
+Unexpected token at 149..150
+Unexpected token at 150..151
+Unexpected token at 151..152
+Unexpected token at 152..153
+Unexpected token at 153..154
+Unexpected token at 154..155
+Unexpected token at 156..157
+Unexpected token at 157..158
+Unexpected token at 158..159
+Unexpected token at 159..160
+Unexpected token at 160..161
+Unexpected token at 161..162
+Unexpected token at 162..163
+Unexpected token at 163..164
+Unexpected token at 164..165
+Unexpected token at 169..170
+Unexpected token at 170..170
+Unexpected token at 172..173
+Unexpected token at 173..174
+Unexpected token at 174..174
+Unexpected token at 174..175
+Unexpected token at 175..176
+Unexpected token at 176..177
+Unexpected token at 177..178
+Unexpected token at 182..183
+Unexpected token at 184..185
+Unexpected token at 186..187
+Unexpected token at 189..190
+Unexpected token at 190..191
+Unexpected token at 210..211
+Unexpected token at 211..212
+Unexpected token at 212..213
+Unexpected token at 213..214
+Unexpected token at 214..215
+Unexpected token at 215..216
+Unexpected token at 217..218
+Unexpected token at 218..219
+Unexpected token at 219..220
+Unexpected token at 220..221
+Unexpected token at 232..233
+Unexpected token at 233..234
+Unexpected token at 234..235
+Unexpected token at 235..236
+Unexpected token at 236..237
+Unexpected token at 237..238
+Unexpected token at 238..238
+Unexpected token at 238..239
+Unexpected token at 239..241
+Missing R_CURLY at 241..241
+Missing R_BRACK at 241..241
+Missing R_BRACK at 241..241
+Missing R_BRACK at 241..241
+Missing R_BRACK at 241..241
+SOURCE_FILE@0..241
+  REF@0..7
+    IDENT@0..7 "KKKKKKK"
+  UNARY_OP@7..17
+    BANG@7..8 "!"
+    REF@8..17
+      IDENT@8..17 "KKKKKKKKK"
+  ERROR@17..18 "%"
+  ERROR@18..19 "$"
+  LIST@19..241
+    L_BRACK@19..20 "["
+    ERROR@20..21 "^"
+    ERROR@21..22 "'"
+    ERROR@22..23 "$"
+    PATH_INTERPOLATION@23..156
+      PATH_START@23..23 ""
+      PATH_FRAGMENT@23..24 "/"
+      DYNAMIC@24..156
+        DOLLAR_L_CURLY@24..26 "${"
+        REF@26..50
+          IDENT@26..50 "KKKKKKKKKKKKKKKcKKkKKKKK"
+        ERROR@50..51 "\u{11}"
+        ERROR@51..52 "\u{11}"
+        ERROR@52..53 "\u{11}"
+        ERROR@53..54 "\u{11}"
+        ERROR@54..55 "\u{11}"
+        ERROR@55..56 "\u{11}"
+        ERROR@56..57 "\u{11}"
+        ERROR@57..58 "\u{11}"
+        ERROR@58..59 "\u{11}"
+        ERROR@59..60 "\u{11}"
+        ERROR@60..61 "\u{11}"
+        ERROR@61..62 "\u{11}"
+        ERROR@62..63 "\u{11}"
+        ERROR@63..64 "\u{11}"
+        ERROR@64..65 "\u{11}"
+        ERROR@65..66 "\u{11}"
+        ERROR@66..67 "\u{11}"
+        ERROR@67..68 "\u{11}"
+        ERROR@68..69 "\u{11}"
+        ERROR@69..70 "\u{11}"
+        ERROR@70..71 "\u{11}"
+        ERROR@71..72 "\u{11}"
+        ERROR@72..73 "\u{11}"
+        ERROR@73..74 "\u{11}"
+        ERROR@74..75 "\u{11}"
+        ERROR@75..76 "\u{11}"
+        ERROR@76..77 "\u{11}"
+        ERROR@77..78 "\u{11}"
+        ERROR@78..79 "\u{11}"
+        ERROR@79..80 "\u{11}"
+        ERROR@80..81 "\u{11}"
+        ERROR@81..82 "\u{11}"
+        ERROR@82..83 "\u{11}"
+        ERROR@83..84 "\u{11}"
+        ERROR@84..85 "\u{11}"
+        ERROR@85..86 "\u{11}"
+        ERROR@86..87 "\u{11}"
+        ERROR@87..88 "\u{11}"
+        ERROR@88..89 "\u{11}"
+        ERROR@89..90 "\u{11}"
+        ERROR@90..91 "\u{11}"
+        ERROR@91..92 "\u{11}"
+        ERROR@92..93 "\u{11}"
+        ERROR@93..94 "\u{11}"
+        ERROR@94..95 "\u{11}"
+        ERROR@95..96 "\u{11}"
+        ERROR@96..97 "\u{11}"
+        ERROR@97..98 "\u{11}"
+        ERROR@98..99 "\u{11}"
+        ERROR@99..100 "\u{11}"
+        ERROR@100..101 "\u{11}"
+        ERROR@101..102 "\u{11}"
+        ERROR@102..103 "\u{11}"
+        ERROR@103..104 "\u{11}"
+        ERROR@104..105 "\u{11}"
+        ERROR@105..106 "\u{11}"
+        ERROR@106..107 "\u{11}"
+        ERROR@107..108 "\u{11}"
+        ERROR@108..109 "\u{11}"
+        ERROR@109..110 "\u{11}"
+        ERROR@110..111 "\u{11}"
+        ERROR@111..112 "\u{11}"
+        ERROR@112..113 "\u{11}"
+        ERROR@113..114 "\u{11}"
+        ERROR@114..115 "\u{11}"
+        ERROR@115..116 "\u{11}"
+        ERROR@116..117 "\u{11}"
+        ERROR@117..118 "\u{11}"
+        IDENT@118..122 "KKKK"
+        ERROR@122..123 "%"
+        ERROR@123..124 "\0"
+        ERROR@124..125 "\0"
+        ERROR@125..126 "\0"
+        ERROR@126..127 "\u{14}"
+        ERROR@127..128 "$"
+        L_BRACK@128..129 "["
+        R_PAREN@129..130 ")"
+        ERROR@130..131 "^"
+        ERROR@131..132 "'"
+        ERROR@132..133 "$"
+        PATH_START@133..133 ""
+        PATH_FRAGMENT@133..134 "/"
+        DOLLAR_L_CURLY@134..136 "${"
+        IDENT@136..141 "KKKKK"
+        ERROR@141..142 "\u{6}"
+        ERROR@142..143 "\u{6}"
+        L_CURLY@143..144 "{"
+        IDENT@144..146 "YY"
+        L_CURLY@146..147 "{"
+        ERROR@147..148 "'"
+        ERROR@148..149 "\0"
+        ERROR@149..150 "\0"
+        ERROR@150..151 "\0"
+        ERROR@151..152 "\0"
+        ERROR@152..153 "\0"
+        ERROR@153..154 "\0"
+        ERROR@154..155 "\0"
+        R_CURLY@155..156 "}"
+    R_CURLY@156..157 "}"
+    ERROR@157..158 "\u{1}"
+    ERROR@158..159 "\0"
+    ERROR@159..160 "|"
+    ERROR@160..161 "\0"
+    ERROR@161..162 "\0"
+    ERROR@162..163 "\0"
+    ERROR@163..164 "\0"
+    ERROR@164..165 "\0"
+    LIST@165..241
+      L_BRACK@165..166 "["
+      REF@166..167
+        IDENT@166..167 "a"
+      ATTR_SET@167..169
+        L_CURLY@167..168 "{"
+        R_CURLY@168..169 "}"
+      R_CURLY@169..170 "}"
+      PATH_END@170..170 ""
+      ATTR_SET@170..172
+        L_CURLY@170..171 "{"
+        R_CURLY@171..172 "}"
+      COLON@172..173 ":"
+      R_CURLY@173..174 "}"
+      PATH_END@174..174 ""
+      ERROR@174..175 "\0"
+      ERROR@175..176 "\0"
+      ERROR@176..177 "\0"
+      R_PAREN@177..178 ")"
+      LIST@178..241
+        L_BRACK@178..179 "["
+        REF@179..180
+          IDENT@179..180 "a"
+        ATTR_SET@180..182
+          L_CURLY@180..181 "{"
+          R_CURLY@181..182 "}"
+        R_CURLY@182..183 "}"
+        ATTR_SET@183..186
+          L_CURLY@183..184 "{"
+          L_CURLY@184..185 "{"
+          R_CURLY@185..186 "}"
+        R_CURLY@186..187 "}"
+        ATTR_SET@187..189
+          L_CURLY@187..188 "{"
+          R_CURLY@188..189 "}"
+        COLON@189..190 ":"
+        R_CURLY@190..191 "}"
+        REF@191..210
+          IDENT@191..210 "KKKKKKKKKKKKKKKKKKK"
+        ERROR@210..211 "%"
+        ERROR@211..212 "\0"
+        ERROR@212..213 "\0"
+        ERROR@213..214 "\0"
+        ERROR@214..215 "\u{14}"
+        ERROR@215..216 "$"
+        LIST@216..241
+          L_BRACK@216..217 "["
+          PLUS@217..218 "+"
+          ERROR@218..219 "^"
+          ERROR@219..220 "'"
+          ERROR@220..221 "$"
+          PATH_INTERPOLATION@221..241
+            PATH_START@221..221 ""
+            PATH_FRAGMENT@221..222 "/"
+            DYNAMIC@222..241
+              DOLLAR_L_CURLY@222..224 "${"
+              REF@224..232
+                IDENT@224..232 "KKKKKKKK"
+              ERROR@232..233 "%"
+              ERROR@233..234 "$"
+              L_BRACK@234..235 "["
+              ERROR@235..236 "^"
+              ERROR@236..237 "'"
+              ERROR@237..238 "$"
+              PATH_START@238..238 ""
+              PATH_FRAGMENT@238..239 "/"
+              DOLLAR_L_CURLY@239..241 "${"
