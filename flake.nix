@@ -44,5 +44,13 @@
             export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/release/nil"
           '';
         };
+
+        devShells.fuzz = pkgs.mkShell {
+          packages = [
+            rustPkgs.rust-nightly_2022-08-01
+            pkgs.cargo-fuzz
+          ];
+          RUST_BACKTRACE = 1;
+        };
       });
 }
