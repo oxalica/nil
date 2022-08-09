@@ -4,31 +4,54 @@ use crossbeam_channel::{Receiver, Sender};
 use lsp_server::{ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
-use nil::{Analysis, AnalysisHost};
+use nil::{Analysis, AnalysisHost, VfsPath};
+use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use walkdir::WalkDir;
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 
 pub struct State {
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
+    opened_files: Arc<RwLock<HashSet<Url>>>,
+    workspace_root: Option<PathBuf>,
     sender: Sender<Message>,
     is_shutdown: bool,
 }
 
 impl State {
     pub fn new(responder: Sender<Message>, workspace_root: Option<PathBuf>) -> Self {
-        let vfs = Vfs::new(workspace_root.unwrap_or_else(|| PathBuf::from("/")));
+        let vfs = Vfs::new(workspace_root.clone().unwrap_or_else(|| PathBuf::from("/")));
         Self {
             host: Default::default(),
             vfs: Arc::new(RwLock::new(vfs)),
+            opened_files: Default::default(),
+            workspace_root,
             sender: responder,
             is_shutdown: false,
         }
     }
 
     pub fn run(&mut self, lsp_receiver: Receiver<Message>) -> Result<()> {
+        if let Some(root) = &self.workspace_root {
+            let mut vfs = self.vfs.write().unwrap();
+            for entry in WalkDir::new(root).follow_links(false).sort_by_file_name() {
+                (|| -> Option<()> {
+                    let entry = entry.ok()?;
+                    let relative_path = entry.path().strip_prefix(root).ok()?;
+                    let vpath = VfsPath::from_path(relative_path)?;
+                    let text = fs::read_to_string(entry.path()).ok();
+                    vfs.set_path_content(vpath, text);
+                    Some(())
+                })();
+            }
+            drop(vfs);
+            self.apply_vfs_change();
+        }
+
         for msg in &lsp_receiver {
             match msg {
                 Message::Request(req) => self.dispatch_request(req),
@@ -68,10 +91,16 @@ impl State {
     fn dispatch_notification(&mut self, notif: Notification) {
         NotificationDispatcher(self, Some(notif))
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
-                st.set_vfs_file_content(&params.text_document.uri, Some(params.text_document.text));
+                let uri = &params.text_document.uri;
+                st.opened_files.write().unwrap().insert(uri.clone());
+                st.set_vfs_file_content(uri, Some(params.text_document.text));
             })
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
-                st.set_vfs_file_content(&params.text_document.uri, None);
+                // N.B. Don't clear text here.
+                st.opened_files
+                    .write()
+                    .unwrap()
+                    .remove(&params.text_document.uri);
             })
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 if let Some(chg) = params.content_changes.into_iter().next() {
@@ -95,31 +124,48 @@ impl State {
     }
 
     fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) {
-        let mut vfs = self.vfs.write().unwrap();
-        let file = vfs.set_uri_content(uri, text);
+        self.vfs.write().unwrap().set_uri_content(uri, text);
+        self.apply_vfs_change();
+    }
 
+    fn apply_vfs_change(&mut self) {
+        let mut vfs = self.vfs.write().unwrap();
         let change = vfs.take_change();
+        let file_changes = change
+            .file_changes
+            .iter()
+            .map(|(file, text)| (*file, text.is_some()))
+            .collect::<Vec<_>>();
         log::debug!("Change: {:?}", change);
         self.host.apply_change(change);
 
-        // Currently we push down changes immediately.
-        let diagnostics = file
-            .and_then(|file| {
-                let line_map = vfs.get_line_map(file)?;
-                let diags = self.host.snapshot().diagnostics(file).ok()?;
-                let diags = diags
-                    .into_iter()
-                    .take(MAX_DIAGNOSTICS_CNT)
-                    .filter_map(|diag| convert::to_diagnostic(line_map, diag))
-                    .collect::<Vec<_>>();
-                Some(diags)
-            })
-            .unwrap_or_default();
-        self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-            uri: uri.clone(),
-            diagnostics,
-            version: None,
-        });
+        let snap = self.host.snapshot();
+        let opened_files = self.opened_files.read().unwrap();
+        for (file, has_text) in file_changes {
+            let uri = vfs.get_uri_for_file(file).unwrap();
+            if !opened_files.contains(&uri) {
+                continue;
+            }
+
+            let diagnostics = has_text
+                .then(|| {
+                    let line_map = vfs.get_line_map(file)?;
+                    let diags = snap.diagnostics(file).ok()?;
+                    let diags = diags
+                        .into_iter()
+                        .take(MAX_DIAGNOSTICS_CNT)
+                        .filter_map(|diag| convert::to_diagnostic(line_map, diag))
+                        .collect::<Vec<_>>();
+                    Some(diags)
+                })
+                .flatten()
+                .unwrap_or_default();
+            self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+                uri,
+                diagnostics,
+                version: None,
+            });
+        }
     }
 }
 

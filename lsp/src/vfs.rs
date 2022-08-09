@@ -49,24 +49,28 @@ impl Vfs {
 
     pub fn set_uri_content(&mut self, uri: &Url, text: Option<String>) -> Option<FileId> {
         let vpath = self.uri_to_vpath(uri)?;
+        self.set_path_content(vpath, text)
+    }
+
+    pub fn set_path_content(&mut self, path: VfsPath, text: Option<String>) -> Option<FileId> {
         let content = text.and_then(LineMap::normalize);
-        let (file, (text, line_map)) =
-            match (self.local_file_set.get_file_for_path(&vpath), content) {
-                (Some(file), None) => {
-                    self.local_file_set.remove_file(file);
-                    self.root_changed = true;
-                    self.files[file.0 as usize] = None;
-                    return None;
-                }
-                (None, None) => return None,
-                (Some(file), Some(content)) => (file, content),
-                (None, Some(content)) => {
-                    let file = self.alloc_file_id();
-                    self.local_file_set.insert(file, vpath);
-                    self.root_changed = true;
-                    (file, content)
-                }
-            };
+        let (file, (text, line_map)) = match (self.local_file_set.get_file_for_path(&path), content)
+        {
+            (Some(file), None) => {
+                self.local_file_set.remove_file(file);
+                self.root_changed = true;
+                self.files[file.0 as usize] = None;
+                return None;
+            }
+            (None, None) => return None,
+            (Some(file), Some(content)) => (file, content),
+            (None, Some(content)) => {
+                let file = self.alloc_file_id();
+                self.local_file_set.insert(file, path);
+                self.root_changed = true;
+                (file, content)
+            }
+        };
         let text = <Arc<str>>::from(text);
         self.change.change_file(file, Some(text.clone()));
         self.files[file.0 as usize] = Some((text, line_map));
