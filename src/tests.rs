@@ -51,26 +51,17 @@ impl TestDB {
         Ok((db, f))
     }
 
-    pub fn find_node<T>(
-        &self,
-        file_id: FileId,
-        pos: TextSize,
-        f: impl FnMut(SyntaxNode) -> Option<T>,
-    ) -> Option<T> {
-        self.parse(file_id)
+    pub fn find_node<T>(&self, fpos: FilePos, f: impl FnMut(SyntaxNode) -> Option<T>) -> Option<T> {
+        self.parse(fpos.file_id)
             .syntax_node()
-            .token_at_offset(pos)
+            .token_at_offset(fpos.pos)
             .right_biased()?
             .parent_ancestors()
             .find_map(f)
     }
 
-    pub fn node_at<N: AstNode<Language = NixLanguage>>(
-        &self,
-        file_id: FileId,
-        pos: TextSize,
-    ) -> Option<N> {
-        self.find_node(file_id, pos, N::cast)
+    pub fn node_at<N: AstNode<Language = NixLanguage>>(&self, fpos: FilePos) -> Option<N> {
+        self.find_node(fpos, N::cast)
     }
 }
 

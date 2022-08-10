@@ -1,10 +1,10 @@
 use crate::builtin::BuiltinKind;
 use crate::def::{AstPtr, NameDefKind};
-use crate::{builtin, DefDatabase, FileId};
+use crate::{builtin, DefDatabase, FileId, FilePos};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use syntax::{ast, match_ast, SyntaxKind, TextRange, TextSize, T};
+use syntax::{ast, match_ast, SyntaxKind, TextRange, T};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[
@@ -68,8 +68,7 @@ impl From<NameDefKind> for CompletionItemKind {
 
 pub(crate) fn completions(
     db: &dyn DefDatabase,
-    file_id: FileId,
-    pos: TextSize,
+    FilePos { file_id, pos }: FilePos,
 ) -> Option<Vec<CompletionItem>> {
     let parse = db.parse(file_id);
 
@@ -237,16 +236,16 @@ mod tests {
 
     #[track_caller]
     fn check_no(fixture: &str, label: &str) {
-        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
-        if let Some(compes) = super::completions(&db, file_id, pos) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        if let Some(compes) = super::completions(&db, f[0]) {
             assert_eq!(compes.iter().find(|item| item.label == label), None);
         }
     }
 
     #[track_caller]
     fn check(fixture: &str, label: &str, expect: Expect) {
-        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
-        let compes = super::completions(&db, file_id, pos).expect("No completion");
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let compes = super::completions(&db, f[0]).expect("No completion");
         let item = compes
             .iter()
             .find(|item| item.label == label)
@@ -254,7 +253,7 @@ mod tests {
 
         let source_range =
             usize::from(item.source_range.start())..usize::from(item.source_range.end());
-        let mut completed = db.file_content(file_id).to_string();
+        let mut completed = db.file_content(f[0].file_id).to_string();
         completed.replace_range(source_range, &item.replace);
         let got = format!("({:?}) {}", item.kind, completed);
         expect.assert_eq(&got);

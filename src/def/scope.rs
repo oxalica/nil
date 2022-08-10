@@ -265,57 +265,55 @@ mod tests {
     use super::ScopeKind;
     use crate::def::{AstPtr, DefDatabase, ResolveResult};
     use crate::tests::TestDB;
-    use expect_test::{expect, Expect};
     use rowan::ast::AstNode;
     use syntax::{ast, match_ast};
 
     #[track_caller]
-    fn check_scopes(fixture: &str, expect: Expect) {
-        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
+    fn check_scopes(fixture: &str) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let expect = f.markers()[1..].iter().map(|p| p.pos).collect::<Vec<_>>();
         let ptr = AstPtr::new(
-            db.node_at::<ast::Expr>(file_id, pos)
+            db.node_at::<ast::Expr>(f[0])
                 .expect("No Expr node")
                 .syntax(),
         );
 
-        let source_map = db.source_map(file_id);
+        let source_map = db.source_map(f[0].file_id);
         let expr_id = source_map.expr_map[&ptr];
-        let scopes = db.scopes(file_id);
+        let scopes = db.scopes(f[0].file_id);
 
         // "innermost@pos var@pos | middle@pos | outmost@pos"
         let scope_id = scopes.scope_by_expr(expr_id).expect("No scope data");
-        let scope_defs = scopes
+        let def_poses = scopes
             .ancestors(scope_id)
-            .map(|scope| match &scope.kind {
+            .flat_map(|scope| match &scope.kind {
                 ScopeKind::NameDefs(defs) => {
-                    let mut names = defs
+                    let mut poses = defs
                         .iter()
-                        .map(|(name, def)| {
-                            let pos = source_map.name_def_node(*def).unwrap().text_range().start();
-                            format!("{}@{}", name, u32::from(pos))
+                        .map(|(_, def)| {
+                            source_map.name_def_node(*def).unwrap().text_range().start()
                         })
                         .collect::<Vec<_>>();
-                    names.sort();
-                    names.join(" ")
+                    poses.sort_unstable();
+                    poses
                 }
                 &ScopeKind::WithExpr(expr) => {
-                    let pos = source_map.expr_node(expr).unwrap().text_range().start();
-                    format!("with@{}", u32::from(pos))
+                    vec![source_map.expr_node(expr).unwrap().text_range().start()]
                 }
             })
             .collect::<Vec<_>>();
-        // The last one is the empty root.
-        let got = scope_defs[..scope_defs.len() - 1].join(" | ");
-        expect.assert_eq(&got);
+        assert_eq!(def_poses, expect);
     }
 
     #[track_caller]
     fn check_resolve(fixture: &str) {
-        let (db, file_id, [pos, def_pos]) = TestDB::single_file(fixture).unwrap();
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert!((1..=2).contains(&f.markers().len()));
+        let expect = f.markers().get(1).map(|p| p.pos);
 
         // Inherit(Attr(Name)) or Expr(Ref(Name))
         let ptr = db
-            .find_node(file_id, pos, |n| {
+            .find_node(f[0], |n| {
                 match_ast! {
                     match n {
                         ast::Expr(e) => Some(AstPtr::new(e.syntax())),
@@ -326,10 +324,10 @@ mod tests {
             })
             .expect("No Attr or Expr found");
 
-        let parse = db.parse(file_id);
-        let source_map = db.source_map(file_id);
+        let parse = db.parse(f[0].file_id);
+        let source_map = db.source_map(f[0].file_id);
         let expr_id = source_map.expr_map[&ptr];
-        let got = db.resolve_name(file_id, expr_id).map(|ret| match ret {
+        let got = db.resolve_name(f[0].file_id, expr_id).map(|ret| match ret {
             ResolveResult::NameDef(def) => source_map
                 .name_def_node(def)
                 .unwrap()
@@ -344,33 +342,28 @@ mod tests {
                 .text_range()
                 .start(),
             // Same pos for builtin names.
-            ResolveResult::Builtin(_) => pos,
+            ResolveResult::Builtin(_) => f[0].pos,
         });
-        assert_eq!(got, Some(def_pos));
+        assert_eq!(got, expect);
     }
 
     #[test]
     fn top_level() {
-        check_scopes(r"$0a", expect![[""]]);
+        check_scopes(r"$0a");
     }
 
     #[test]
     fn lambda() {
-        check_scopes(r"(a: b: (c: 0) $0a (d: 0)) (e: 0)", expect!["b@4 | a@1"]);
-        check_scopes(r"{ a, b ? c, ... }@d: $0x (y: x)", expect!["a@2 b@5 d@18"]);
-        check_scopes(
-            r"a: { a, b ? $0c, ... }@d: y: a",
-            expect!["a@5 b@8 d@21 | a@0"],
-        );
+        check_scopes(r"($2a: $1b: (c: 0) $0a (d: 0)) (e: 0)");
+        check_scopes(r"{ $1a, $2b ? c, ... }@$3d: $0x (y: x)");
+        check_scopes(r"$4a: { $1a, $2b ? $0c, ... }@$3d: y: a");
+
         check_resolve("{} @ $1y: $0y");
     }
 
     #[test]
     fn with() {
-        check_scopes(
-            r"a: with b; c: with c; $0a (d: with e; a)",
-            expect!["with@14 | c@11 | with@3 | a@0"],
-        );
+        check_scopes(r"$4a: $3with b; $2c: $1with c; $0a (d: with e; a)");
 
         check_resolve(r"$1a: with b; c: $0a");
         check_resolve(r"a: with b; $1c: $0c");
@@ -381,44 +374,26 @@ mod tests {
 
     #[test]
     fn attrset_non_rec() {
-        check_scopes(
-            "a: { inherit a; b = c: $0a; e = 1; inherit (a) f; }",
-            expect!["c@20 | a@0"],
-        );
-        check_scopes(
-            "a: { inherit a; b = c: a; e = 1; inherit ($0a) f; }",
-            expect!["a@0"],
-        );
+        check_scopes("$2a: { inherit a; b = $1c: $0a; e = 1; inherit (a) f; }");
+        check_scopes("$1a: { inherit a; b = c: a; e = 1; inherit ($0a) f; }");
     }
 
     #[test]
     fn attrset_rec() {
-        check_scopes(
-            "a: rec { inherit a; b = c: $0a; e = 1; inherit (a) f; }",
-            expect!["c@24 | a@17 b@20 e@30 f@49 | a@0"],
-        );
-        check_scopes(
-            "a: rec { inherit a; b = c: a; e = 1; inherit ($0a) f; }",
-            expect!["a@17 b@20 e@30 f@49 | a@0"],
-        );
-        check_scopes(
-            "a: rec { inherit $0a; b = c: a; e = 1; inherit (a) f; }",
-            expect!["a@0"],
-        );
+        check_scopes("$6a: rec { inherit $2a; $3b = $1c: $0a; $4e = 1; inherit (a) $5f; }");
+        check_scopes("$5a: rec { inherit $1a; $2b = c: a; $3e = 1; inherit ($0a) $4f; }");
+        check_scopes("$1a: rec { inherit $0a; b = c: a; e = 1; inherit (a) f; }");
     }
 
     #[test]
     fn let_in() {
-        check_scopes(r#"let a.b = 1; "c+d" = a; in $0a"#, expect!["a@4 c+d@13"]);
-        check_scopes(r#"let a.b = 1; "b+c" = $0a; in a"#, expect!["a@4 b+c@13"]);
+        check_scopes(r#"let $1a.b = 1; $2"c+d" = a; in $0a"#);
+        check_scopes(r#"let $1a.b = 1; $2"b+c" = $0a; in a"#);
     }
 
     #[test]
     fn shadowing() {
-        check_scopes(
-            "let a = 1; b = 2; in let a = 2; inherit b; in $0a",
-            expect!["a@25 b@40 | a@4 b@11"],
-        );
+        check_scopes("let $3a = 1; $4b = 2; in let $1a = 2; inherit $2b; in $0a");
 
         check_resolve("let a = 1; b = 2; in let $1a = 2; inherit b; in $0a");
         check_resolve("let a = 1; b = 2; in let a = 2; inherit $1b; in $0b");

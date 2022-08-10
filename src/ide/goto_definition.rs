@@ -1,14 +1,13 @@
 use super::NavigationTarget;
 use crate::def::{AstPtr, Expr, Literal, ResolveResult};
-use crate::{DefDatabase, FileId};
+use crate::{DefDatabase, FilePos};
 use rowan::ast::AstNode;
 use rowan::{TextRange, TextSize};
 use syntax::{ast, match_ast, SyntaxKind, T};
 
 pub(crate) fn goto_definition(
     db: &dyn DefDatabase,
-    file_id: FileId,
-    pos: TextSize,
+    FilePos { file_id, pos }: FilePos,
 ) -> Option<Vec<NavigationTarget>> {
     let parse = db.parse(file_id);
     let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
@@ -35,11 +34,11 @@ pub(crate) fn goto_definition(
             Expr::Literal(Literal::Path(path)) => path,
             _ => return None,
         };
-        let file_id = path.resolve(db)?;
-        let full_range = TextRange::up_to(TextSize::of(&*db.file_content(file_id)));
+        let target_file_id = path.resolve(db)?;
+        let full_range = TextRange::up_to(TextSize::of(&*db.file_content(target_file_id)));
         let focus_range = TextRange::default();
         return Some(vec![NavigationTarget {
-            file_id,
+            file_id: target_file_id,
             focus_range,
             full_range,
         }]);
@@ -99,7 +98,7 @@ mod tests {
 
     fn check(fixture: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        let targets = super::goto_definition(&db, f[0].file_id, f[0].pos)
+        let targets = super::goto_definition(&db, f[0])
             .into_iter()
             .flatten()
             .map(|target| {
