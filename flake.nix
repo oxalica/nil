@@ -36,12 +36,12 @@
             pkgs.jq
             (import ./neovim-env.nix { inherit pkgs; })
           ];
-
-          RUST_BACKTRACE = 1;
+          RUST_BACKTRACE = "short";
           NIXPKGS = nixpkgs;
 
+          # bash
           shellHook = ''
-            export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/release/nil"
+            export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/debug/nil"
           '';
         };
 
@@ -53,7 +53,7 @@
             pkgs.jq
             pkgs.gnugrep
           ];
-          RUST_BACKTRACE = 1;
+          RUST_BACKTRACE = "short";
 
           # bash
           shellHook = ''

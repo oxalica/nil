@@ -3,15 +3,14 @@ mod handler;
 mod state;
 mod vfs;
 
+use anyhow::Result;
+use lsp_server::Connection;
 use lsp_types::InitializeParams;
 use std::env;
 use std::path::PathBuf;
 
 pub(crate) use state::{State, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
-
-use anyhow::Result;
-use lsp_server::Connection;
 
 pub fn main_loop(conn: Connection) -> Result<()> {
     let init_params =
