@@ -62,6 +62,20 @@ impl VfsPath {
     }
 }
 
+impl TryFrom<String> for VfsPath {
+    type Error = ();
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::new(s).ok_or(())
+    }
+}
+
+impl<'a> TryFrom<&'a str> for VfsPath {
+    type Error = ();
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+        Self::new(s).ok_or(())
+    }
+}
+
 /// A set of [`VfsPath`]s identified by [`FileId`]s.
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct FileSet {

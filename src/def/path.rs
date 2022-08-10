@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn resolve_path() {
-        let (db, files) = TestDB::file_set(
+        let (db, f) = TestDB::from_fixture(
             "
 #- /default.nix
 ./foo/bar.nix
@@ -128,13 +128,22 @@ mod tests {
 #- /foo/bar.nix
 baz/../../bar.nix
 
-#- bar.nix
+#- /bar.nix
 ./.
         ",
         )
         .unwrap();
-        assert_eq!(db.module_paths(files[0])[0].resolve(&db), Some(files[1]));
-        assert_eq!(db.module_paths(files[1])[0].resolve(&db), Some(files[2]));
-        assert_eq!(db.module_paths(files[2])[0].resolve(&db), Some(files[0]));
+        assert_eq!(
+            db.module_paths(f["/default.nix"])[0].resolve(&db),
+            Some(f["/foo/bar.nix"])
+        );
+        assert_eq!(
+            db.module_paths(f["/foo/bar.nix"])[0].resolve(&db),
+            Some(f["/bar.nix"])
+        );
+        assert_eq!(
+            db.module_paths(f["/bar.nix"])[0].resolve(&db),
+            Some(f["/default.nix"])
+        );
     }
 }

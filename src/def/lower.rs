@@ -1250,7 +1250,6 @@ mod tests {
         );
     }
 
-    // FIXME: The location is not quite right currently.
     #[test]
     fn attrset_merge_error() {
         // Value and value.

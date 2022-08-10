@@ -98,13 +98,13 @@ mod tests {
     use expect_test::{expect, Expect};
 
     fn check(fixture: &str, expect: Expect) {
-        let (db, file_id, [pos]) = TestDB::single_file(fixture).unwrap();
-        let src = db.file_content(file_id);
-        let targets = super::goto_definition(&db, file_id, pos)
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let targets = super::goto_definition(&db, f[0].file_id, f[0].pos)
             .into_iter()
             .flatten()
             .map(|target| {
                 assert!(target.full_range.contains_range(target.focus_range));
+                let src = db.file_content(target.file_id);
                 let mut full = src[target.full_range].to_owned();
                 let relative_focus = target.focus_range - target.full_range.start();
                 full.insert(relative_focus.end().into(), '>');
@@ -175,9 +175,18 @@ mod tests {
         check("let true = 1; in true && $0false", expect![""]);
     }
 
-    // TODO: Multi-files test.
     #[test]
     fn path() {
         check("1 + $0./.", expect!["<>1 + ./."]);
+        check(
+            "
+#- /default.nix
+import $0./bar.nix
+
+#- /bar.nix
+hello
+            ",
+            expect!["<>hello"],
+        );
     }
 }
