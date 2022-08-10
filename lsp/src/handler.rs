@@ -4,7 +4,7 @@ use lsp_types::{
     GotoDefinitionResponse, Location, OneOf, ReferenceParams, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
 };
-use nil::InFile;
+use nil::FileRange;
 
 pub(crate) fn server_capabilities() -> ServerCapabilities {
     ServerCapabilities {
@@ -35,7 +35,7 @@ pub(crate) fn goto_definition(
     let targets = targets
         .into_iter()
         .filter_map(|target| {
-            convert::to_location(&vfs, InFile::new(target.file_id, target.focus_range))
+            convert::to_location(&vfs, FileRange::new(target.file_id, target.focus_range))
         })
         .collect::<Vec<_>>();
     Some(GotoDefinitionResponse::Array(targets))

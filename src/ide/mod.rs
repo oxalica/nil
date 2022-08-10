@@ -87,14 +87,14 @@ impl Analysis {
     }
 
     pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<Vec<NavigationTarget>>> {
-        self.with_db(|db| goto_definition::goto_definition(db, pos.file_id, pos.value))
+        self.with_db(|db| goto_definition::goto_definition(db, pos.file_id, pos.pos))
     }
 
     pub fn completions(&self, pos: FilePos) -> Cancellable<Option<Vec<CompletionItem>>> {
-        self.with_db(|db| completion::completions(db, pos.file_id, pos.value))
+        self.with_db(|db| completion::completions(db, pos.file_id, pos.pos))
     }
 
     pub fn references(&self, pos: FilePos) -> Cancellable<Option<Vec<FileRange>>> {
-        self.with_db(|db| references::references(db, pos.file_id, pos.value))
+        self.with_db(|db| references::references(db, pos.file_id, pos.pos))
     }
 }

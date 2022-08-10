@@ -143,8 +143,29 @@ impl<T> InFile<T> {
     }
 }
 
-pub type FilePos = InFile<TextSize>;
-pub type FileRange = InFile<TextRange>;
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct FilePos {
+    pub file_id: FileId,
+    pub pos: TextSize,
+}
+
+impl FilePos {
+    pub fn new(file_id: FileId, pos: TextSize) -> Self {
+        Self { file_id, pos }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct FileRange {
+    pub file_id: FileId,
+    pub range: TextRange,
+}
+
+impl FileRange {
+    pub fn new(file_id: FileId, range: TextRange) -> Self {
+        Self { file_id, range }
+    }
+}
 
 #[salsa::query_group(SourceDatabaseStorage)]
 pub trait SourceDatabase {

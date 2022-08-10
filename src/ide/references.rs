@@ -1,5 +1,5 @@
 use crate::def::AstPtr;
-use crate::{DefDatabase, FileId, FileRange, InFile};
+use crate::{DefDatabase, FileId, FileRange};
 use rowan::ast::AstNode;
 use rowan::TextSize;
 use syntax::{ast, match_ast, SyntaxKind, T};
@@ -55,7 +55,7 @@ pub(crate) fn references(
         refs.iter()
             .map(|&expr| {
                 let ptr = source_map.expr_node(expr).expect("Id must be valid");
-                InFile::new(file_id, ptr.text_range())
+                FileRange::new(file_id, ptr.text_range())
             })
             .collect()
     });
@@ -74,7 +74,7 @@ mod tests {
         let mut got = super::references(&db, file_id, poses[0])
             .into_iter()
             .flatten()
-            .map(|file_range| file_range.value.start())
+            .map(|frange| frange.range.start())
             .collect::<Vec<_>>();
         got.sort();
         assert_eq!(got, expect);

@@ -3,7 +3,7 @@ use lsp_types::{
     self as lsp, DiagnosticSeverity, DiagnosticTag, Location, Position, Range,
     TextDocumentPositionParams,
 };
-use nil::{CompletionItem, CompletionItemKind, Diagnostic, FilePos, InFile, Severity};
+use nil::{CompletionItem, CompletionItemKind, Diagnostic, FilePos, FileRange, Severity};
 use text_size::TextRange;
 
 pub(crate) fn from_file_pos(
@@ -17,10 +17,10 @@ pub(crate) fn from_file_pos(
     Some(FilePos::new(file, pos))
 }
 
-pub(crate) fn to_location(vfs: &Vfs, frange: InFile<TextRange>) -> Option<Location> {
+pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Option<Location> {
     let uri = vfs.get_uri_for_file(frange.file_id)?;
     let line_map = vfs.get_line_map(frange.file_id)?;
-    Some(Location::new(uri, to_range(line_map, frange.value)))
+    Some(Location::new(uri, to_range(line_map, frange.range)))
 }
 
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
