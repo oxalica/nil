@@ -657,7 +657,7 @@ mod tests {
 
     #[track_caller]
     fn check_lower(src: &str, expect: Expect) {
-        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let (db, file_id) = TestDB::single_file(src).unwrap();
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
@@ -686,7 +686,7 @@ mod tests {
 
     #[track_caller]
     fn check_path(src: &str, expect: Expect) {
-        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let (db, file_id) = TestDB::single_file(src).unwrap();
         let module = db.module(file_id);
         let got = module
             .exprs()
@@ -701,7 +701,7 @@ mod tests {
 
     #[track_caller]
     fn check_error(src: &str, expect: Expect) {
-        let (db, file_id, []) = TestDB::single_file(src).unwrap();
+        let (db, file_id) = TestDB::single_file(src).unwrap();
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {

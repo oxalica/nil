@@ -180,70 +180,69 @@ impl<'a> Traversal<'a> {
 mod tests {
     use crate::tests::TestDB;
     use crate::DefDatabase;
-    use expect_test::{expect, Expect};
 
     #[track_caller]
-    fn check(fixture: &str, expect: Expect) {
-        let (db, file, []) = TestDB::single_file(fixture).unwrap();
-        let module = db.module(file);
+    fn check(fixture: &str) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(f.files().len(), 1);
+        let expect = f.markers().iter().map(|p| p.pos).collect::<Vec<_>>();
+        let file = f.files()[0];
         let source_map = db.source_map(file);
         let liveness = db.liveness_check(file);
-        let got = liveness
+        let mut got = liveness
             .unused_name_defs
             .iter()
-            .map(|&def| {
-                let pos = source_map.name_def_node(def).unwrap().text_range().start();
-                format!("{}@{:?}", module[def].name, pos)
-            })
-            .chain(liveness.unused_withs.iter().map(|&expr| {
-                let pos = source_map.expr_node(expr).unwrap().text_range().start();
-                format!("with@{:?}", pos)
-            }))
-            .chain(liveness.unused_recs().iter().map(|&expr| {
-                let pos = source_map.expr_node(expr).unwrap().text_range().start();
-                format!("rec@{:?}", pos)
-            }))
-            .collect::<Vec<_>>()
-            .join(" ");
-        expect.assert_eq(&got);
+            .map(|&def| source_map.name_def_node(def).unwrap().text_range().start())
+            .chain(
+                liveness
+                    .unused_withs
+                    .iter()
+                    .map(|&expr| source_map.expr_node(expr).unwrap().text_range().start()),
+            )
+            .chain(
+                liveness
+                    .unused_recs()
+                    .iter()
+                    .map(|&expr| source_map.expr_node(expr).unwrap().text_range().start()),
+            )
+            .collect::<Vec<_>>();
+        got.sort_unstable();
+        assert_eq!(got, expect);
     }
 
     #[test]
     fn let_in() {
-        check("let a = 1; b = a; c = a; in c", expect!["b@11"]);
-        check("let a = 1; in let a = 2; in a", expect!["a@4"]);
-        check("let a = 1; in let inherit a; in a", expect![""]);
+        check("let a = 1; $0b = a; c = a; in c");
+        check("let $0a = 1; in let a = 2; in a");
+        check("let a = 1; in let inherit a; in a");
     }
 
     #[test]
     fn lambda() {
-        check("a: { b }: c@{}: 0", expect!["c@10"]);
+        check("a: { b }: $0c@{}: 0");
     }
 
     #[test]
     fn with() {
-        check("a: with 1; a", expect!["with@3"]);
-        check("a: with 1; with 2; b", expect![""]);
+        check("a: $0with 1; a");
+        check("a: with 1; with 2; b");
     }
 
     #[test]
     fn rec_attrset() {
-        check("rec { a = 1; b = a; c = 1; }", expect![""]);
-        check("rec { a = 1; b = 1; c = 1; }", expect!["rec@0"]);
-        check("rec { }", expect!["rec@0"]);
+        check("rec { a = 1; b = a; c = 1; }");
+        check("$0rec { a = 1; b = 1; c = 1; }");
+        check("$0rec { }");
     }
 
     #[test]
     fn no_recursive_unused() {
-        check("let a = let b = 1; in b; in 1", expect!["a@4"]);
-        check("let a = rec { b = b; }; in 1", expect!["a@4"]);
+        check("let $0a = let b = 1; in b; in 1");
+        check("let $0a = rec { b = b; }; in 1");
     }
 
     #[test]
     fn deeper_unused_use_outer_unused() {
-        check(
-            "let a = 1; b = let c = a; in 1; in 1",
-            expect!["a@4 b@11 c@19"],
-        );
+        check("let $0a = 1; $1b = let $2c = a; in 1; in 1");
     }
 }

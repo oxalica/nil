@@ -19,21 +19,11 @@ pub struct TestDB {
 impl salsa::Database for TestDB {}
 
 impl TestDB {
-    pub fn single_file<const MARKERS: usize>(
-        fixture: &str,
-    ) -> Result<(Self, FileId, [TextSize; MARKERS])> {
+    pub fn single_file(fixture: &str) -> Result<(Self, FileId)> {
         let (db, f) = Self::from_fixture(fixture)?;
         ensure!(f.files().len() == 1, "Fixture contains multiple files");
         let file_id = f.files()[0];
-        let poses = f
-            .markers()
-            .iter()
-            .map(|pos| pos.pos)
-            .collect::<Vec<_>>()
-            .try_into()
-            .ok()
-            .context("Marker count mismatch")?;
-        Ok((db, file_id, poses))
+        Ok((db, file_id))
     }
 
     pub fn from_fixture(fixture: &str) -> Result<(Self, Fixture)> {

@@ -54,7 +54,7 @@ mod tests {
     use expect_test::{expect, Expect};
 
     fn check(fixture: &str, expect: Expect) {
-        let (db, file_id, []) = TestDB::single_file(fixture).unwrap();
+        let (db, file_id) = TestDB::single_file(fixture).unwrap();
         let diags = super::diagnostics(&db, file_id);
         assert!(!diags.is_empty());
         let got = diags

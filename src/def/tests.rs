@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 #[test]
 fn source_map() {
-    let (db, root, []) = TestDB::single_file("foo 123").unwrap();
+    let (db, root) = TestDB::single_file("foo 123").unwrap();
 
     let source_map = db.source_map(root);
     let mut expr_map = source_map.expr_map.iter().collect::<Vec<_>>();
