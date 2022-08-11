@@ -46,7 +46,10 @@ impl TestDB {
             file_set.insert(file, path.clone());
             change.change_file(file, Some(text.to_owned().into()));
         }
-        change.set_roots(vec![SourceRoot::new_local(file_set)]);
+        let entry = file_set
+            .get_file_for_path(&"/default.nix".try_into().unwrap())
+            .context("Missing entry file")?;
+        change.set_roots(vec![SourceRoot::new_local(file_set, Some(entry))]);
         change.apply(&mut db);
         Ok((db, f))
     }

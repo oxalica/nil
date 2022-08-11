@@ -86,8 +86,7 @@ pub enum PathAnchor {
 #[cfg(test)]
 mod tests {
     use super::{PathAnchor, PathData};
-    use crate::tests::TestDB;
-    use crate::{DefDatabase, FileId, VfsPath};
+    use crate::{FileId, VfsPath};
 
     #[test]
     #[rustfmt::skip]
@@ -116,34 +115,5 @@ mod tests {
         assert_eq!(norm("../."), path(""));
         assert_eq!(norm("foo/./bar/../.baz"), path("foo/.baz"));
         assert_eq!(norm("../../foo"), path("foo"));
-    }
-
-    #[test]
-    fn resolve_path() {
-        let (db, f) = TestDB::from_fixture(
-            "
-#- /default.nix
-./foo/bar.nix
-
-#- /foo/bar.nix
-baz/../../bar.nix
-
-#- /bar.nix
-./.
-        ",
-        )
-        .unwrap();
-        assert_eq!(
-            db.module_paths(f["/default.nix"])[0].resolve(&db),
-            Some(f["/foo/bar.nix"])
-        );
-        assert_eq!(
-            db.module_paths(f["/foo/bar.nix"])[0].resolve(&db),
-            Some(f["/bar.nix"])
-        );
-        assert_eq!(
-            db.module_paths(f["/bar.nix"])[0].resolve(&db),
-            Some(f["/default.nix"])
-        );
     }
 }

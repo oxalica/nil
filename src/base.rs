@@ -118,11 +118,12 @@ impl fmt::Debug for FileSet {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceRoot {
     file_set: FileSet,
+    entry: Option<FileId>,
 }
 
 impl SourceRoot {
-    pub fn new_local(file_set: FileSet) -> Self {
-        Self { file_set }
+    pub fn new_local(file_set: FileSet, entry: Option<FileId>) -> Self {
+        Self { file_set, entry }
     }
 
     pub fn get_file_for_path(&self, path: &VfsPath) -> Option<FileId> {
@@ -135,6 +136,10 @@ impl SourceRoot {
 
     pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + '_ {
         self.file_set.iter()
+    }
+
+    pub fn entry(&self) -> Option<FileId> {
+        self.entry
     }
 }
 

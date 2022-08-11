@@ -7,11 +7,11 @@ mod scope;
 mod tests;
 
 use crate::base::SourceDatabase;
-use crate::{Diagnostic, FileId};
+use crate::{Diagnostic, FileId, SourceRootId};
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops;
 use std::sync::Arc;
 use syntax::Parse;
@@ -34,8 +34,10 @@ pub trait DefDatabase: SourceDatabase {
 
     fn source_map(&self, file_id: FileId) -> Arc<ModuleSourceMap>;
 
-    #[salsa::invoke(Module::module_paths_query)]
-    fn module_paths(&self, file_id: FileId) -> Arc<[Path]>;
+    #[salsa::invoke(Module::module_references_query)]
+    fn module_references(&self, file_id: FileId) -> Arc<HashSet<FileId>>;
+
+    fn source_root_closure(&self, id: SourceRootId) -> Arc<HashSet<FileId>>;
 
     #[salsa::invoke(Path::resolve_path_query)]
     fn resolve_path(&self, path: Path) -> Option<FileId>;
@@ -73,6 +75,24 @@ fn module(db: &dyn DefDatabase, file_id: FileId) -> Arc<Module> {
 
 fn source_map(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleSourceMap> {
     db.module_with_source_map(file_id).1
+}
+
+fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<FileId>> {
+    let entry = match db.source_root(id).entry() {
+        Some(file) => file,
+        None => return Default::default(),
+    };
+    let mut closure = HashSet::new();
+    closure.insert(entry);
+    let mut queue = vec![entry];
+    while let Some(file) = queue.pop() {
+        for &target in db.module_references(file).iter() {
+            if closure.insert(target) {
+                queue.push(target);
+            }
+        }
+    }
+    Arc::new(closure)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,18 +150,20 @@ impl Module {
         self.bindings.iter()
     }
 
-    pub(crate) fn module_paths_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<[Path]> {
-        let module = db.module(file_id);
-        let mut paths = module
+    pub(crate) fn module_references_query(
+        db: &dyn DefDatabase,
+        file_id: FileId,
+    ) -> Arc<HashSet<FileId>> {
+        let refs = db
+            .module(file_id)
             .exprs()
             .filter_map(|(_, kind)| match kind {
                 &Expr::Literal(Literal::Path(p)) => Some(p),
                 _ => None,
             })
-            .collect::<Vec<_>>();
-        paths.sort_unstable();
-        paths.dedup();
-        paths.into()
+            .filter_map(|path| path.resolve(db))
+            .collect();
+        Arc::new(refs)
     }
 }
 

@@ -648,6 +648,7 @@ impl MergingEntry {
 #[cfg(test)]
 mod tests {
     use super::lower;
+    use crate::def::{Expr, Literal};
     use crate::tests::TestDB;
     use crate::{DefDatabase, FileId};
     use expect_test::{expect, Expect};
@@ -686,11 +687,15 @@ mod tests {
     #[track_caller]
     fn check_path(src: &str, expect: Expect) {
         let (db, file_id, []) = TestDB::single_file(src).unwrap();
-        let _module = db.module(file_id);
-        let mut got = String::new();
-        for &p in db.module_paths(file_id).iter() {
-            writeln!(got, "{:?}", p.data(&db)).unwrap();
-        }
+        let module = db.module(file_id);
+        let got = module
+            .exprs()
+            .filter_map(|(_, kind)| match kind {
+                Expr::Literal(Literal::Path(path)) => Some(path),
+                _ => None,
+            })
+            .map(|path| format!("{:?}\n", path.data(&db)))
+            .collect::<String>();
         expect.assert_eq(&got);
     }
 
