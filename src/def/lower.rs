@@ -3,7 +3,7 @@ use super::{
     ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, PathAnchor,
     PathData,
 };
-use crate::{Diagnostic, DiagnosticKind, FileId};
+use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
@@ -605,16 +605,25 @@ impl MergingEntry {
 
     fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, ptr: &AstPtr) {
         // Don't emit twice at the previous key.
+        //
+        // FIXME: Neovim doesn't support `relatedInformation` yet, thus we push back-refs here.
+        // https://github.com/neovim/neovim/issues/19649
         if !mem::replace(&mut self.is_duplicated, true) {
-            ctx.diagnostic(Diagnostic::new(
-                self.def_ptr.text_range(),
-                DiagnosticKind::DuplicatedKey,
-            ));
+            ctx.diagnostic(
+                Diagnostic::new(self.def_ptr.text_range(), DiagnosticKind::DuplicatedKey)
+                    .with_note(
+                        FileRange::new(ctx.file_id, ptr.text_range()),
+                        "Later defined here",
+                    ),
+            );
         }
-        ctx.diagnostic(Diagnostic::new(
-            ptr.text_range(),
-            DiagnosticKind::DuplicatedKey,
-        ));
+
+        ctx.diagnostic(
+            Diagnostic::new(ptr.text_range(), DiagnosticKind::DuplicatedKey).with_note(
+                FileRange::new(ctx.file_id, self.def_ptr.text_range()),
+                "First defined here",
+            ),
+        );
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {

@@ -1,9 +1,11 @@
+use crate::FileRange;
 use syntax::{ErrorKind as SynErrorKind, TextRange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub range: TextRange,
     pub kind: DiagnosticKind,
+    pub notes: Vec<(FileRange, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +38,16 @@ pub enum Severity {
 
 impl Diagnostic {
     pub fn new(range: TextRange, kind: DiagnosticKind) -> Self {
-        Self { range, kind }
+        Self {
+            range,
+            kind,
+            notes: Vec::new(),
+        }
+    }
+
+    pub fn with_note(mut self, frange: FileRange, message: impl Into<String>) -> Self {
+        self.notes.push((frange, message.into()));
+        self
     }
 
     pub fn severity(&self) -> Severity {

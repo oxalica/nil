@@ -1,7 +1,7 @@
 use crate::{LineMap, StateSnapshot, Vfs};
 use lsp_types::{
-    self as lsp, DiagnosticSeverity, DiagnosticTag, Location, Position, Range,
-    TextDocumentPositionParams,
+    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
+    Position, Range, TextDocumentPositionParams,
 };
 use nil::{CompletionItem, CompletionItemKind, Diagnostic, FilePos, FileRange, Severity};
 use text_size::TextRange;
@@ -29,7 +29,11 @@ pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
     Range::new(Position::new(line1, col1), Position::new(line2, col2))
 }
 
-pub(crate) fn to_diagnostic(line_map: &LineMap, diag: Diagnostic) -> Option<lsp::Diagnostic> {
+pub(crate) fn to_diagnostic(
+    vfs: &Vfs,
+    line_map: &LineMap,
+    diag: Diagnostic,
+) -> Option<lsp::Diagnostic> {
     Some(lsp::Diagnostic {
         severity: match diag.severity() {
             Severity::Error => Some(DiagnosticSeverity::ERROR),
@@ -41,7 +45,19 @@ pub(crate) fn to_diagnostic(line_map: &LineMap, diag: Diagnostic) -> Option<lsp:
         code_description: None,
         source: None,
         message: diag.message(),
-        related_information: None,
+        related_information: {
+            Some(
+                diag.notes
+                    .iter()
+                    .filter_map(|(frange, msg)| {
+                        Some(DiagnosticRelatedInformation {
+                            location: to_location(vfs, *frange)?,
+                            message: msg.to_owned(),
+                        })
+                    })
+                    .collect(),
+            )
+        },
         tags: {
             let mut tags = Vec::new();
             if diag.is_deprecated() {

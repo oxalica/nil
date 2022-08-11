@@ -154,7 +154,7 @@ impl State {
                     let diags = diags
                         .into_iter()
                         .take(MAX_DIAGNOSTICS_CNT)
-                        .filter_map(|diag| convert::to_diagnostic(line_map, diag))
+                        .filter_map(|diag| convert::to_diagnostic(&vfs, line_map, diag))
                         .collect::<Vec<_>>();
                     Some(diags)
                 })
