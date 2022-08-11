@@ -10,7 +10,7 @@ use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::{mem, str};
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
-use syntax::{Parse, TextRange};
+use syntax::Parse;
 
 pub(super) fn lower(
     db: &dyn DefDatabase,
@@ -63,8 +63,8 @@ impl LowerCtx<'_> {
         self.module.bindings.alloc(Binding { key, value })
     }
 
-    fn diagnostic(&mut self, range: TextRange, kind: DiagnosticKind) {
-        self.module.diagnostics.push(Diagnostic { range, kind });
+    fn diagnostic(&mut self, diag: Diagnostic) {
+        self.module.diagnostics.push(diag);
     }
 
     fn lower_name(&mut self, node: ast::Name, kind: NameDefKind) -> NameDefId {
@@ -179,7 +179,7 @@ impl LowerCtx<'_> {
                     let let_in_header = e
                         .in_token()
                         .map_or(let_tok_range, |tok| tok.text_range().cover(let_tok_range));
-                    self.diagnostic(let_in_header, DiagnosticKind::EmptyLetIn);
+                    self.diagnostic(Diagnostic::new(let_in_header, DiagnosticKind::EmptyLetIn));
                 }
                 let body = self.lower_expr_opt(e.body());
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
@@ -189,7 +189,10 @@ impl LowerCtx<'_> {
                 let (def_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
                     (Some(NameDefKind::RecAttrset), Expr::RecAttrset)
                 } else if e.let_token().is_some() {
-                    self.diagnostic(e.syntax().text_range(), DiagnosticKind::LetAttrset);
+                    self.diagnostic(Diagnostic::new(
+                        e.syntax().text_range(),
+                        DiagnosticKind::LetAttrset,
+                    ));
                     (Some(NameDefKind::RecAttrset), Expr::LetAttrset)
                 } else {
                     (None, Expr::Attrset)
@@ -221,7 +224,10 @@ impl LowerCtx<'_> {
             LiteralKind::Int => Literal::Int(text.parse::<i64>().ok()?),
             LiteralKind::Float => Literal::Float(text.parse::<f64>().unwrap().into()),
             LiteralKind::Uri => {
-                self.diagnostic(lit.syntax().text_range(), DiagnosticKind::UriLiteral);
+                self.diagnostic(Diagnostic::new(
+                    lit.syntax().text_range(),
+                    DiagnosticKind::UriLiteral,
+                ));
                 Literal::String(text.into())
             }
             LiteralKind::SearchPath => {
@@ -416,7 +422,10 @@ impl MergingSet {
             let key = match ctx.lower_key(attr, self.def_kind) {
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 BindingKey::Dynamic(expr) => {
-                    ctx.diagnostic(ptr.text_range(), DiagnosticKind::InvalidDynamic);
+                    ctx.diagnostic(Diagnostic::new(
+                        ptr.text_range(),
+                        DiagnosticKind::InvalidDynamic,
+                    ));
                     self.recover_error(ctx, expr, ptr.clone());
                     continue;
                 }
@@ -450,7 +459,10 @@ impl MergingSet {
         }
 
         if no_attrs {
-            ctx.diagnostic(i.syntax().text_range(), DiagnosticKind::EmptyInherit);
+            ctx.diagnostic(Diagnostic::new(
+                i.syntax().text_range(),
+                DiagnosticKind::EmptyInherit,
+            ));
         }
     }
 
@@ -473,7 +485,10 @@ impl MergingSet {
 
             // LetIn doesn't allow dynamic attrs.
             if let (Some(NameDefKind::LetIn), BindingKey::Dynamic(_)) = (self.def_kind, &key) {
-                ctx.diagnostic(attr_ptr.text_range(), DiagnosticKind::InvalidDynamic);
+                ctx.diagnostic(Diagnostic::new(
+                    attr_ptr.text_range(),
+                    DiagnosticKind::InvalidDynamic,
+                ));
                 // We don't skip the RHS but still process it as a recovery.
             }
 
@@ -526,9 +541,15 @@ impl MergingEntry {
                 let prev_is_rec = prev_set.def_kind.is_some();
                 let this_is_rec = def_kind.is_some();
                 if prev_is_rec {
-                    ctx.diagnostic(def_ptr.text_range(), DiagnosticKind::MergeRecAttrset);
+                    ctx.diagnostic(Diagnostic::new(
+                        def_ptr.text_range(),
+                        DiagnosticKind::MergeRecAttrset,
+                    ));
                 } else if this_is_rec {
-                    ctx.diagnostic(def_ptr.text_range(), DiagnosticKind::MergePlainRecAttrset);
+                    ctx.diagnostic(Diagnostic::new(
+                        def_ptr.text_range(),
+                        DiagnosticKind::MergePlainRecAttrset,
+                    ));
                 }
             }
             // We prefer to become a Attrset as a guess, which allows further merging.
@@ -583,11 +604,17 @@ impl MergingEntry {
     }
 
     fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, ptr: &AstPtr) {
+        // Don't emit twice at the previous key.
         if !mem::replace(&mut self.is_duplicated, true) {
-            // Don't emit twice at previouse key.
-            ctx.diagnostic(self.def_ptr.text_range(), DiagnosticKind::DuplicatedKey);
+            ctx.diagnostic(Diagnostic::new(
+                self.def_ptr.text_range(),
+                DiagnosticKind::DuplicatedKey,
+            ));
         }
-        ctx.diagnostic(ptr.text_range(), DiagnosticKind::DuplicatedKey);
+        ctx.diagnostic(Diagnostic::new(
+            ptr.text_range(),
+            DiagnosticKind::DuplicatedKey,
+        ));
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
@@ -624,7 +651,7 @@ mod tests {
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
-            writeln!(got, "{:?}", diag).unwrap();
+            writeln!(got, "{}", diag.debug_to_string()).unwrap();
         }
         if !module.diagnostics.is_empty() {
             writeln!(got).unwrap();
@@ -664,7 +691,7 @@ mod tests {
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
-            writeln!(got, "{:?}", diag).unwrap();
+            writeln!(got, "{}", diag.debug_to_string()).unwrap();
         }
         expect.assert_eq(&got);
     }
@@ -686,7 +713,7 @@ mod tests {
         check_lower(
             "a:b",
             expect![[r#"
-                Diagnostic { range: 0..3, kind: UriLiteral }
+                0..3: URL literal is confusing and deprecated. Use strings instead
 
                 0: Literal(String("a:b"))
             "#]],
@@ -882,7 +909,7 @@ mod tests {
         check_lower(
             "foo:bar",
             expect![[r#"
-                Diagnostic { range: 0..7, kind: UriLiteral }
+                0..7: URL literal is confusing and deprecated. Use strings instead
 
                 0: Literal(String("foo:bar"))
             "#]],
@@ -939,8 +966,8 @@ mod tests {
         check_lower(
             r#"{ inherit; inherit a "b" ${("c")}; inherit (d); inherit (e) f g; }"#,
             expect![[r#"
-                Diagnostic { range: 2..10, kind: EmptyInherit }
-                Diagnostic { range: 35..47, kind: EmptyInherit }
+                2..10: Nothing inherited
+                35..47: Nothing inherited
 
                 0: Reference("a")
                 1: Reference("b")
@@ -1024,7 +1051,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a = { c = 2; }; }",
             expect![[r#"
-                Diagnostic { range: 26..36, kind: MergeRecAttrset }
+                26..36: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1044,7 +1071,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a.c = 2; }",
             expect![[r#"
-                Diagnostic { range: 22..23, kind: MergeRecAttrset }
+                22..23: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1064,7 +1091,7 @@ mod tests {
         check_lower(
             "{ a = { b = 1; }; a = rec { c = 2; }; }",
             expect![[r#"
-                Diagnostic { range: 22..36, kind: MergePlainRecAttrset }
+                22..36: Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1081,7 +1108,7 @@ mod tests {
         check_lower(
             "{ a.b = 1; a = rec { c = 2; }; }",
             expect![[r#"
-                Diagnostic { range: 15..29, kind: MergePlainRecAttrset }
+                15..29: Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1098,7 +1125,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a = rec { c = 2; }; }",
             expect![[r#"
-                Diagnostic { range: 26..40, kind: MergeRecAttrset }
+                26..40: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1157,7 +1184,7 @@ mod tests {
         check_lower(
             "{ a.b = let { c.d = 1; }; }",
             expect![[r#"
-                Diagnostic { range: 8..24, kind: LetAttrset }
+                8..24: `let { ... }` is deprecated. Use `let ... in ...` instead
 
                 0: Literal(Int(1))
                 1: Attrset(Bindings { entries: [Idx::<Binding>(0)], inherit_froms: [] })
@@ -1201,7 +1228,7 @@ mod tests {
         check_lower(
             "let in 1",
             expect![[r#"
-                Diagnostic { range: 0..6, kind: EmptyLetIn }
+                0..6: Empty let-in
 
                 0: Literal(Int(1))
                 1: LetIn(Bindings { entries: [], inherit_froms: [] }, Idx::<Expr>(0))
@@ -1233,19 +1260,19 @@ mod tests {
         check_error(
             "let ${a} = 1; in 1",
             expect![[r#"
-                Diagnostic { range: 4..8, kind: InvalidDynamic }
+                4..8: Invalid location of dynamic attribute
             "#]],
         );
         check_error(
             "{ inherit ${a}; }",
             expect![[r#"
-                Diagnostic { range: 10..14, kind: InvalidDynamic }
+                10..14: Invalid location of dynamic attribute
             "#]],
         );
         check_error(
             "{ inherit (a) ${a}; }",
             expect![[r#"
-                Diagnostic { range: 14..18, kind: InvalidDynamic }
+                14..18: Invalid location of dynamic attribute
             "#]],
         );
     }
@@ -1256,40 +1283,40 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                Diagnostic { range: 2..3, kind: DuplicatedKey }
-                Diagnostic { range: 9..10, kind: DuplicatedKey }
+                2..3: Duplicated name definition
+                9..10: Duplicated name definition
             "#]],
         );
         // Set and value.
         check_error(
             "{ a.b = 1; a = 2; }",
             expect![[r#"
-                Diagnostic { range: 2..3, kind: DuplicatedKey }
-                Diagnostic { range: 11..12, kind: DuplicatedKey }
+                2..3: Duplicated name definition
+                11..12: Duplicated name definition
             "#]],
         );
         // Value and set.
         check_error(
             "{ a = 1; a.b = 2; }",
             expect![[r#"
-                Diagnostic { range: 2..3, kind: DuplicatedKey }
-                Diagnostic { range: 9..10, kind: DuplicatedKey }
+                2..3: Duplicated name definition
+                9..10: Duplicated name definition
             "#]],
         );
         // Inherit and value.
         check_error(
             "{ inherit a; a = 1; }",
             expect![[r#"
-                Diagnostic { range: 10..11, kind: DuplicatedKey }
-                Diagnostic { range: 13..14, kind: DuplicatedKey }
+                10..11: Duplicated name definition
+                13..14: Duplicated name definition
             "#]],
         );
         // Inherit-from and value.
         check_error(
             "{ inherit (1) a; a = 1; }",
             expect![[r#"
-                Diagnostic { range: 14..15, kind: DuplicatedKey }
-                Diagnostic { range: 17..18, kind: DuplicatedKey }
+                14..15: Duplicated name definition
+                17..18: Duplicated name definition
             "#]],
         );
     }
@@ -1299,9 +1326,9 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; a = 3; }",
             expect![[r#"
-                Diagnostic { range: 2..3, kind: DuplicatedKey }
-                Diagnostic { range: 9..10, kind: DuplicatedKey }
-                Diagnostic { range: 16..17, kind: DuplicatedKey }
+                2..3: Duplicated name definition
+                9..10: Duplicated name definition
+                16..17: Duplicated name definition
             "#]],
         );
     }

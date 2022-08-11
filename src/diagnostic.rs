@@ -1,7 +1,6 @@
-use std::fmt;
 use syntax::{ErrorKind as SynErrorKind, TextRange};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub range: TextRange,
     pub kind: DiagnosticKind,
@@ -36,6 +35,10 @@ pub enum Severity {
 }
 
 impl Diagnostic {
+    pub fn new(range: TextRange, kind: DiagnosticKind) -> Self {
+        Self { range, kind }
+    }
+
     pub fn severity(&self) -> Severity {
         match self.kind {
             DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
@@ -79,7 +82,7 @@ impl Diagnostic {
                 "Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored"
             }
             DiagnosticKind::MergeRecAttrset => {
-                "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`."
+                "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`"
             }
 
             DiagnosticKind::UnusedBinding => "Unused binding",
@@ -105,25 +108,19 @@ impl Diagnostic {
             DiagnosticKind::LetAttrset | DiagnosticKind::UriLiteral
         )
     }
+
+    pub fn debug_to_string(&self) -> String {
+        format!(
+            "{}..{}: {}",
+            u32::from(self.range.start()),
+            u32::from(self.range.end()),
+            self.message(),
+        )
+    }
 }
 
 impl From<syntax::Error> for Diagnostic {
     fn from(err: syntax::Error) -> Self {
-        Self {
-            range: err.range,
-            kind: DiagnosticKind::SyntaxError(err.kind),
-        }
-    }
-}
-
-impl fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} at {}..{}",
-            self.message(),
-            u32::from(self.range.start()),
-            u32::from(self.range.end()),
-        )
+        Self::new(err.range, DiagnosticKind::SyntaxError(err.kind))
     }
 }
