@@ -112,7 +112,7 @@ pub(crate) fn liveness_check_query(
                 },
                 Expr::LetIn(bindings, body) => {
                     // Pre-mark all let-binding.
-                    bindings.walk_child_defs(&module, |def, value| {
+                    bindings.walk_child_defs(|def, value| {
                         let (BindingValue::Inherit(e)
                         | BindingValue::InheritFrom(e)
                         | BindingValue::Expr(e)) = *value;
@@ -122,7 +122,7 @@ pub(crate) fn liveness_check_query(
                     // Traverse the body as root.
                     stack.push(*body);
                 }
-                e => e.walk_child_exprs(&module, |e| stack.push(e)),
+                e => e.walk_child_exprs(|e| stack.push(e)),
             }
         }
 
@@ -147,8 +147,8 @@ pub(crate) fn liveness_check_query(
                 unused_withs.push(expr);
             }
             Expr::RecAttrset(bindings)
-                if bindings.statics.iter().all(|&b| match module[b].key {
-                    BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
+                if bindings.statics.iter().all(|(key, _)| match key {
+                    &BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
                     BindingKey::Name(_) => unreachable!(),
                 }) =>
             {

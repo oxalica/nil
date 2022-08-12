@@ -1,7 +1,6 @@
 use super::{
-    AstPtr, Attrpath, Binding, BindingId, BindingKey, BindingValue, Bindings, DefDatabase, Expr,
-    ExprId, Literal, Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, PathAnchor,
-    PathData,
+    AstPtr, Attrpath, BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Literal,
+    Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, PathAnchor, PathData,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
 use indexmap::IndexMap;
@@ -23,7 +22,6 @@ pub(super) fn lower(
         module: Module {
             exprs: Arena::new(),
             name_defs: Arena::new(),
-            bindings: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
             diagnostics: Vec::new(),
@@ -57,10 +55,6 @@ impl LowerCtx<'_> {
         self.source_map.name_def_map.insert(ptr.clone(), id);
         self.source_map.name_def_map_rev.insert(id, ptr);
         id
-    }
-
-    fn alloc_binding(&mut self, key: BindingKey, value: BindingValue) -> BindingId {
-        self.module.bindings.alloc(Binding { key, value })
     }
 
     fn diagnostic(&mut self, diag: Diagnostic) {
@@ -530,10 +524,7 @@ impl MergingSet {
             statics: self
                 .statics
                 .into_iter()
-                .map(|(key, entry)| {
-                    let value = entry.finish(ctx);
-                    ctx.alloc_binding(key, value)
-                })
+                .map(|(key, entry)| (key, entry.finish(ctx)))
                 .collect(),
             inherit_froms: self.inherit_froms.into(),
             dynamics: self
@@ -707,12 +698,6 @@ mod tests {
         }
         for (i, e) in module.exprs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), e).unwrap();
-        }
-        if !module.bindings.is_empty() {
-            writeln!(got).unwrap();
-        }
-        for (i, b) in module.bindings.iter() {
-            writeln!(got, "{}: {:?}", i.into_raw(), b).unwrap();
         }
         if !module.name_defs.is_empty() {
             writeln!(got).unwrap();
@@ -1004,11 +989,7 @@ mod tests {
                 2: Literal(Int(2))
                 3: Literal(Int(3))
                 4: Literal(Int(4))
-                5: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1), Idx::<Binding>(2)], inherit_froms: [], dynamics: [(Idx::<Expr>(1), Idx::<Expr>(2))] })
-
-                0: Binding { key: Name("a"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(3)) }
-                2: Binding { key: Name("\n"), value: Expr(Idx::<Expr>(4)) }
+                5: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(3))), (Name("\n"), Expr(Idx::<Expr>(4)))], inherit_froms: [], dynamics: [(Idx::<Expr>(1), Idx::<Expr>(2))] })
             "#]],
         );
     }
@@ -1026,13 +1007,7 @@ mod tests {
                 2: Reference("c")
                 3: Reference("d")
                 4: Reference("e")
-                5: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1), Idx::<Binding>(2), Idx::<Binding>(3), Idx::<Binding>(4)], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
-
-                0: Binding { key: Name("a"), value: Inherit(Idx::<Expr>(0)) }
-                1: Binding { key: Name("b"), value: Inherit(Idx::<Expr>(1)) }
-                2: Binding { key: Name("c"), value: Inherit(Idx::<Expr>(2)) }
-                3: Binding { key: Name("f"), value: InheritFrom(Idx::<Expr>(4)) }
-                4: Binding { key: Name("g"), value: InheritFrom(Idx::<Expr>(4)) }
+                5: Attrset(Bindings { statics: [(Name("a"), Inherit(Idx::<Expr>(0))), (Name("b"), Inherit(Idx::<Expr>(1))), (Name("c"), Inherit(Idx::<Expr>(2))), (Name("f"), InheritFrom(Idx::<Expr>(4))), (Name("g"), InheritFrom(Idx::<Expr>(4)))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
             "#]],
         );
     }
@@ -1045,12 +1020,8 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
         // Path and attrset.
@@ -1059,12 +1030,8 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
         // Attrset and path.
@@ -1073,12 +1040,8 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
         // Attrset and attrset.
@@ -1087,12 +1050,8 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
     }
@@ -1107,12 +1066,8 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1127,12 +1082,8 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1147,12 +1098,8 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
 
@@ -1164,12 +1111,8 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("c"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
             "#]],
         );
 
@@ -1181,12 +1124,8 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [Idx::<Binding>(0), Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: NameDef(Idx::<NameDef>(1)), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "b", kind: RecAttrset }
                 1: NameDef { name: "c", kind: RecAttrset }
@@ -1200,11 +1139,8 @@ mod tests {
             "rec { a.b = 1; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: Attrset(Bindings { statics: [Idx::<Binding>(0)], inherit_froms: [], dynamics: [] })
-                2: RecAttrset(Bindings { statics: [Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(1)) }
+                1: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "a", kind: RecAttrset }
             "#]],
@@ -1218,13 +1154,9 @@ mod tests {
             "{ a.b = rec { c = 1; }; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: RecAttrset(Bindings { statics: [Idx::<Binding>(0)], inherit_froms: [], dynamics: [] })
-                2: Attrset(Bindings { statics: [Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: Name("b"), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("a"), value: Expr(Idx::<Expr>(2)) }
+                1: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "c", kind: RecAttrset }
             "#]],
@@ -1239,15 +1171,10 @@ mod tests {
                 8..24: `let { ... }` is deprecated. Use `let ... in ...` instead
 
                 0: Literal(Int(1))
-                1: Attrset(Bindings { statics: [Idx::<Binding>(0)], inherit_froms: [], dynamics: [] })
-                2: LetAttrset(Bindings { statics: [Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [Idx::<Binding>(2)], inherit_froms: [], dynamics: [] })
-                4: Attrset(Bindings { statics: [Idx::<Binding>(3)], inherit_froms: [], dynamics: [] })
-
-                0: Binding { key: Name("d"), value: Expr(Idx::<Expr>(0)) }
-                1: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(1)) }
-                2: Binding { key: Name("b"), value: Expr(Idx::<Expr>(2)) }
-                3: Binding { key: Name("a"), value: Expr(Idx::<Expr>(3)) }
+                1: Attrset(Bindings { statics: [(Name("d"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: LetAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                4: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
 
                 0: NameDef { name: "c", kind: RecAttrset }
             "#]],
@@ -1263,12 +1190,9 @@ mod tests {
                 1: Literal(Int(1))
                 2: Reference("a")
                 3: Literal(Int(2))
-                4: Attrset(Bindings { statics: [Idx::<Binding>(0)], inherit_froms: [], dynamics: [] })
-                5: Attrset(Bindings { statics: [Idx::<Binding>(1)], inherit_froms: [], dynamics: [] })
+                4: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                5: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
                 6: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(4)), (Idx::<Expr>(2), Idx::<Expr>(5))] })
-
-                0: Binding { key: Name("b"), value: Expr(Idx::<Expr>(1)) }
-                1: Binding { key: Name("b"), value: Expr(Idx::<Expr>(3)) }
             "#]],
         );
     }
@@ -1295,9 +1219,7 @@ mod tests {
                 1: Literal(Int(1))
                 2: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(1))] })
                 3: Literal(Int(1))
-                4: LetIn(Bindings { statics: [Idx::<Binding>(0)], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
-
-                0: Binding { key: NameDef(Idx::<NameDef>(0)), value: Expr(Idx::<Expr>(2)) }
+                4: LetIn(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
 
                 0: NameDef { name: "a", kind: LetIn }
             "#]],

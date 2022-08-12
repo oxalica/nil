@@ -99,14 +99,12 @@ fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<Fi
 pub struct Module {
     exprs: Arena<Expr>,
     name_defs: Arena<NameDef>,
-    bindings: Arena<Binding>,
     entry_expr: ExprId,
     diagnostics: Vec<Diagnostic>,
 }
 
 pub type ExprId = Idx<Expr>;
 pub type NameDefId = Idx<NameDef>;
-pub type BindingId = Idx<Binding>;
 
 impl ops::Index<ExprId> for Module {
     type Output = Expr;
@@ -119,13 +117,6 @@ impl ops::Index<NameDefId> for Module {
     type Output = NameDef;
     fn index(&self, index: NameDefId) -> &Self::Output {
         &self.name_defs[index]
-    }
-}
-
-impl ops::Index<BindingId> for Module {
-    type Output = Binding;
-    fn index(&self, index: BindingId) -> &Self::Output {
-        &self.bindings[index]
     }
 }
 
@@ -142,12 +133,6 @@ impl Module {
         &self,
     ) -> impl Iterator<Item = (NameDefId, &'_ NameDef)> + ExactSizeIterator + '_ {
         self.name_defs.iter()
-    }
-
-    pub fn bindings(
-        &self,
-    ) -> impl Iterator<Item = (BindingId, &'_ Binding)> + ExactSizeIterator + '_ {
-        self.bindings.iter()
     }
 
     pub(crate) fn module_references_query(
@@ -219,7 +204,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
+    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match self {
             Self::Missing | Self::Reference(_) | Self::Literal(_) => {}
             Self::Lambda(_, pat, body) => {
@@ -256,11 +241,11 @@ impl Expr {
                 xs.iter().copied().for_each(f)
             }
             Self::LetIn(bindings, body) => {
-                bindings.walk_child_exprs(module, &mut f);
+                bindings.walk_child_exprs(&mut f);
                 f(*body);
             }
             Self::Attrset(bindings) | Self::RecAttrset(bindings) | Self::LetAttrset(bindings) => {
-                bindings.walk_child_exprs(module, f);
+                bindings.walk_child_exprs(f);
             }
         }
     }
@@ -296,18 +281,11 @@ pub struct Pat {
 
 pub type Attrpath = Box<[ExprId]>;
 
-// FIXME: Make static and dynamic bindings both flattened or both not?
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bindings {
-    pub statics: Box<[BindingId]>,
+    pub statics: Box<[(BindingKey, BindingValue)]>,
     pub inherit_froms: Box<[ExprId]>,
     pub dynamics: Box<[(ExprId, ExprId)]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Binding {
-    pub key: BindingKey,
-    pub value: BindingValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -324,11 +302,10 @@ pub enum BindingValue {
 }
 
 impl Bindings {
-    pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
-        for &binding in self.statics.iter() {
-            let binding = &module[binding];
-            match binding.value {
-                BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
+    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+        for (_, value) in self.statics.iter() {
+            match value {
+                BindingValue::Inherit(e) | BindingValue::Expr(e) => f(*e),
                 // Walking here would be redundant, we traverse them outside `entries` loop.
                 BindingValue::InheritFrom(_) => {}
             }
@@ -338,15 +315,10 @@ impl Bindings {
         }
     }
 
-    pub(crate) fn walk_child_defs(
-        &self,
-        module: &Module,
-        mut f: impl FnMut(NameDefId, &BindingValue),
-    ) {
-        for &binding in self.statics.iter() {
-            let binding = &module[binding];
-            if let &BindingKey::NameDef(def) = &binding.key {
-                f(def, &binding.value);
+    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameDefId, &BindingValue)) {
+        for (key, value) in self.statics.iter() {
+            if let &BindingKey::NameDef(def) = key {
+                f(def, value);
             }
         }
     }
