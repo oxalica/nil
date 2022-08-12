@@ -22,7 +22,16 @@ let
         nvim-cmp
         cmp_luasnip
         cmp-nvim-lsp
-        nvim-lspconfig
+        # https://github.com/neovim/nvim-lspconfig/pull/2053
+        (nvim-lspconfig.overrideAttrs (old: {
+          version = "pr-2053";
+          src = pkgs.fetchFromGitHub {
+            owner = "neovim";
+            repo = "nvim-lspconfig";
+            rev = "e094ff79c6f5b806f601c930d37870988bb5feaa";
+            hash = "sha256-50sXmJMb7MUPWwtE/tt3neP3TNmC2guvMzJqeS4Tp98=";
+          };
+        }))
       ];
     };
   }).overrideAttrs (old: {
@@ -88,7 +97,7 @@ let
 
     local lsp_path = vim.env.NIL_PATH or 'target/debug/nil'
     local log_path = vim.env.NIL_LOG_PATH or '/tmp/nil.log'
-    require('lspconfig').rnix.setup {
+    require('lspconfig').nil_ls.setup {
       autostart = true,
       capabilities = caps,
       cmd = {

@@ -33,6 +33,7 @@
             # Override the stable rustfmt.
             rustPkgs.rust-nightly_2022-08-01.availableComponents.rustfmt
             rustPkgs.rust
+            pkgs.gdb
             pkgs.jq
             (import ./neovim-env.nix { inherit pkgs; })
           ];

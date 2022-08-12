@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use walkdir::WalkDir;
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 
@@ -38,7 +37,7 @@ impl State {
     pub fn run(&mut self, lsp_receiver: Receiver<Message>) -> Result<()> {
         if let Some(root) = &self.workspace_root {
             let mut vfs = self.vfs.write().unwrap();
-            for entry in WalkDir::new(root).follow_links(false).sort_by_file_name() {
+            for entry in ignore::WalkBuilder::new(root).follow_links(false).build() {
                 (|| -> Option<()> {
                     let entry = entry.ok()?;
                     let relative_path = entry.path().strip_prefix(root).ok()?;
