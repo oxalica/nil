@@ -147,13 +147,9 @@ pub(crate) fn liveness_check_query(
                 unused_withs.push(expr);
             }
             Expr::RecAttrset(bindings)
-                if bindings.entries.iter().all(|&b| {
-                    match module[b].key {
-                        BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
-                        // Dynamic names are not in scopes.
-                        BindingKey::Dynamic(_) => true,
-                        BindingKey::Name(_) => unreachable!(),
-                    }
+                if bindings.statics.iter().all(|&b| match module[b].key {
+                    BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
+                    BindingKey::Name(_) => unreachable!(),
                 }) =>
             {
                 unused_recs.push(expr);
@@ -225,8 +221,6 @@ mod tests {
     }
 
     #[test]
-    // FIXME: This panics due to a bug in source_map.
-    #[ignore]
     fn let_and_rec() {
         check("let   a = 1; in $0rec { inherit a; }");
         check("let $0a = 1; in   rec { a = a/*self*/; }");

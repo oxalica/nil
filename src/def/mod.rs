@@ -288,7 +288,7 @@ pub enum Literal {
     Path(Path),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pat {
     pub fields: Box<[(Option<NameDefId>, Option<ExprId>)]>,
     pub ellipsis: bool,
@@ -296,10 +296,12 @@ pub struct Pat {
 
 pub type Attrpath = Box<[ExprId]>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// FIXME: Make static and dynamic bindings both flattened or both not?
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bindings {
-    pub entries: Box<[BindingId]>,
+    pub statics: Box<[BindingId]>,
     pub inherit_froms: Box<[ExprId]>,
+    pub dynamics: Box<[(ExprId, ExprId)]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -312,7 +314,6 @@ pub struct Binding {
 pub enum BindingKey {
     NameDef(NameDefId),
     Name(SmolStr),
-    Dynamic(ExprId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -324,12 +325,8 @@ pub enum BindingValue {
 
 impl Bindings {
     pub(crate) fn walk_child_exprs(&self, module: &Module, mut f: impl FnMut(ExprId)) {
-        for &binding in self.entries.iter() {
+        for &binding in self.statics.iter() {
             let binding = &module[binding];
-            match binding.key {
-                BindingKey::NameDef(_) | BindingKey::Name(_) => {}
-                BindingKey::Dynamic(e) => f(e),
-            }
             match binding.value {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => f(e),
                 // Walking here would be redundant, we traverse them outside `entries` loop.
@@ -346,7 +343,7 @@ impl Bindings {
         module: &Module,
         mut f: impl FnMut(NameDefId, &BindingValue),
     ) {
-        for &binding in self.entries.iter() {
+        for &binding in self.statics.iter() {
             let binding = &module[binding];
             if let &BindingKey::NameDef(def) = &binding.key {
                 f(def, &binding.value);

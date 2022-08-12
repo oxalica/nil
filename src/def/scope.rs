@@ -136,7 +136,7 @@ impl ModuleScopes {
     ) -> ScopeId {
         let mut defs = HashMap::default();
 
-        for &binding in bindings.entries.iter() {
+        for &binding in bindings.statics.iter() {
             let binding = &module[binding];
             if let &BindingKey::NameDef(def) = &binding.key {
                 defs.insert(module[def].name.clone(), def);
@@ -158,13 +158,16 @@ impl ModuleScopes {
             })
         };
 
-        for &binding in bindings.entries.iter() {
+        for &binding in bindings.statics.iter() {
             let binding = &module[binding];
-            if let BindingKey::Dynamic(expr) = binding.key {
-                self.traverse_expr(module, expr, scope);
-            }
-            if let BindingValue::Expr(expr) = binding.value {
-                self.traverse_expr(module, expr, scope);
+            match binding.value {
+                // Traversed before.
+                BindingValue::Inherit(_) |
+                // Traversed later.
+                BindingValue::InheritFrom(_) => {},
+                BindingValue::Expr(e) => {
+                    self.traverse_expr(module, e, scope);
+                }
             }
         }
         for &e in bindings.inherit_froms.iter() {
