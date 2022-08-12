@@ -16,7 +16,7 @@ use std::ops;
 use std::sync::Arc;
 use syntax::Parse;
 
-pub use self::liveness::LivenessCheck;
+pub use self::liveness::LivenessCheckResult;
 pub use self::path::{Path, PathAnchor, PathData};
 pub use self::scope::{ModuleScopes, NameReferenceMap, ResolveResult, ScopeData, ScopeId};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
@@ -51,8 +51,8 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(NameReferenceMap::name_reference_map_query)]
     fn name_reference_map(&self, file_id: FileId) -> Arc<NameReferenceMap>;
 
-    #[salsa::invoke(LivenessCheck::liveness_check_query)]
-    fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheck>;
+    #[salsa::invoke(liveness::liveness_check_query)]
+    fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheckResult>;
 }
 
 fn parse(db: &dyn DefDatabase, file_id: FileId) -> Parse {

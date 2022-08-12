@@ -1,179 +1,172 @@
-//! Liveness check of bindings and "with" expressions,
-//! locating uncessary or inaccessible bindings and expressions.
+//! Liveness check of names.
+//! It locates uncessary or inaccessible bindings and expressions, based on name resolution.
 //!
-//! We only identify codes eliminable without any semantic change.
-//! Thus names in LetIn are subjects of warnings, while fields from RecAttrset or Pat are not.
+//! Our goals are,
+//! - Applicatable.
+//!   Removing ALL unused items will work and be semantically identical.
+//! - Closed.
+//!   If there is an unused binding, it either has no references,
+//!   or each of its reference is included by some reported unused binding.
+//! - Self-contained.
+//!   Warnings inside a sub-expression should not be influenced by if the sub-expression itself
+//!   is reachable from root.
+//!   So one unreachable binding should not cause ALL deep bindings to be spammed.
+//!
+//! We now identifies,
+//! - Unused `let` bindings.
+//! - Unused `with` expressions.
+//! - Unnecessary `rec` attrsets.
+use super::{BindingKey, BindingValue, DefDatabase, Expr, ExprId, NameDefId, ResolveResult};
+use crate::{Diagnostic, DiagnosticKind, FileId};
 use la_arena::ArenaMap;
-
-use super::{
-    BindingKey, BindingValue, DefDatabase, Expr, ExprId, Module, ModuleScopes, NameDefId,
-    ResolveResult,
-};
-use crate::FileId;
+use rowan::ast::AstNode;
+use rowan::TextRange;
+use std::collections::HashMap;
 use std::sync::Arc;
+use syntax::ast;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct LivenessCheck {
-    unused_name_defs: Box<[NameDefId]>,
-    unused_withs: Box<[ExprId]>,
-    unused_recs: Box<[ExprId]>,
+pub struct LivenessCheckResult {
+    name_defs: Box<[NameDefId]>,
+    withs: Box<[ExprId]>,
+    rec_attrsets: Box<[ExprId]>,
 }
 
-impl LivenessCheck {
-    pub fn unused_name_defs(&self) -> &[NameDefId] {
-        &self.unused_name_defs
-    }
-
-    pub fn unused_withs(&self) -> &[ExprId] {
-        &self.unused_withs
-    }
-
-    pub fn unused_recs(&self) -> &[ExprId] {
-        &self.unused_recs
-    }
-
-    pub(crate) fn liveness_check_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
-        let module = db.module(file_id);
-        let scopes = db.scopes(file_id);
-        let mut traversal = Traversal::new(&module, &scopes);
-        traversal.run(module.entry_expr);
-        Arc::new(Self {
-            unused_name_defs: traversal.unused_name_defs.into(),
-            unused_withs: traversal.unused_withs.into(),
-            unused_recs: traversal.unused_recs.into(),
-        })
+impl LivenessCheckResult {
+    pub fn to_diagnostics<'a>(
+        &'a self,
+        db: &dyn DefDatabase,
+        file: FileId,
+    ) -> impl Iterator<Item = Diagnostic> + 'a {
+        let source_map = db.source_map(file);
+        let root = db.parse(file).syntax_node();
+        let mut diags = Vec::new();
+        diags.extend(self.name_defs.iter().map(|&def| {
+            let ptr = source_map.name_def_node(def).unwrap();
+            Diagnostic::new(ptr.text_range(), DiagnosticKind::UnusedBinding)
+        }));
+        diags.extend(self.withs.iter().map(|&expr| {
+            let ptr = source_map.expr_node(expr).unwrap();
+            let node = ast::With::cast(ptr.to_node(&root)).unwrap();
+            let header_range = match (node.with_token(), node.semicolon_token()) {
+                (Some(start), Some(end)) => start.text_range().cover(end.text_range()),
+                _ => TextRange::empty(ptr.text_range().start()),
+            };
+            Diagnostic::new(header_range, DiagnosticKind::UnusedWith)
+        }));
+        diags.extend(self.rec_attrsets.iter().map(|&expr| {
+            let ptr = source_map.expr_node(expr).unwrap();
+            let node = ast::AttrSet::cast(ptr.to_node(&root)).unwrap();
+            let range = node.rec_token().map_or_else(
+                || TextRange::empty(ptr.text_range().start()),
+                |tok| tok.text_range(),
+            );
+            Diagnostic::new(range, DiagnosticKind::UnusedRec)
+        }));
+        diags.into_iter()
     }
 }
 
-struct Traversal<'a> {
-    module: &'a Module,
-    scopes: &'a ModuleScopes,
-    def_expr_map: ArenaMap<NameDefId, ExprId>,
-    visited_defs: ArenaMap<NameDefId, ()>,
-    visited_def_exprs: ArenaMap<ExprId, ()>,
-    visited_withs: ArenaMap<ExprId, ()>,
-    queue: Vec<ExprId>,
-    unused_name_defs: Vec<NameDefId>,
-    unused_withs: Vec<ExprId>,
-    unused_recs: Vec<ExprId>,
-}
+pub(crate) fn liveness_check_query(
+    db: &dyn DefDatabase,
+    file_id: FileId,
+) -> Arc<LivenessCheckResult> {
+    let module = db.module(file_id);
+    let scopes = db.scopes(file_id);
 
-impl<'a> Traversal<'a> {
-    fn new(module: &'a Module, scopes: &'a ModuleScopes) -> Self {
-        // Preprocess dependencies of each NameDef.
-        let mut def_expr_map: ArenaMap<NameDefId, ExprId> = ArenaMap::default();
-        for (_, binding) in module.bindings() {
-            // Here we only track dependencies, thus InheritFrom is the same as Inherit.
-            if let (
-                &BindingKey::NameDef(def),
-                BindingValue::Inherit(e) | BindingValue::InheritFrom(e) | BindingValue::Expr(e),
-            ) = (&binding.key, binding.value)
-            {
-                def_expr_map.insert(def, e);
-            }
-        }
+    // Unused let-bindings are eagerly collected into this.
+    let mut unused_defs = Vec::new();
 
-        Self {
-            module,
-            scopes,
-            def_expr_map,
-            visited_defs: ArenaMap::default(),
-            visited_def_exprs: ArenaMap::default(),
-            visited_withs: ArenaMap::default(),
-            queue: Vec::new(),
-            unused_name_defs: Vec::new(),
-            unused_withs: Vec::new(),
-            unused_recs: Vec::new(),
-        }
-    }
+    // For rec-attrset check.
+    let mut visited_defs: ArenaMap<NameDefId, ()> = ArenaMap::default();
+    // For traversal of let-in bindings.
+    let mut visited_def_rhs = ArenaMap::default();
+    let mut visited_withs = ArenaMap::default();
+    let mut stack = vec![module.entry_expr];
 
-    // Traverse live expressions and detect dead codes.
-    fn run(&mut self, entry: ExprId) {
-        // Traverse with BFS.
-        self.queue.push(entry);
-        while let Some(expr) = self.queue.pop() {
-            match &self.module[expr] {
-                Expr::Reference(name) => match self.scopes.resolve_name(expr, name) {
+    while !stack.is_empty() {
+        // N.B. This should be dropped in every loop.
+        // Or it will make this whole check cost quadratic time!
+        let mut discovered_let_rhs: HashMap<NameDefId, ExprId> = HashMap::new();
+
+        // Traverse all reachable Exprs from roots.
+        while let Some(expr) = stack.pop() {
+            match &module[expr] {
+                Expr::Reference(name) => match scopes.resolve_name(expr, name) {
                     Some(ResolveResult::NameDef(def)) => {
-                        self.visited_defs.insert(def, ());
-                        if let Some(&e) = self.def_expr_map.get(def) {
-                            // Bindings can be referenced in multiple places.
-                            // We need to avoid re-entrance.
-                            if self.visited_def_exprs.get(e).is_none() {
-                                self.visited_def_exprs.insert(e, ());
-                                self.queue.push(e);
+                        visited_defs.insert(def, ());
+                        if let Some(rhs) = discovered_let_rhs.remove(&def) {
+                            // Dedup inherit-from expressions.
+                            if visited_def_rhs.get(rhs).is_none() {
+                                visited_def_rhs.insert(rhs, ());
+                                stack.push(rhs);
                             }
                         }
                     }
                     Some(ResolveResult::WithExprs(exprs)) => {
                         for expr in exprs {
-                            self.visited_withs.insert(expr, ());
+                            visited_withs.insert(expr, ());
                         }
                     }
                     Some(ResolveResult::Builtin(_)) | None => {}
                 },
-                // Don't walk LetIn bindings unless referenced.
-                Expr::LetIn(_, body) => self.queue.push(*body),
-                e => e.walk_child_exprs(self.module, |e| self.queue.push(e)),
+                Expr::LetIn(bindings, body) => {
+                    // Pre-mark all let-binding.
+                    bindings.walk_child_defs(&module, |def, value| {
+                        let (BindingValue::Inherit(e)
+                        | BindingValue::InheritFrom(e)
+                        | BindingValue::Expr(e)) = *value;
+                        discovered_let_rhs.insert(def, e);
+                    });
+
+                    // Traverse the body as root.
+                    stack.push(*body);
+                }
+                e => e.walk_child_exprs(&module, |e| stack.push(e)),
             }
         }
 
-        self.collect(entry);
+        // Record unused let-bindings and continue traversal inside them,
+        // as if themselves are reachable.
+        unused_defs.extend(discovered_let_rhs.iter().map(|(&def, _)| def));
+        stack.extend(discovered_let_rhs.iter().map(|(_, &rhs)| rhs));
     }
 
-    /// Collect unused codes. But re-visit outmost unused bindings to avoid redandunt results.
-    fn collect(&mut self, expr: ExprId) {
-        let kind = &self.module[expr];
-
+    // Finally, collect unused lambda parameters, "with" expressions and "rec" attrsets.
+    // It's intended to not reporting them if they are only referenced by some unused let-bindings.
+    // Unused let-bindings may be caused by unfinished codes or typos,
+    // situation may be changed when user tries to fixing them.
+    let mut unused_withs = Vec::new();
+    let mut unused_recs = Vec::new();
+    for (expr, kind) in module.exprs() {
         match kind {
-            Expr::LetIn(bindings, body) => {
-                // Collect all errors first.
-                bindings.walk_child_defs(self.module, |def, _| {
-                    if self.visited_defs.get(def).is_none() {
-                        self.unused_name_defs.push(def);
-                    }
-                });
-
-                // Then recover from outermost Expr.
-                bindings.walk_child_defs(self.module, |def, value| {
-                    if self.visited_defs.get(def).is_none() {
-                        let e = match *value {
-                            BindingValue::Inherit(e)
-                            | BindingValue::InheritFrom(e)
-                            | BindingValue::Expr(e) => e,
-                        };
-                        self.run(e);
-                    }
-                });
-
-                self.collect(*body);
-
-                // Bindings are already re-collected! Don't repeat.
-                return;
+            &Expr::Lambda(Some(param), Some(_), _) if visited_defs.get(param).is_none() => {
+                unused_defs.push(param);
             }
-            Expr::With(..) if self.visited_withs.get(expr).is_none() => {
-                self.unused_withs.push(expr);
-            }
-            &Expr::Lambda(Some(param), Some(_), _) if self.visited_defs.get(param).is_none() => {
-                self.unused_name_defs.push(param);
+            &Expr::With(..) if visited_withs.get(expr).is_none() => {
+                unused_withs.push(expr);
             }
             Expr::RecAttrset(bindings)
-                if bindings
-                    .entries
-                    .iter()
-                    .all(|&binding| match self.module[binding].key {
-                        BindingKey::NameDef(def) => self.visited_defs.get(def).is_none(),
-                        BindingKey::Name(_) | BindingKey::Dynamic(_) => true,
-                    }) =>
+                if bindings.entries.iter().all(|&b| {
+                    match module[b].key {
+                        BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
+                        // Dynamic names are not in scopes.
+                        BindingKey::Dynamic(_) => true,
+                        BindingKey::Name(_) => unreachable!(),
+                    }
+                }) =>
             {
-                self.unused_recs.push(expr);
+                unused_recs.push(expr);
             }
             _ => {}
         }
-
-        // There may be more deep LetIn need collection.
-        kind.walk_child_exprs(self.module, |e| self.collect(e));
     }
+
+    Arc::new(LivenessCheckResult {
+        name_defs: unused_defs.into(),
+        withs: unused_withs.into(),
+        rec_attrsets: unused_recs.into(),
+    })
 }
 
 #[cfg(test)]
@@ -185,26 +178,13 @@ mod tests {
     fn check(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.files().len(), 1);
-        let expect = f.markers().iter().map(|p| p.pos).collect::<Vec<_>>();
         let file = f.files()[0];
-        let source_map = db.source_map(file);
-        let liveness = db.liveness_check(file);
-        let mut got = liveness
-            .unused_name_defs
-            .iter()
-            .map(|&def| source_map.name_def_node(def).unwrap().text_range().start())
-            .chain(
-                liveness
-                    .unused_withs
-                    .iter()
-                    .map(|&expr| source_map.expr_node(expr).unwrap().text_range().start()),
-            )
-            .chain(
-                liveness
-                    .unused_recs()
-                    .iter()
-                    .map(|&expr| source_map.expr_node(expr).unwrap().text_range().start()),
-            )
+        assert_eq!(db.module(file).diagnostics(), Vec::new(), "Lower error");
+        let expect = f.markers().iter().map(|p| p.pos).collect::<Vec<_>>();
+        let mut got = db
+            .liveness_check(file)
+            .to_diagnostics(&db, file)
+            .map(|diag| diag.range.start())
             .collect::<Vec<_>>();
         got.sort_unstable();
         assert_eq!(got, expect);
@@ -212,9 +192,16 @@ mod tests {
 
     #[test]
     fn let_in() {
-        check("let a = 1; $0b = a; c = a; in c");
+        // Transitive references.
+        check("let   a = b; b = 1;   c = a; in c");
+        check("let   a = b; b = 1; $0c = a; in a");
+        // Shadowing.
         check("let $0a = 1; in let a = 2; in a");
-        check("let a = 1; in let inherit a; in a");
+        check("let $0a = 1; in let a = a/*self*/; in a");
+        // Not shadowing.
+        check("let   a = 1; in let inherit a; in a");
+        // Mutual references.
+        check("let $0a = b; $1b = a; in 1");
     }
 
     #[test]
@@ -230,19 +217,39 @@ mod tests {
 
     #[test]
     fn rec_attrset() {
-        check("rec { a = 1; b = a; c = 1; }");
         check("$0rec { a = 1; b = 1; c = 1; }");
         check("$0rec { }");
+        check("  rec { a = 1; b = a; c = 1; }");
+        check("  rec { a = b; b = a; }");
+        check("  rec { a = a/*self*/; }");
     }
 
     #[test]
-    fn no_recursive_unused() {
-        check("let $0a = let b = 1; in b; in 1");
-        check("let $0a = rec { b = b; }; in 1");
+    // FIXME: This panics due to a bug in source_map.
+    #[ignore]
+    fn let_and_rec() {
+        check("let   a = 1; in $0rec { inherit a; }");
+        check("let $0a = 1; in   rec { a = a/*self*/; }");
+        check("let $0a =   rec { a = a/*self*/; }; in 1");
+        check("let $0a = $1rec { inherit a; }; in 1");
+        check("rec { a = 1; b = let $0c = a; in 1; }");
     }
 
     #[test]
-    fn deeper_unused_use_outer_unused() {
+    fn nested_let() {
+        check("let   a = let   b = 1; in b; in a");
+        check("let $0a = let   b = 1; in b; in 1");
+        check("let $0a = let $1b = 1; in 1; in 1");
+        check("let   a = let $0b = 1; in 1; in a");
+
+        check("let   a = 1;   b = let   c = a; in c; in b");
+        check("let $0a = 1;   b = let $1c = a; in 1; in b");
+        check("let $0a = 1; $1b = let   c = a; in c; in 1");
         check("let $0a = 1; $1b = let $2c = a; in 1; in 1");
+    }
+
+    #[test]
+    fn with_used_by_unused_let() {
+        check("with 1; let $0a = from_with; in 1");
     }
 }
