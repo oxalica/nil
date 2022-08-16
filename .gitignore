@@ -1,3 +1,7 @@
 /target
 /.envrc
 /result*
+
+# Profiling
+/*.svg
+perf.*

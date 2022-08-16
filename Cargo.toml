@@ -25,3 +25,6 @@ members = [
     "syntax",
     "lsp",
 ]
+
+[profile.release]
+debug = 1
