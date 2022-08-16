@@ -1,7 +1,7 @@
 Unexpected token at 8..11
 Missing SEMICOLON at 12..12
 Missing KW_IN at 12..12
-Unexpected token at 12..12
+Missing expression at 12..12
 SOURCE_FILE@0..12
   LET_IN@0..12
     KW_LET@0..3 "let"

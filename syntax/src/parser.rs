@@ -324,114 +324,72 @@ impl<'i> Parser<'i> {
     /// Operator level expression (low priority).
     /// Maybe consume nothing.
     fn expr_operator_opt(&mut self) {
-        self.op_imply();
+        self.expr_bp(0);
     }
 
-    fn op_left(&mut self, mut next: impl FnMut(&mut Self), ops: &[SyntaxKind]) {
-        let cp = self.checkpoint();
-        next(self);
-        while matches!(self.peek_non_ws(), Some(k) if ops.contains(&k)) {
-            self.start_node_at(cp, BINARY_OP);
-            self.bump();
-            next(self);
-            self.finish_node();
-        }
-    }
-    fn op_right(&mut self, mut next: impl FnMut(&mut Self), ops: &[SyntaxKind]) {
-        let mut cp = self.checkpoint();
-        next(self);
-        let mut node_cnt = 0usize;
-        while matches!(self.peek_non_ws(), Some(k) if ops.contains(&k)) {
-            node_cnt += 1;
-            self.start_node_at(cp, BINARY_OP);
-            self.bump();
-            cp = self.checkpoint();
-            next(self);
-        }
-        for _ in 0..node_cnt {
-            self.finish_node();
-        }
-    }
-    fn op_no_assoc(&mut self, mut next: impl FnMut(&mut Self), ops: &[SyntaxKind]) {
-        let cp = self.checkpoint();
-        next(self);
-        while matches!(self.peek_non_ws(), Some(k) if ops.contains(&k)) {
-            self.start_node_at(cp, BINARY_OP);
-            self.bump();
-            next(self);
-
-            // Tolerate incorrect usage of no associative operators, and just mark them.
-            while matches!(self.peek_non_ws(), Some(k) if ops.contains(&k)) {
-                self.error(ErrorKind::MultipleNoAssoc);
-                self.bump();
-                next(self);
+    // Pratt parser.
+    // Ref: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+    fn expr_bp(&mut self, min_bp: u8) {
+        // Always consume whitespace first, even though not `allow_prefix`.
+        let tok = match self.peek_non_ws() {
+            None => {
+                self.error(ErrorKind::MissingExpr);
+                return;
             }
-            self.finish_node()
-        }
-    }
-    fn op_unary(&mut self, mut next: impl FnMut(&mut Self), tok: SyntaxKind) {
-        let mut node_cnt = 0usize;
-        while self.peek_non_ws() == Some(tok) {
-            self.start_node(UNARY_OP);
-            self.bump();
-            node_cnt += 1;
-        }
-        next(self);
-        for _ in 0..node_cnt {
-            self.finish_node();
-        }
-    }
+            Some(tok) => tok,
+        };
 
-    fn op_imply(&mut self) {
-        self.op_right(Self::op_or, &[T![->]]);
-    }
-    fn op_or(&mut self) {
-        self.op_left(Self::op_and, &[T![||]]);
-    }
-    fn op_and(&mut self) {
-        self.op_left(Self::op_eq, &[T![&&]]);
-    }
-    fn op_eq(&mut self) {
-        self.op_no_assoc(Self::op_cmp, &[T![==], T![!=]]);
-    }
-    fn op_cmp(&mut self) {
-        self.op_no_assoc(Self::op_update, &[T![<], T![>], T![<=], T![>=]]);
-    }
-    fn op_update(&mut self) {
-        self.op_right(Self::op_not, &[T!["//"]]);
-    }
-    fn op_not(&mut self) {
-        self.op_unary(Self::op_add, T![!]);
-    }
-    fn op_add(&mut self) {
-        self.op_left(Self::op_mul, &[T![+], T![-]]);
-    }
-    fn op_mul(&mut self) {
-        self.op_left(Self::op_concat, &[T![*], T![/]]);
-    }
-    fn op_concat(&mut self) {
-        self.op_right(Self::op_has_attr, &[T![++]]);
-    }
-    fn op_has_attr(&mut self) {
         let cp = self.checkpoint();
-        self.op_neg();
-        while self.peek_non_ws() == Some(T![?]) {
-            self.start_node_at(cp, HAS_ATTR);
-            self.bump(); // ?
-            self.attrpath_opt();
-            self.finish_node();
+
+        match tok.prefix_bp() {
+            Some(rbp) => {
+                self.start_node(UNARY_OP);
+                self.bump(); // Prefix op.
+                self.expr_bp(rbp);
+                self.finish_node();
+            }
+            _ => self.expr_select_opt(),
         }
-    }
-    fn op_neg(&mut self) {
-        self.op_unary(Self::op_app, T![-]);
-    }
-    fn op_app(&mut self) {
-        let next = Self::expr_select_opt;
-        let cp = self.checkpoint();
-        next(self);
-        while matches!(self.peek_non_ws(), Some(k) if k.can_start_atom_expr()) {
-            self.start_node_at(cp, APPLY);
-            next(self);
+
+        loop {
+            let tok = match self.peek_non_ws() {
+                None => break,
+                Some(tok) => tok,
+            };
+
+            if let Some(lbp) = tok.postfix_bp() {
+                if lbp < min_bp {
+                    break;
+                }
+
+                // Currently we have only HAS_ATTR as a postfix operator.
+                assert_eq!(tok, T![?]);
+                self.start_node_at(cp, HAS_ATTR);
+                self.bump(); // `?`
+                self.attrpath_opt();
+                self.finish_node();
+                continue;
+            }
+
+            let (lbp, rbp) = match tok.infix_bp() {
+                None => break,
+                Some(bps) => bps,
+            };
+            if lbp == min_bp {
+                self.error(ErrorKind::MultipleNoAssoc);
+                break;
+            }
+            if lbp < min_bp {
+                break;
+            }
+
+            if rbp == APPLY_RBP {
+                self.start_node_at(cp, APPLY);
+            } else {
+                self.start_node_at(cp, BINARY_OP);
+                self.bump(); // Infix op.
+            }
+            self.expr_bp(rbp);
             self.finish_node();
         }
     }
@@ -453,7 +411,7 @@ impl<'i> Parser<'i> {
             }
             self.finish_node();
 
-        // Yes, this is wierd, but Nix parse `or` immediately after a non-select atom expression,
+        // Yes, this is weird, but Nix parse `or` immediately after a non-select atom expression,
         // and construct a Apply node, with higher priority than left-associative Apply.
         // `a b or c` => `(a (b or)) c`
         } else if self.peek_non_ws() == Some(T![or]) {
@@ -801,4 +759,51 @@ impl SyntaxKind {
                 | T!['[']
         )
     }
+
+    #[rustfmt::skip]
+    fn prefix_bp(self) -> Option<u8> {
+        // See `infix_bp`.
+        Some(match self {
+            T![!] => 13,
+            T![-] => 23,
+            _ => return None,
+        })
+    }
+
+    #[rustfmt::skip]
+    fn postfix_bp(self) -> Option<u8> {
+        // See `infix_bp`.
+        Some(match self {
+            T![?] => 21,
+            _ => return None,
+        })
+    }
+
+    #[rustfmt::skip]
+    fn infix_bp(self) -> Option<(u8, u8)> {
+        Some(match self {
+            T![->] => (2, 1),
+            T![||] => (3, 4),
+            T![&&] => (5, 6),
+            T![==] |
+            T![!=] => (7, 7),
+            T![<] |
+            T![<=] |
+            T![>] |
+            T![>=] => (9, 9),
+            T!["//"] => (12, 11),
+            // Prefix `!` => 13
+            T![+] |
+            T![-] => (15, 16),
+            T![*] |
+            T![/] => (17, 18),
+            T![++] => (20, 19),
+            // Postfix `?` => 21
+            // Prefix `-` => 23
+            _ if self.can_start_atom_expr() => (25, 26), // APPLY
+            _ => return None,
+        })
+    }
 }
+
+const APPLY_RBP: u8 = 26;

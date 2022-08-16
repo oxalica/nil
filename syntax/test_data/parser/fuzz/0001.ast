@@ -1,7 +1,7 @@
 Unexpected token at 3..4
 Unexpected token at 4..5
 Missing COLON at 6..6
-Unexpected token at 6..6
+Missing expression at 6..6
 SOURCE_FILE@0..6
   LAMBDA@0..6
     PARAM@0..6

@@ -1,5 +1,5 @@
-SOURCE_FILE@0..42
-  LET_IN@0..42
+SOURCE_FILE@0..50
+  LET_IN@0..50
     KW_LET@0..3 "let"
     SPACE@3..4 " "
     ATTR_PATH_VALUE@4..11
@@ -15,11 +15,11 @@ SOURCE_FILE@0..42
     SPACE@11..12 " "
     KW_IN@12..14 "in"
     SPACE@14..15 " "
-    BINARY_OP@15..42
-      LIST@15..30
+    BINARY_OP@15..50
+      LIST@15..38
         L_BRACK@15..16 "["
         SPACE@16..17 " "
-        SELECT@17..29
+        SELECT@17..31
           ATTR_SET@17..20
             L_CURLY@17..18 "{"
             SPACE@18..19 " "
@@ -30,26 +30,37 @@ SOURCE_FILE@0..42
               KW_OR@21..23 "or"
             SPACE@23..24 " "
           KW_OR@24..26 "or"
-          SPACE@26..27 " "
-          LITERAL@27..28
-            INT@27..28 "1"
-          SPACE@28..29 " "
-        R_BRACK@29..30 "]"
-      SPACE@30..31 " "
-      PLUS@31..32 "+"
-      SPACE@32..33 " "
-      APPLY@33..42
-        APPLY@33..39
-          REF@33..34
-            IDENT@33..34 "f"
-          SPACE@34..35 " "
-          APPLY@35..39
-            REF@35..36
-              IDENT@35..36 "a"
-            SPACE@36..37 " "
-            REF@37..39
-              KW_OR@37..39 "or"
-        SPACE@39..40 " "
-        REF@40..41
-          IDENT@40..41 "b"
-        SPACE@41..42 "\n"
+          APPLY@26..31
+            SPACE@26..27 " "
+            LITERAL@27..28
+              INT@27..28 "1"
+            SPACE@28..29 " "
+            REF@29..31
+              KW_OR@29..31 "or"
+        SPACE@31..32 " "
+        APPLY@32..36
+          LITERAL@32..33
+            INT@32..33 "2"
+          SPACE@33..34 " "
+          REF@34..36
+            KW_OR@34..36 "or"
+        SPACE@36..37 " "
+        R_BRACK@37..38 "]"
+      SPACE@38..39 " "
+      PLUS@39..40 "+"
+      SPACE@40..41 " "
+      APPLY@41..50
+        APPLY@41..48
+          REF@41..42
+            IDENT@41..42 "f"
+          SPACE@42..43 " "
+          APPLY@43..47
+            REF@43..44
+              IDENT@43..44 "a"
+            SPACE@44..45 " "
+            REF@45..47
+              KW_OR@45..47 "or"
+          SPACE@47..48 " "
+        REF@48..49
+          IDENT@48..49 "b"
+        SPACE@49..50 "\n"

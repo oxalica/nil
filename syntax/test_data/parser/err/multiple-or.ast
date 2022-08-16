@@ -1,0 +1,33 @@
+Unexpected token at 6..8
+Unexpected token at 17..19
+SOURCE_FILE@0..24
+  APPLY@0..24
+    PAREN@0..9
+      L_PAREN@0..1 "("
+      APPLY@1..5
+        REF@1..2
+          IDENT@1..2 "a"
+        SPACE@2..3 " "
+        REF@3..5
+          KW_OR@3..5 "or"
+      SPACE@5..6 " "
+      KW_OR@6..8 "or"
+      R_PAREN@8..9 ")"
+    SPACE@9..10 " "
+    LIST@10..23
+      L_BRACK@10..11 "["
+      SPACE@11..12 " "
+      APPLY@12..16
+        REF@12..13
+          IDENT@12..13 "a"
+        SPACE@13..14 " "
+        REF@14..16
+          KW_OR@14..16 "or"
+      SPACE@16..17 " "
+      KW_OR@17..19 "or"
+      SPACE@19..20 " "
+      REF@20..21
+        IDENT@20..21 "b"
+      SPACE@21..22 " "
+      R_BRACK@22..23 "]"
+    SPACE@23..24 "\n"
