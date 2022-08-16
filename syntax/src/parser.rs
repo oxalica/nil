@@ -771,31 +771,6 @@ impl<'i> Parser<'i> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum BinaryOpKind {
-    Imply,
-    Or,
-    And,
-    Equal,
-    NotEqual,
-    Less,
-    Greater,
-    LessEqual,
-    GreaterEqual,
-    Update,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Concat,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum UnaryOpKind {
-    Not,
-    Neg,
-}
-
 impl SyntaxKind {
     fn is_whitespace(self) -> bool {
         matches!(self, COMMENT | SPACE)
