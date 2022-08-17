@@ -1,7 +1,7 @@
 mod liveness;
 mod lower;
+mod nameres;
 mod path;
-mod scope;
 
 #[cfg(test)]
 mod tests;
@@ -17,10 +17,10 @@ use std::sync::Arc;
 use syntax::Parse;
 
 pub use self::liveness::LivenessCheckResult;
-pub use self::path::{Path, PathAnchor, PathData};
-pub use self::scope::{
+pub use self::nameres::{
     ModuleScopes, NameReference, NameResolution, ResolveResult, ScopeData, ScopeId,
 };
+pub use self::path::{Path, PathAnchor, PathData};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
 #[salsa::query_group(DefDatabaseStorage)]
