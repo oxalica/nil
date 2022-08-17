@@ -18,7 +18,9 @@ use syntax::Parse;
 
 pub use self::liveness::LivenessCheckResult;
 pub use self::path::{Path, PathAnchor, PathData};
-pub use self::scope::{ModuleScopes, NameReferenceMap, ResolveResult, ScopeData, ScopeId};
+pub use self::scope::{
+    ModuleScopes, NameReference, NameResolution, ResolveResult, ScopeData, ScopeId,
+};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
 #[salsa::query_group(DefDatabaseStorage)]
@@ -45,11 +47,11 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 
-    #[salsa::invoke(ModuleScopes::resolve_name_query)]
-    fn resolve_name(&self, file_id: FileId, expr_id: ExprId) -> Option<ResolveResult>;
+    #[salsa::invoke(NameResolution::name_resolution_query)]
+    fn name_resolution(&self, file_id: FileId) -> Arc<NameResolution>;
 
-    #[salsa::invoke(NameReferenceMap::name_reference_map_query)]
-    fn name_reference_map(&self, file_id: FileId) -> Arc<NameReferenceMap>;
+    #[salsa::invoke(NameReference::name_reference_query)]
+    fn name_reference(&self, file_id: FileId) -> Arc<NameReference>;
 
     #[salsa::invoke(liveness::liveness_check_query)]
     fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheckResult>;

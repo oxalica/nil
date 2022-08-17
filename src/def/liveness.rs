@@ -72,7 +72,7 @@ pub(crate) fn liveness_check_query(
     file_id: FileId,
 ) -> Arc<LivenessCheckResult> {
     let module = db.module(file_id);
-    let scopes = db.scopes(file_id);
+    let name_res = db.name_resolution(file_id);
 
     // Unused let-bindings are eagerly collected into this.
     let mut unused_defs = Vec::new();
@@ -92,8 +92,8 @@ pub(crate) fn liveness_check_query(
         // Traverse all reachable Exprs from roots.
         while let Some(expr) = stack.pop() {
             match &module[expr] {
-                Expr::Reference(name) => match scopes.resolve_name(expr, name) {
-                    Some(ResolveResult::NameDef(def)) => {
+                Expr::Reference(_) => match name_res.get(expr) {
+                    Some(&ResolveResult::NameDef(def)) => {
                         visited_defs.insert(def, ());
                         if let Some(rhs) = discovered_let_rhs.remove(&def) {
                             // Dedup inherit-from expressions.
@@ -104,7 +104,7 @@ pub(crate) fn liveness_check_query(
                         }
                     }
                     Some(ResolveResult::WithExprs(exprs)) => {
-                        for expr in exprs {
+                        for &expr in exprs {
                             visited_withs.insert(expr, ());
                         }
                     }

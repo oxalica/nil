@@ -36,15 +36,15 @@ pub(crate) fn references(
     })?;
 
     let source_map = db.source_map(file_id);
-    let ref_map = db.name_reference_map(file_id);
+    let name_ref = db.name_reference(file_id);
     let refs = match kind {
         DefKind::Attr(ptr) => {
             let def = source_map.node_name_def(ptr)?;
-            ref_map.def_references(def)
+            name_ref.def_references(def)
         }
         DefKind::With(ptr) => {
             let expr = source_map.node_expr(ptr)?;
-            ref_map.with_references(expr)
+            name_ref.with_references(expr)
         }
     };
     // When {def,with}_references returns None, it means no references,

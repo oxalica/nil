@@ -44,8 +44,9 @@ pub(crate) fn goto_definition(
         }]);
     }
 
-    match db.resolve_name(file_id, expr_id)? {
-        ResolveResult::NameDef(def) => {
+    let name_res = db.name_resolution(file_id);
+    match name_res.get(expr_id)? {
+        &ResolveResult::NameDef(def) => {
             let name_node = source_map.name_def_node(def)?.to_node(&parse.syntax_node());
             let full_node = name_node.ancestors().find(|n| {
                 matches!(

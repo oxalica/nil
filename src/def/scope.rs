@@ -33,19 +33,6 @@ impl ModuleScopes {
         Arc::new(this)
     }
 
-    pub(crate) fn resolve_name_query(
-        db: &dyn DefDatabase,
-        file_id: FileId,
-        expr_id: ExprId,
-    ) -> Option<ResolveResult> {
-        let module = db.module(file_id);
-        let name = match &module[expr_id] {
-            Expr::Reference(name) => name,
-            _ => return None,
-        };
-        db.scopes(file_id).resolve_name(expr_id, name)
-    }
-
     pub fn scope_by_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
         self.scope_by_expr.get(expr_id).copied()
     }
@@ -54,7 +41,8 @@ impl ModuleScopes {
         iter::successors(Some(scope_id), |&i| self[i].parent).map(|i| &self[i])
     }
 
-    pub fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
+    /// Resolve a name in the scope of an Expr.
+    fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
         let scope = self.scope_by_expr(expr_id)?;
         // 1. Local defs.
         if let Some(def) = self
@@ -219,36 +207,64 @@ impl ScopeData {
     }
 }
 
+/// Name resolution of all references.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct NameResolution {
+    resolve_map: HashMap<ExprId, ResolveResult>,
+}
+
+impl NameResolution {
+    pub(crate) fn name_resolution_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
+        let module = db.module(file_id);
+        let scopes = db.scopes(file_id);
+        let resolve_map = module
+            .exprs()
+            .filter_map(|(e, kind)| {
+                match kind {
+                    // Inherited attrs are also translated into Expr::References.
+                    Expr::Reference(name) => Some((e, scopes.resolve_name(e, name)?)),
+                    _ => None,
+                }
+            })
+            .collect();
+        Arc::new(Self { resolve_map })
+    }
+
+    pub fn get(&self, expr: ExprId) -> Option<&ResolveResult> {
+        self.resolve_map.get(&expr)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (ExprId, &'_ ResolveResult)> + '_ {
+        self.resolve_map.iter().map(|(e, res)| (*e, res))
+    }
+}
+
 /// The map of reverse name resolution, or name references.
 /// It is used for name references lookup, but requires resolution of all names.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct NameReferenceMap {
+pub struct NameReference {
     // Assume almost all defs are referenced somewhere.
     def_refs: ArenaMap<NameDefId, Vec<ExprId>>,
     // But there are just some "with"s.
     with_refs: HashMap<ExprId, Vec<ExprId>>,
 }
 
-impl NameReferenceMap {
-    pub(crate) fn name_reference_map_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
-        let module = db.module(file_id);
+impl NameReference {
+    pub(crate) fn name_reference_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
+        let name_res = db.name_resolution(file_id);
         let mut this = Self::default();
-        module
-            .exprs()
-            // N.B. Inherited attrs are also translated into Expr::References.
-            // This should cover all direct references.
-            .filter(|(_, kind)| matches!(kind, Expr::Reference(_)))
-            .filter_map(|(expr, _)| Some((expr, db.resolve_name(file_id, expr)?)))
-            .for_each(|(expr, resolved)| match resolved {
+        for (expr, resolved) in name_res.iter() {
+            match resolved {
                 ResolveResult::Builtin(_) => {}
-                ResolveResult::NameDef(def) => match this.def_refs.get_mut(def) {
+                &ResolveResult::NameDef(def) => match this.def_refs.get_mut(def) {
                     Some(refs) => refs.push(expr),
                     None => this.def_refs.insert(def, vec![expr]),
                 },
                 ResolveResult::WithExprs(withs) => withs
                     .iter()
                     .for_each(|&with_expr| this.with_refs.entry(with_expr).or_default().push(expr)),
-            });
+            }
+        }
         Arc::new(this)
     }
 
@@ -309,6 +325,7 @@ mod tests {
     #[track_caller]
     fn check_resolve(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let file_id = f[0].file_id;
         assert!((1..=2).contains(&f.markers().len()));
         let expect = f.markers().get(1).map(|p| p.pos);
 
@@ -325,11 +342,12 @@ mod tests {
             })
             .expect("No Attr or Expr found");
 
-        let parse = db.parse(f[0].file_id);
-        let source_map = db.source_map(f[0].file_id);
+        let parse = db.parse(file_id);
+        let source_map = db.source_map(file_id);
+        let name_res = db.name_resolution(file_id);
         let expr_id = source_map.expr_map[&ptr];
-        let got = db.resolve_name(f[0].file_id, expr_id).map(|ret| match ret {
-            ResolveResult::NameDef(def) => source_map
+        let got = name_res.get(expr_id).map(|ret| match ret {
+            &ResolveResult::NameDef(def) => source_map
                 .name_def_node(def)
                 .unwrap()
                 .to_node(&parse.syntax_node())
