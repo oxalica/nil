@@ -1,5 +1,5 @@
 use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameDefId};
-use crate::{builtin, FileId};
+use crate::{builtin, Diagnostic, DiagnosticKind, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
 use std::collections::HashMap;
@@ -210,7 +210,8 @@ impl ScopeData {
 /// Name resolution of all references.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct NameResolution {
-    resolve_map: HashMap<ExprId, ResolveResult>,
+    // `None` value for unresolved names.
+    resolve_map: HashMap<ExprId, Option<ResolveResult>>,
 }
 
 impl NameResolution {
@@ -222,7 +223,7 @@ impl NameResolution {
             .filter_map(|(e, kind)| {
                 match kind {
                     // Inherited attrs are also translated into Expr::References.
-                    Expr::Reference(name) => Some((e, scopes.resolve_name(e, name)?)),
+                    Expr::Reference(name) => Some((e, scopes.resolve_name(e, name))),
                     _ => None,
                 }
             })
@@ -231,11 +232,29 @@ impl NameResolution {
     }
 
     pub fn get(&self, expr: ExprId) -> Option<&ResolveResult> {
-        self.resolve_map.get(&expr)
+        self.resolve_map.get(&expr)?.as_ref()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (ExprId, &'_ ResolveResult)> + '_ {
-        self.resolve_map.iter().map(|(e, res)| (*e, res))
+        self.resolve_map
+            .iter()
+            .filter_map(|(e, res)| Some((*e, res.as_ref()?)))
+    }
+
+    pub fn to_diagnostics(
+        &self,
+        db: &dyn DefDatabase,
+        file_id: FileId,
+    ) -> impl Iterator<Item = Diagnostic> + '_ {
+        let source_map = db.source_map(file_id);
+        self.resolve_map
+            .iter()
+            .filter(|(_, res)| res.is_none())
+            .filter_map(move |(&e, _)| {
+                let ptr = source_map.expr_node(e)?;
+                let range = ptr.text_range();
+                Some(Diagnostic::new(range, DiagnosticKind::UndefinedName))
+            })
     }
 }
 

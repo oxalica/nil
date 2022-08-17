@@ -11,6 +11,9 @@ pub(crate) fn diagnostics(db: &dyn DefDatabase, file: FileId) -> Vec<Diagnostic>
     let module = db.module(file);
     diags.extend(module.diagnostics().iter().cloned());
 
+    // Name resolution.
+    diags.extend(db.name_resolution(file).to_diagnostics(db, file));
+
     // Liveness check.
     let liveness = db.liveness_check(file);
     diags.extend(liveness.to_diagnostics(db, file));
@@ -52,6 +55,16 @@ mod tests {
             expect![[r#"
                 2..3: Duplicated name definition
                 9..10: Duplicated name definition
+            "#]],
+        );
+    }
+
+    #[test]
+    fn name_resolution() {
+        check(
+            "a",
+            expect![[r#"
+                0..1: Undefined name
             "#]],
         );
     }

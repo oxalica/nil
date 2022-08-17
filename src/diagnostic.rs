@@ -23,6 +23,9 @@ pub enum DiagnosticKind {
     MergePlainRecAttrset,
     MergeRecAttrset,
 
+    // Name resolution.
+    UndefinedName,
+
     // Liveness.
     UnusedBinding,
     UnusedWith,
@@ -52,7 +55,9 @@ impl Diagnostic {
 
     pub fn severity(&self) -> Severity {
         match self.kind {
-            DiagnosticKind::InvalidDynamic | DiagnosticKind::DuplicatedKey => Severity::Error,
+            DiagnosticKind::InvalidDynamic
+            | DiagnosticKind::DuplicatedKey
+            | DiagnosticKind::UndefinedName => Severity::Error,
             DiagnosticKind::EmptyInherit
             | DiagnosticKind::EmptyLetIn
             | DiagnosticKind::LetAttrset
@@ -96,6 +101,8 @@ impl Diagnostic {
             DiagnosticKind::MergeRecAttrset => {
                 "Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`"
             }
+
+            DiagnosticKind::UndefinedName => "Undefined name",
 
             DiagnosticKind::UnusedBinding => "Unused binding",
             DiagnosticKind::UnusedWith => "Unused `with`",
