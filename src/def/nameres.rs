@@ -159,6 +159,10 @@ impl ModuleScopes {
         for &e in bindings.inherit_froms.iter() {
             self.traverse_expr(module, e, scope);
         }
+        for &(k, v) in bindings.dynamics.iter() {
+            self.traverse_expr(module, k, scope);
+            self.traverse_expr(module, v, scope);
+        }
         scope
     }
 }
@@ -421,6 +425,12 @@ mod tests {
         check_scopes("$6a: rec { inherit $2a; $3b = $1c: $0a; $4e = 1; inherit (a) $5f; }");
         check_scopes("$5a: rec { inherit $1a; $2b = c: a; $3e = 1; inherit ($0a) $4f; }");
         check_scopes("$1a: rec { inherit $0a; b = c: a; e = 1; inherit (a) f; }");
+    }
+
+    #[test]
+    fn dynamic_attr() {
+        check_resolve(r#"let $1a = 1; in     { ${$0a} = a;   a = 2; }"#);
+        check_resolve(r#"let   a = 1; in rec { ${$0a} = a; $1a = 2; }"#);
     }
 
     #[test]

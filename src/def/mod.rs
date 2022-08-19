@@ -315,6 +315,10 @@ impl Bindings {
         for &e in self.inherit_froms.iter() {
             f(e);
         }
+        for &(k, v) in self.dynamics.iter() {
+            f(k);
+            f(v);
+        }
     }
 
     pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameDefId, &BindingValue)) {
