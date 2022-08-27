@@ -110,6 +110,17 @@ Add the following elisp code to your configuration. (using `use-package`)
   (nix-mode . eglot-ensure))
 ```
 
+### For vscode `Nix IDE` user
+
+Modify the extension's settings in your `settings.json`
+
+```jsonc
+{
+  // ...
+  "nix.serverPath": "nil"
+}
+```
+
 ## License
 
 "nil" is primarily distributed under the terms of both the MIT
