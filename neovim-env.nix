@@ -6,8 +6,7 @@
 { pkgs ? import <nixpkgs> { } }:
 let
   neovim = (pkgs.neovim.override {
-    withPython = false;
-    withRuby = false;
+    withPython3 = false;
 
     configure = {
       customRC = ''

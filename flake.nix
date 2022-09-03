@@ -15,6 +15,14 @@
         inherit (builtins) substring;
         pkgs = nixpkgs.legacyPackages.${system};
         rustPkgs = rust-overlay.packages.${system};
+
+        pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
+          set -e
+          cargo fmt --check
+          cargo clippy --all-targets --all-features -- --deny warnings
+          cargo test -p '*'
+        '';
+
       in {
         packages = rec {
           default = nil;
@@ -29,13 +37,14 @@
         };
 
         devShells.default = pkgs.mkShell {
-          packages = [
+          packages = with pkgs; with rustPkgs; [
             # Override the stable rustfmt.
-            rustPkgs.rust-nightly_2022-08-01.availableComponents.rustfmt
-            rustPkgs.rust
-            pkgs.gdb
-            pkgs.jq
+            rust-nightly_2022-08-01.availableComponents.rustfmt
+            rust
+            gdb
+            jq
             (import ./neovim-env.nix { inherit pkgs; })
+            pre-commit
           ];
           RUST_BACKTRACE = "short";
           NIXPKGS = nixpkgs;
@@ -47,12 +56,12 @@
         };
 
         devShells.fuzz = pkgs.mkShell {
-          packages = [
-            rustPkgs.rust-nightly_2022-08-01
-            pkgs.cargo-fuzz
-            pkgs.llvmPackages_14.llvm
-            pkgs.jq
-            pkgs.gnugrep
+          packages = with pkgs; with rustPkgs; [
+            rust-nightly_2022-08-01
+            cargo-fuzz
+            llvmPackages_14.llvm
+            jq
+            gnugrep
           ];
           RUST_BACKTRACE = "short";
 
