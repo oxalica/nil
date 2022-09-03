@@ -47,18 +47,24 @@ pub(crate) fn goto_definition(
     let name_res = db.name_resolution(file_id);
     match name_res.get(expr_id)? {
         &ResolveResult::NameDef(def) => {
-            let name_node = source_map.name_def_node(def)?.to_node(&parse.syntax_node());
-            let full_node = name_node.ancestors().find(|n| {
-                matches!(
-                    n.kind(),
-                    SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
-                )
-            })?;
-            Some(vec![NavigationTarget {
-                file_id,
-                focus_range: name_node.text_range(),
-                full_range: full_node.text_range(),
-            }])
+            let targets = source_map
+                .name_def_nodes(def)
+                .filter_map(|ptr| {
+                    let name_node = ptr.to_node(&parse.syntax_node());
+                    let full_node = name_node.ancestors().find(|n| {
+                        matches!(
+                            n.kind(),
+                            SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
+                        )
+                    })?;
+                    Some(NavigationTarget {
+                        file_id,
+                        focus_range: name_node.text_range(),
+                        full_range: full_node.text_range(),
+                    })
+                })
+                .collect();
+            Some(targets)
         }
         ResolveResult::WithExprs(withs) => {
             let targets = withs

@@ -53,7 +53,7 @@ impl LowerCtx<'_> {
     fn alloc_name_def(&mut self, name: SmolStr, kind: NameDefKind, ptr: AstPtr) -> NameDefId {
         let id = self.module.name_defs.alloc(NameDef { name, kind });
         self.source_map.name_def_map.insert(ptr.clone(), id);
-        self.source_map.name_def_map_rev.insert(id, ptr);
+        self.source_map.name_def_map_rev.insert(id, vec![ptr]);
         id
     }
 

@@ -331,7 +331,12 @@ mod tests {
                     let mut poses = defs
                         .iter()
                         .map(|(_, def)| {
-                            source_map.name_def_node(*def).unwrap().text_range().start()
+                            source_map
+                                .name_def_nodes(*def)
+                                .next()
+                                .unwrap()
+                                .text_range()
+                                .start()
                         })
                         .collect::<Vec<_>>();
                     poses.sort_unstable();
@@ -349,8 +354,7 @@ mod tests {
     fn check_resolve(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         let file_id = f[0].file_id;
-        assert!((1..=2).contains(&f.markers().len()));
-        let expect = f.markers().get(1).map(|p| p.pos);
+        let expect = f.markers()[1..].iter().map(|p| p.pos).collect::<Vec<_>>();
 
         // Inherit(Attr(Name)) or Expr(Ref(Name))
         let ptr = db
@@ -369,23 +373,30 @@ mod tests {
         let source_map = db.source_map(file_id);
         let name_res = db.name_resolution(file_id);
         let expr_id = source_map.expr_map[&ptr];
-        let got = name_res.get(expr_id).map(|ret| match ret {
-            &ResolveResult::NameDef(def) => source_map
-                .name_def_node(def)
-                .unwrap()
-                .to_node(&parse.syntax_node())
-                .text_range()
-                .start(),
-            ResolveResult::WithExprs(expr) => source_map
-                // Test the innermost one.
-                .expr_node(expr[0])
-                .unwrap()
-                .to_node(&parse.syntax_node())
-                .text_range()
-                .start(),
-            // Same pos for builtin names.
-            ResolveResult::Builtin(_) => f[0].pos,
-        });
+        let got = name_res
+            .get(expr_id)
+            .map(|ret| {
+                match ret {
+                    &ResolveResult::NameDef(def) => source_map
+                        .name_def_nodes(def)
+                        .map(|ptr| ptr.to_node(&parse.syntax_node()).text_range().start())
+                        .collect(),
+                    ResolveResult::WithExprs(exprs) => exprs
+                        .iter()
+                        .map(|&e| {
+                            source_map
+                                .expr_node(e)
+                                .unwrap()
+                                .to_node(&parse.syntax_node())
+                                .text_range()
+                                .start()
+                        })
+                        .collect(),
+                    // Return the input pos to indicate builtin names.
+                    ResolveResult::Builtin(_) => vec![f[0].pos],
+                }
+            })
+            .unwrap_or_default();
         assert_eq!(got, expect);
     }
 
@@ -411,7 +422,7 @@ mod tests {
         check_resolve(r"a: with b; $1c: $0c");
         check_resolve(r"a: $1with b; c: $0x");
         check_resolve(r"$1x: with a; with b; $0x");
-        check_resolve(r"x: with a; $1with b; $0y");
+        check_resolve(r"x: $2with a; $1with b; $0y");
     }
 
     #[test]

@@ -161,7 +161,7 @@ pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
     name_def_map: HashMap<AstPtr, NameDefId>,
-    name_def_map_rev: ArenaMap<NameDefId, AstPtr>,
+    name_def_map_rev: ArenaMap<NameDefId, Vec<AstPtr>>,
 }
 
 impl ModuleSourceMap {
@@ -177,8 +177,12 @@ impl ModuleSourceMap {
         self.name_def_map.get(&node).copied()
     }
 
-    pub fn name_def_node(&self, def_id: NameDefId) -> Option<AstPtr> {
-        self.name_def_map_rev.get(def_id).cloned()
+    pub fn name_def_nodes(&self, def_id: NameDefId) -> impl Iterator<Item = AstPtr> + '_ {
+        self.name_def_map_rev
+            .get(def_id)
+            .into_iter()
+            .flatten()
+            .cloned()
     }
 }
 

@@ -41,10 +41,12 @@ impl LivenessCheckResult {
         let source_map = db.source_map(file);
         let root = db.parse(file).syntax_node();
         let mut diags = Vec::new();
-        diags.extend(self.name_defs.iter().map(|&def| {
-            let ptr = source_map.name_def_node(def).unwrap();
-            Diagnostic::new(ptr.text_range(), DiagnosticKind::UnusedBinding)
-        }));
+        diags.extend(
+            self.name_defs
+                .iter()
+                .flat_map(|&def| source_map.name_def_nodes(def))
+                .map(|ptr| Diagnostic::new(ptr.text_range(), DiagnosticKind::UnusedBinding)),
+        );
         diags.extend(self.withs.iter().map(|&expr| {
             let ptr = source_map.expr_node(expr).unwrap();
             let node = ast::With::cast(ptr.to_node(&root)).unwrap();
