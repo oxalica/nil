@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use std::{mem, str};
+use std::str;
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
 use syntax::Parse;
 
@@ -350,8 +350,6 @@ struct MergingSet {
 struct MergingEntry {
     /// The LHS range of the definition's Attr node, for error reporting.
     def_ptr: AstPtr,
-    /// Whether this entry is considered duplicated and the error is already reported.
-    is_duplicated: bool,
     value: MergingValue,
 }
 
@@ -382,8 +380,6 @@ impl MergingSet {
         let key = ctx.alloc_expr(Expr::Missing, expr_ptr.clone());
         let entry = MergingEntry {
             def_ptr: expr_ptr,
-            // This doesn't matter since dynamic keys can never be duplicated.
-            is_duplicated: true,
             value: BindingValue::Expr(expr).into(),
         };
         self.dynamics.push((key, entry));
@@ -445,7 +441,6 @@ impl MergingSet {
             };
             let entry = MergingEntry {
                 def_ptr: ptr,
-                is_duplicated: false,
                 value: value.into(),
             };
             self.statics.insert(key, entry);
@@ -546,7 +541,6 @@ impl MergingEntry {
     fn new(def_ptr: AstPtr) -> Self {
         Self {
             def_ptr,
-            is_duplicated: false,
             value: MergingValue::Placeholder,
         }
     }
@@ -630,24 +624,10 @@ impl MergingEntry {
     }
 
     fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, ptr: AstPtr) {
-        // Don't emit twice at the previous key.
-        //
-        // FIXME: Neovim doesn't support `relatedInformation` yet, thus we push back-refs here.
-        // https://github.com/neovim/neovim/issues/19649
-        if !mem::replace(&mut self.is_duplicated, true) {
-            ctx.diagnostic(
-                Diagnostic::new(self.def_ptr.text_range(), DiagnosticKind::DuplicatedKey)
-                    .with_note(
-                        FileRange::new(ctx.file_id, ptr.text_range()),
-                        "Later defined here",
-                    ),
-            );
-        }
-
         ctx.diagnostic(
             Diagnostic::new(ptr.text_range(), DiagnosticKind::DuplicatedKey).with_note(
                 FileRange::new(ctx.file_id, self.def_ptr.text_range()),
-                "First defined here",
+                "Previously defined here",
             ),
         );
     }
@@ -691,7 +671,7 @@ mod tests {
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
-            writeln!(got, "{}", diag.debug_to_string()).unwrap();
+            writeln!(got, "{}", diag.debug_display()).unwrap();
         }
         if !module.diagnostics.is_empty() {
             writeln!(got).unwrap();
@@ -729,7 +709,7 @@ mod tests {
         let module = db.module(file_id);
         let mut got = String::new();
         for diag in module.diagnostics() {
-            writeln!(got, "{}", diag.debug_to_string()).unwrap();
+            writeln!(got, "{}", diag.debug_display()).unwrap();
         }
         expect.assert_eq(&got);
     }
@@ -1255,40 +1235,40 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                2..3: Duplicated name definition
                 9..10: Duplicated name definition
+                  2..3: Previously defined here
             "#]],
         );
         // Set and value.
         check_error(
             "{ a.b = 1; a = 2; }",
             expect![[r#"
-                2..3: Duplicated name definition
                 11..12: Duplicated name definition
+                  2..3: Previously defined here
             "#]],
         );
         // Value and set.
         check_error(
             "{ a = 1; a.b = 2; }",
             expect![[r#"
-                2..3: Duplicated name definition
                 9..10: Duplicated name definition
+                  2..3: Previously defined here
             "#]],
         );
         // Inherit and value.
         check_error(
             "{ inherit a; a = 1; }",
             expect![[r#"
-                10..11: Duplicated name definition
                 13..14: Duplicated name definition
+                  10..11: Previously defined here
             "#]],
         );
         // Inherit-from and value.
         check_error(
             "{ inherit (1) a; a = 1; }",
             expect![[r#"
-                14..15: Duplicated name definition
                 17..18: Duplicated name definition
+                  14..15: Previously defined here
             "#]],
         );
     }
@@ -1298,9 +1278,10 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; a = 3; }",
             expect![[r#"
-                2..3: Duplicated name definition
                 9..10: Duplicated name definition
+                  2..3: Previously defined here
                 16..17: Duplicated name definition
+                  2..3: Previously defined here
             "#]],
         );
     }

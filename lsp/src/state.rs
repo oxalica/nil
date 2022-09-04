@@ -148,14 +148,9 @@ impl State {
 
             let diagnostics = has_text
                 .then(|| {
-                    let line_map = vfs.get_line_map(file)?;
-                    let diags = snap.diagnostics(file).ok()?;
-                    let diags = diags
-                        .into_iter()
-                        .take(MAX_DIAGNOSTICS_CNT)
-                        .filter_map(|diag| convert::to_diagnostic(&vfs, line_map, diag))
-                        .collect::<Vec<_>>();
-                    Some(diags)
+                    let mut diags = snap.diagnostics(file).ok()?;
+                    diags.truncate(MAX_DIAGNOSTICS_CNT);
+                    convert::to_diagnostics(&vfs, file, &diags)
                 })
                 .flatten()
                 .unwrap_or_default();

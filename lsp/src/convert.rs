@@ -3,7 +3,7 @@ use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
     Position, Range, TextDocumentPositionParams,
 };
-use nil::{CompletionItem, CompletionItemKind, Diagnostic, FilePos, FileRange, Severity};
+use nil::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
 use text_size::TextRange;
 
 pub(crate) fn from_file_pos(
@@ -29,47 +29,78 @@ pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
     Range::new(Position::new(line1, col1), Position::new(line2, col2))
 }
 
-pub(crate) fn to_diagnostic(
+pub(crate) fn to_diagnostics(
     vfs: &Vfs,
-    line_map: &LineMap,
-    diag: Diagnostic,
-) -> Option<lsp::Diagnostic> {
-    Some(lsp::Diagnostic {
-        severity: match diag.severity() {
-            Severity::Error => Some(DiagnosticSeverity::ERROR),
-            Severity::Warning => Some(DiagnosticSeverity::WARNING),
-            Severity::IncompleteSyntax => return None,
-        },
-        range: to_range(line_map, diag.range),
-        code: None,
-        code_description: None,
-        source: None,
-        message: diag.message(),
-        related_information: {
-            Some(
-                diag.notes
-                    .iter()
-                    .filter_map(|(frange, msg)| {
-                        Some(DiagnosticRelatedInformation {
-                            location: to_location(vfs, *frange)?,
-                            message: msg.to_owned(),
+    file: FileId,
+    diags: &[Diagnostic],
+) -> Option<Vec<lsp::Diagnostic>> {
+    let line_map = vfs.get_line_map(file)?;
+    let mut ret = Vec::with_capacity(diags.len() * 2);
+    for diag in diags {
+        let primary_diag = lsp::Diagnostic {
+            severity: match diag.severity() {
+                Severity::Error => Some(DiagnosticSeverity::ERROR),
+                Severity::Warning => Some(DiagnosticSeverity::WARNING),
+                Severity::IncompleteSyntax => continue,
+            },
+            range: to_range(line_map, diag.range),
+            code: None,
+            code_description: None,
+            source: None,
+            message: diag.message(),
+            related_information: {
+                Some(
+                    diag.notes
+                        .iter()
+                        .filter_map(|(frange, msg)| {
+                            Some(DiagnosticRelatedInformation {
+                                location: to_location(vfs, *frange)?,
+                                message: msg.to_owned(),
+                            })
                         })
-                    })
-                    .collect(),
-            )
-        },
-        tags: {
-            let mut tags = Vec::new();
-            if diag.is_deprecated() {
-                tags.push(DiagnosticTag::DEPRECATED);
+                        .collect(),
+                )
+            },
+            tags: {
+                let mut tags = Vec::new();
+                if diag.is_deprecated() {
+                    tags.push(DiagnosticTag::DEPRECATED);
+                }
+                if diag.is_unnecessary() {
+                    tags.push(DiagnosticTag::UNNECESSARY);
+                }
+                Some(tags)
+            },
+            data: None,
+        };
+
+        // Hoist related information to top-level Hints.
+        for (frange, msg) in &diag.notes {
+            // We cannot handle cross-file diagnostics here.
+            if frange.file_id != file {
+                continue;
             }
-            if diag.is_unnecessary() {
-                tags.push(DiagnosticTag::UNNECESSARY);
-            }
-            Some(tags)
-        },
-        data: None,
-    })
+
+            ret.push(lsp::Diagnostic {
+                severity: Some(DiagnosticSeverity::HINT),
+                range: to_range(line_map, frange.range),
+                code: primary_diag.code.clone(),
+                code_description: primary_diag.code_description.clone(),
+                source: primary_diag.source.clone(),
+                message: msg.into(),
+                related_information: Some(vec![DiagnosticRelatedInformation {
+                    location: to_location(vfs, FileRange::new(file, diag.range))
+                        .expect("Checked by get_line_map"),
+                    message: "original diagnostic".into(),
+                }]),
+                tags: None,
+                data: None,
+            });
+        }
+
+        ret.push(primary_diag);
+    }
+    Some(ret)
 }
 
 pub(crate) fn to_completion_item(

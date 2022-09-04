@@ -30,11 +30,14 @@ mod tests {
         let (db, file_id) = TestDB::single_file(fixture).unwrap();
         let diags = super::diagnostics(&db, file_id);
         assert!(!diags.is_empty());
-        let got = diags
+        let mut got = diags
             .iter()
-            .map(|d| d.debug_to_string() + "\n")
+            .map(|d| d.debug_display().to_string())
             .collect::<Vec<_>>()
             .join("");
+        if got.contains('\n') {
+            got.push('\n');
+        }
         expect.assert_eq(&got);
     }
 
@@ -42,9 +45,7 @@ mod tests {
     fn syntax_error() {
         check(
             "1 == 2 == 3",
-            expect![[r#"
-                7..9: Invalid usage of no-associative operators
-            "#]],
+            expect!["7..9: Invalid usage of no-associative operators"],
         );
     }
 
@@ -53,31 +54,22 @@ mod tests {
         check(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                2..3: Duplicated name definition
                 9..10: Duplicated name definition
+                  2..3: Previously defined here
             "#]],
         );
     }
 
     #[test]
     fn name_resolution() {
-        check(
-            "a",
-            expect![[r#"
-                0..1: Undefined name
-            "#]],
-        );
+        check("a", expect!["0..1: Undefined name"]);
     }
 
     #[test]
     fn liveness() {
         check(
             "let a = a; b = 1; in with 1; b + rec { }",
-            expect![[r#"
-                4..5: Unused binding
-                21..28: Unused `with`
-                33..36: Unused `rec`
-            "#]],
+            expect!["4..5: Unused binding21..28: Unused `with`33..36: Unused `rec`"],
         );
     }
 }

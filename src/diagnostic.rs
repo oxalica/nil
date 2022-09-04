@@ -1,4 +1,5 @@
 use crate::FileRange;
+use core::fmt;
 use syntax::{ErrorKind as SynErrorKind, TextRange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,13 +129,20 @@ impl Diagnostic {
         )
     }
 
-    pub fn debug_to_string(&self) -> String {
-        format!(
-            "{}..{}: {}",
-            u32::from(self.range.start()),
-            u32::from(self.range.end()),
-            self.message(),
-        )
+    pub fn debug_display(&self) -> impl fmt::Display + '_ {
+        struct Wrapper<'a>(&'a Diagnostic);
+        impl fmt::Display for Wrapper<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{:?}: {}", self.0.range, self.0.message(),)?;
+                for (frange, msg) in &self.0.notes {
+                    // Currently all related information is in the same file.
+                    // Ignore the FileId here.
+                    write!(f, "\n  {:?}: {}", frange.range, msg)?;
+                }
+                Ok(())
+            }
+        }
+        Wrapper(self)
     }
 }
 
