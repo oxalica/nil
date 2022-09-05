@@ -3,14 +3,14 @@ use crate::def::{AstPtr, Expr, Literal, ResolveResult};
 use crate::{DefDatabase, FilePos};
 use rowan::ast::AstNode;
 use rowan::{TextRange, TextSize};
-use syntax::{ast, match_ast, SyntaxKind, T};
+use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, T};
 
 pub(crate) fn goto_definition(
     db: &dyn DefDatabase,
     FilePos { file_id, pos }: FilePos,
 ) -> Option<Vec<NavigationTarget>> {
     let parse = db.parse(file_id);
-    let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
+    let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
     if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT | SyntaxKind::PATH) {
         return None;
     }
@@ -173,6 +173,14 @@ mod tests {
             "let a = $0a; in rec { inherit a; b = a; }",
             expect!["<a> = a;"],
         );
+    }
+
+    #[test]
+    fn left_and_right() {
+        check("let a = 1; in $0a ", expect!["<a> = 1;"]);
+        check("let a = 1; in a$0 ", expect!["<a> = 1;"]);
+        check("let a = 1; in 0+$0a+0", expect!["<a> = 1;"]);
+        check("let a = 1; in 0+a$0+0", expect!["<a> = 1;"]);
     }
 
     #[test]

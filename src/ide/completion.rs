@@ -4,7 +4,7 @@ use crate::{builtin, DefDatabase, FileId, FilePos};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use syntax::{ast, match_ast, SyntaxKind, TextRange, T};
+use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, TextRange, T};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[
@@ -74,7 +74,7 @@ pub(crate) fn completions(
 ) -> Option<Vec<CompletionItem>> {
     let parse = db.parse(file_id);
 
-    let tok = parse.syntax_node().token_at_offset(pos).left_biased()?;
+    let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
     let source_range = match tok.kind() {
         T![.] => TextRange::empty(pos),
         SyntaxKind::IDENT => tok.text_range(),

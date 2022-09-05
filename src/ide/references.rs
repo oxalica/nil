@@ -1,14 +1,14 @@
 use crate::def::AstPtr;
 use crate::{DefDatabase, FilePos, FileRange};
 use rowan::ast::AstNode;
-use syntax::{ast, match_ast, SyntaxKind, T};
+use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, T};
 
 pub(crate) fn references(
     db: &dyn DefDatabase,
     FilePos { file_id, pos }: FilePos,
 ) -> Option<Vec<FileRange>> {
     let parse = db.parse(file_id);
-    let tok = parse.syntax_node().token_at_offset(pos).right_biased()?;
+    let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
     if !matches!(
         tok.kind(),
         T![with]
