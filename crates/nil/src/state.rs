@@ -1,10 +1,10 @@
-use crate::{convert, handler, Vfs};
-use anyhow::{bail, Result};
+use crate::{convert, handler, Result, Vfs};
 use crossbeam_channel::{Receiver, Sender};
-use ide::{Analysis, AnalysisHost, VfsPath};
-use lsp_server::{ErrorCode, Message, Notification, Request, Response};
+use ide::{Analysis, AnalysisHost, Cancelled, VfsPath};
+use lsp_server::{ErrorCode, Message, Notification, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
+use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -23,6 +23,8 @@ pub struct State {
 
 impl State {
     pub fn new(responder: Sender<Message>, workspace_root: Option<PathBuf>) -> Self {
+        // Vfs root must be absolute.
+        let workspace_root = workspace_root.and_then(|root| root.canonicalize().ok());
         let vfs = Vfs::new(workspace_root.clone().unwrap_or_else(|| PathBuf::from("/")));
         Self {
             host: Default::default(),
@@ -58,12 +60,13 @@ impl State {
                     if notif.method == notif::Exit::METHOD {
                         return Ok(());
                     }
-                    self.dispatch_notification(notif)
+                    self.dispatch_notification(notif)?;
                 }
                 Message::Response(_) => {}
             }
         }
-        bail!("Channel closed")
+
+        Err("Channel closed".into())
     }
 
     fn dispatch_request(&mut self, req: Request) {
@@ -80,6 +83,7 @@ impl State {
         RequestDispatcher(self, Some(req))
             .on_sync_mut::<req::Shutdown>(|st, ()| {
                 st.is_shutdown = true;
+                Ok(())
             })
             .on::<req::GotoDefinition>(handler::goto_definition)
             .on::<req::References>(handler::references)
@@ -88,26 +92,29 @@ impl State {
             .finish();
     }
 
-    fn dispatch_notification(&mut self, notif: Notification) {
+    fn dispatch_notification(&mut self, notif: Notification) -> Result<()> {
         NotificationDispatcher(self, Some(notif))
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
                 let uri = &params.text_document.uri;
                 st.opened_files.write().unwrap().insert(uri.clone());
-                st.set_vfs_file_content(uri, Some(params.text_document.text));
-            })
+                st.set_vfs_file_content(uri, Some(params.text_document.text))?;
+                Ok(())
+            })?
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
                 // N.B. Don't clear text here.
                 st.opened_files
                     .write()
                     .unwrap()
                     .remove(&params.text_document.uri);
-            })
+                Ok(())
+            })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 if let Some(chg) = params.content_changes.into_iter().next() {
-                    st.set_vfs_file_content(&params.text_document.uri, Some(chg.text));
+                    st.set_vfs_file_content(&params.text_document.uri, Some(chg.text))?;
                 }
-            })
-            .finish();
+                Ok(())
+            })?
+            .finish()
     }
 
     fn send_notification<N: notif::Notification>(&self, params: N::Params) {
@@ -123,9 +130,10 @@ impl State {
         }
     }
 
-    fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) {
-        self.vfs.write().unwrap().set_uri_content(uri, text);
+    fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) -> Result<()> {
+        self.vfs.write().unwrap().set_uri_content(uri, text)?;
         self.apply_vfs_change();
+        Ok(())
     }
 
     fn apply_vfs_change(&mut self) {
@@ -136,22 +144,23 @@ impl State {
             .iter()
             .map(|(file, text)| (*file, text.is_some()))
             .collect::<Vec<_>>();
-        log::debug!("Change: {:?}", change);
+        tracing::debug!("Change: {:?}", change);
         self.host.apply_change(change);
 
         let snap = self.host.snapshot();
         let opened_files = self.opened_files.read().unwrap();
         for (file, has_text) in file_changes {
-            let uri = vfs.get_uri_for_file(file).unwrap();
+            let uri = vfs.uri_for_file(file);
             if !opened_files.contains(&uri) {
                 continue;
             }
 
+            // TODO: Error is ignored.
             let diagnostics = has_text
                 .then(|| {
                     let mut diags = snap.diagnostics(file).ok()?;
                     diags.truncate(MAX_DIAGNOSTICS_CNT);
-                    convert::to_diagnostics(&vfs, file, &diags)
+                    Some(convert::to_diagnostics(&vfs, file, &diags))
                 })
                 .flatten()
                 .unwrap_or_default();
@@ -168,25 +177,41 @@ impl State {
 struct RequestDispatcher<'s>(&'s mut State, Option<Request>);
 
 impl<'s> RequestDispatcher<'s> {
-    fn on_sync_mut<R: req::Request>(mut self, f: fn(&mut State, R::Params) -> R::Result) -> Self {
+    fn on_sync_mut<R: req::Request>(
+        mut self,
+        f: fn(&mut State, R::Params) -> Result<R::Result>,
+    ) -> Self {
         if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
             let req = self.1.take().unwrap();
-            let params = serde_json::from_value::<R::Params>(req.params).unwrap();
-            let resp = f(self.0, params);
-            let resp = Response::new_ok(req.id, serde_json::to_value(resp).unwrap());
-            self.0.sender.send(resp.into()).unwrap();
+            let ret = match serde_json::from_value::<R::Params>(req.params) {
+                Ok(params) => result_to_response(req.id, f(self.0, params)),
+                Err(err) => Ok(Response::new_err(
+                    req.id,
+                    ErrorCode::InvalidParams as i32,
+                    err.to_string(),
+                )),
+            };
+            if let Ok(resp) = ret {
+                self.0.sender.send(resp.into()).unwrap();
+            }
         }
         self
     }
 
-    // TODO: Error handling?
-    fn on<R: req::Request>(mut self, f: fn(StateSnapshot, R::Params) -> R::Result) -> Self {
+    fn on<R: req::Request>(mut self, f: fn(StateSnapshot, R::Params) -> Result<R::Result>) -> Self {
         if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
             let req = self.1.take().unwrap();
-            let params = serde_json::from_value::<R::Params>(req.params).unwrap();
-            let resp = f(self.0.snapshot(), params);
-            let resp = Response::new_ok(req.id, serde_json::to_value(resp).unwrap());
-            self.0.sender.send(resp.into()).unwrap();
+            let ret = match serde_json::from_value::<R::Params>(req.params) {
+                Ok(params) => result_to_response(req.id, f(self.0.snapshot(), params)),
+                Err(err) => Ok(Response::new_err(
+                    req.id,
+                    ErrorCode::InvalidParams as i32,
+                    err.to_string(),
+                )),
+            };
+            if let Ok(resp) = ret {
+                self.0.sender.send(resp.into()).unwrap();
+            }
         }
         self
     }
@@ -203,17 +228,35 @@ impl<'s> RequestDispatcher<'s> {
 struct NotificationDispatcher<'s>(&'s mut State, Option<Notification>);
 
 impl<'s> NotificationDispatcher<'s> {
-    fn on_sync_mut<N: notif::Notification>(mut self, f: fn(&mut State, N::Params)) -> Self {
+    fn on_sync_mut<N: notif::Notification>(
+        mut self,
+        f: fn(&mut State, N::Params) -> Result<()>,
+    ) -> Result<Self> {
         if matches!(&self.1, Some(notif) if notif.method == N::METHOD) {
             let params =
                 serde_json::from_value::<N::Params>(self.1.take().unwrap().params).unwrap();
-            f(self.0, params);
+            f(self.0, params)?;
         }
-        self
+        Ok(self)
     }
 
-    fn finish(self) {
-        let _ = self;
+    fn finish(self) -> Result<()> {
+        // TODO: We are not done yet.
+        Ok(())
+    }
+}
+
+fn result_to_response(id: RequestId, ret: Result<impl Serialize>) -> Result<Response, Cancelled> {
+    match ret {
+        Ok(ret) => Ok(Response::new_ok(id, ret)),
+        Err(err) => match err.downcast::<Cancelled>() {
+            Ok(cancelled) => Err(*cancelled),
+            Err(err) => Ok(Response::new_err(
+                id,
+                ErrorCode::InternalError as i32,
+                err.to_string(),
+            )),
+        },
     }
 }
 

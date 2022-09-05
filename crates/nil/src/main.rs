@@ -1,8 +1,7 @@
-use anyhow::Result;
 use lsp_server::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{env, fs, io};
+use std::{env, fs, io, process};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::EnvFilter;
 
@@ -10,7 +9,7 @@ const LOG_FILTER_ENV: &str = "NIL_LOG";
 const LOG_PATH_ENV: &str = "NIL_LOG_PATH";
 const BACKTRACE_ENV: &str = "RUST_BACKTRACE";
 
-fn main() -> Result<()> {
+fn main() {
     if env::var(BACKTRACE_ENV).is_err() {
         env::set_var(BACKTRACE_ENV, "short");
     }
@@ -21,13 +20,18 @@ fn main() -> Result<()> {
         let date = option_env!("CFG_DATE").unwrap_or("unknown");
         let rev = option_env!("CFG_REV").unwrap_or("unknown");
         println!("nil {} {}", date, rev);
-        return Ok(());
+        return;
     }
 
     let (conn, io_threads) = Connection::stdio();
-    nil::main_loop(conn)?;
-    io_threads.join()?;
-    Ok(())
+    match nil::main_loop(conn).and_then(|()| io_threads.join().map_err(Into::into)) {
+        Ok(()) => {}
+        Err(err) => {
+            tracing::error!("Unexpected error: {}", err);
+            eprintln!("{}", err);
+            process::exit(101);
+        }
+    }
 }
 
 fn setup_logger() {

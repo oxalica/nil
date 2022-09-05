@@ -99,8 +99,8 @@ impl FileSet {
         self.files.get(path).copied()
     }
 
-    pub fn get_path_for_file(&self, file: FileId) -> Option<&VfsPath> {
-        self.paths.get(&file)
+    pub fn path_for_file(&self, file: FileId) -> &VfsPath {
+        &self.paths[&file]
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + '_ {
@@ -130,8 +130,8 @@ impl SourceRoot {
         self.file_set.get_file_for_path(path)
     }
 
-    pub fn get_path_for_file(&self, file: FileId) -> Option<&VfsPath> {
-        self.file_set.get_path_for_file(file)
+    pub fn path_for_file(&self, file: FileId) -> &VfsPath {
+        self.file_set.path_for_file(file)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + '_ {

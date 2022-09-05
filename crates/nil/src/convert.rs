@@ -1,4 +1,4 @@
-use crate::{LineMap, StateSnapshot, Vfs};
+use crate::{LineMap, Result, StateSnapshot, Vfs};
 use ide::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
@@ -6,31 +6,31 @@ use lsp_types::{
 };
 use text_size::{TextRange, TextSize};
 
-pub(crate) fn from_file(snap: &StateSnapshot, doc: &TextDocumentIdentifier) -> Option<FileId> {
+pub(crate) fn from_file(snap: &StateSnapshot, doc: &TextDocumentIdentifier) -> Result<FileId> {
     let vfs = snap.vfs.read().unwrap();
     vfs.get_file_for_uri(&doc.uri)
 }
 
-pub(crate) fn from_pos(snap: &StateSnapshot, file: FileId, pos: Position) -> Option<TextSize> {
+pub(crate) fn from_pos(snap: &StateSnapshot, file: FileId, pos: Position) -> Result<TextSize> {
     let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.get_line_map(file)?;
+    let line_map = vfs.file_line_map(file);
     let pos = line_map.pos(pos.line, pos.character);
-    Some(pos)
+    Ok(pos)
 }
 
 pub(crate) fn from_file_pos(
     snap: &StateSnapshot,
     params: &TextDocumentPositionParams,
-) -> Option<FilePos> {
+) -> Result<FilePos> {
     let file = from_file(snap, &params.text_document)?;
     let pos = from_pos(snap, file, params.position)?;
-    Some(FilePos::new(file, pos))
+    Ok(FilePos::new(file, pos))
 }
 
-pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Option<Location> {
-    let uri = vfs.get_uri_for_file(frange.file_id)?;
-    let line_map = vfs.get_line_map(frange.file_id)?;
-    Some(Location::new(uri, to_range(line_map, frange.range)))
+pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Location {
+    let uri = vfs.uri_for_file(frange.file_id);
+    let line_map = vfs.file_line_map(frange.file_id);
+    Location::new(uri, to_range(line_map, frange.range))
 }
 
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
@@ -43,8 +43,8 @@ pub(crate) fn to_diagnostics(
     vfs: &Vfs,
     file: FileId,
     diags: &[Diagnostic],
-) -> Option<Vec<lsp::Diagnostic>> {
-    let line_map = vfs.get_line_map(file)?;
+) -> Vec<lsp::Diagnostic> {
+    let line_map = vfs.file_line_map(file);
     let mut ret = Vec::with_capacity(diags.len() * 2);
     for diag in diags {
         let primary_diag = lsp::Diagnostic {
@@ -62,11 +62,9 @@ pub(crate) fn to_diagnostics(
                 Some(
                     diag.notes
                         .iter()
-                        .filter_map(|(frange, msg)| {
-                            Some(DiagnosticRelatedInformation {
-                                location: to_location(vfs, *frange)?,
-                                message: msg.to_owned(),
-                            })
+                        .map(|(frange, msg)| DiagnosticRelatedInformation {
+                            location: to_location(vfs, *frange),
+                            message: msg.to_owned(),
                         })
                         .collect(),
                 )
@@ -99,8 +97,7 @@ pub(crate) fn to_diagnostics(
                 source: primary_diag.source.clone(),
                 message: msg.into(),
                 related_information: Some(vec![DiagnosticRelatedInformation {
-                    location: to_location(vfs, FileRange::new(file, diag.range))
-                        .expect("Checked by get_line_map"),
+                    location: to_location(vfs, FileRange::new(file, diag.range)),
                     message: "original diagnostic".into(),
                 }]),
                 tags: None,
@@ -110,13 +107,11 @@ pub(crate) fn to_diagnostics(
 
         ret.push(primary_diag);
     }
-    Some(ret)
+
+    ret
 }
 
-pub(crate) fn to_completion_item(
-    line_map: &LineMap,
-    item: CompletionItem,
-) -> Option<lsp::CompletionItem> {
+pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> lsp::CompletionItem {
     let kind = match item.kind {
         CompletionItemKind::Keyword => lsp::CompletionItemKind::KEYWORD,
         CompletionItemKind::Param => lsp::CompletionItemKind::VARIABLE,
@@ -126,7 +121,7 @@ pub(crate) fn to_completion_item(
         CompletionItemKind::BuiltinFunction => lsp::CompletionItemKind::FUNCTION,
         CompletionItemKind::BuiltinAttrset => lsp::CompletionItemKind::CLASS,
     };
-    Some(lsp::CompletionItem {
+    lsp::CompletionItem {
         label: item.label.into(),
         kind: Some(kind),
         insert_text: None,
@@ -139,5 +134,5 @@ pub(crate) fn to_completion_item(
         })),
         // TODO
         ..Default::default()
-    })
+    }
 }

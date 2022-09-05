@@ -8,7 +8,7 @@ use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::{Change, Diagnostic, FileId, FilePos, FileRange};
 use rowan::TextRange;
-use salsa::{Cancelled, Database, Durability, ParallelDatabase};
+use salsa::{Database, Durability, ParallelDatabase};
 use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
@@ -20,6 +20,7 @@ pub struct NavigationTarget {
     pub focus_range: TextRange,
 }
 
+pub use salsa::Cancelled;
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]

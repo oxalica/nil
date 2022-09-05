@@ -1,3 +1,4 @@
+use crate::Result;
 use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use lsp_types::Url;
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ use text_size::TextSize;
 pub struct Vfs {
     // FIXME: Currently this list is append-only.
     files: Vec<Option<(Arc<str>, LineMap)>>,
+    /// The root directory, which must be absolute.
     local_root: PathBuf,
     local_file_set: FileSet,
     root_changed: bool,
@@ -26,6 +28,7 @@ impl fmt::Debug for Vfs {
 
 impl Vfs {
     pub fn new(local_root: PathBuf) -> Self {
+        assert!(local_root.is_absolute());
         Self {
             files: Vec::new(),
             local_root,
@@ -41,15 +44,20 @@ impl Vfs {
         FileId(id)
     }
 
-    fn uri_to_vpath(&self, uri: &Url) -> Option<VfsPath> {
-        let path = uri.to_file_path().ok()?;
-        let relative_path = path.strip_prefix(&self.local_root).ok()?;
-        VfsPath::from_path(relative_path)
+    fn uri_to_vpath(&self, uri: &Url) -> Result<VfsPath> {
+        let path = uri
+            .to_file_path()
+            .map_err(|_| format!("Non-file URI: {}", uri))?;
+        let relative_path = path
+            .strip_prefix(&self.local_root)
+            .map_err(|_| format!("URI outside workspace: {}", uri))?;
+        Ok(VfsPath::from_path(relative_path).expect("URI is UTF-8"))
     }
 
-    pub fn set_uri_content(&mut self, uri: &Url, text: Option<String>) -> Option<FileId> {
+    pub fn set_uri_content(&mut self, uri: &Url, text: Option<String>) -> Result<()> {
         let vpath = self.uri_to_vpath(uri)?;
-        self.set_path_content(vpath, text)
+        self.set_path_content(vpath, text);
+        Ok(())
     }
 
     pub fn set_path_content(&mut self, path: VfsPath, text: Option<String>) -> Option<FileId> {
@@ -77,16 +85,18 @@ impl Vfs {
         Some(file)
     }
 
-    pub fn get_file_for_uri(&self, uri: &Url) -> Option<FileId> {
+    pub fn get_file_for_uri(&self, uri: &Url) -> Result<FileId> {
         let vpath = self.uri_to_vpath(uri)?;
-        self.local_file_set.get_file_for_path(&vpath)
+        self.local_file_set
+            .get_file_for_path(&vpath)
+            .ok_or_else(|| format!("URI not found: {}", uri).into())
     }
 
-    pub fn get_uri_for_file(&self, file: FileId) -> Option<Url> {
-        let vpath = self.local_file_set.get_path_for_file(file)?.as_str();
+    pub fn uri_for_file(&self, file: FileId) -> Url {
+        let vpath = self.local_file_set.path_for_file(file).as_str();
         assert!(!vpath.is_empty(), "Root is a directory");
-        let path = self.local_root.join(vpath.strip_prefix('/')?);
-        Url::from_file_path(path).ok()
+        let path = self.local_root.join(vpath.strip_prefix('/').unwrap());
+        Url::from_file_path(path).expect("Root is absolute")
     }
 
     pub fn take_change(&mut self) -> Change {
@@ -106,8 +116,11 @@ impl Vfs {
         change
     }
 
-    pub fn get_line_map(&self, file_id: FileId) -> Option<&LineMap> {
-        Some(&self.files.get(file_id.0 as usize)?.as_ref()?.1)
+    pub fn file_line_map(&self, file_id: FileId) -> &LineMap {
+        &self.files[file_id.0 as usize]
+            .as_ref()
+            .expect("File must be valid")
+            .1
     }
 }
 

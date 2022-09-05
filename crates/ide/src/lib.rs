@@ -8,7 +8,8 @@ mod ide;
 mod tests;
 
 pub use self::ide::{
-    Analysis, AnalysisHost, CompletionItem, CompletionItemKind, NavigationTarget, RootDatabase,
+    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, NavigationTarget,
+    RootDatabase,
 };
 pub use base::{
     Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,

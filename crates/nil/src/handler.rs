@@ -1,4 +1,4 @@
-use crate::{convert, StateSnapshot};
+use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
@@ -31,65 +31,77 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
 pub(crate) fn goto_definition(
     snap: StateSnapshot,
     params: GotoDefinitionParams,
-) -> Option<GotoDefinitionResponse> {
+) -> Result<Option<GotoDefinitionResponse>> {
     let fpos = convert::from_file_pos(&snap, &params.text_document_position_params)?;
-    let targets = snap.analysis.goto_definition(fpos).ok()??;
+    let targets = match snap.analysis.goto_definition(fpos)? {
+        None => return Ok(None),
+        Some(targets) => targets,
+    };
     let vfs = snap.vfs.read().unwrap();
     let targets = targets
         .into_iter()
-        .filter_map(|target| {
+        .map(|target| {
             convert::to_location(&vfs, FileRange::new(target.file_id, target.focus_range))
         })
         .collect::<Vec<_>>();
-    Some(GotoDefinitionResponse::Array(targets))
+    Ok(Some(GotoDefinitionResponse::Array(targets)))
 }
 
-pub(crate) fn references(snap: StateSnapshot, params: ReferenceParams) -> Option<Vec<Location>> {
+pub(crate) fn references(
+    snap: StateSnapshot,
+    params: ReferenceParams,
+) -> Result<Option<Vec<Location>>> {
     let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
-    let refs = snap.analysis.references(fpos).ok()??;
+    let refs = match snap.analysis.references(fpos)? {
+        None => return Ok(None),
+        Some(refs) => refs,
+    };
     let vfs = snap.vfs.read().unwrap();
     let locs = refs
-        .iter()
-        .filter_map(|&frange| convert::to_location(&vfs, frange))
+        .into_iter()
+        .map(|frange| convert::to_location(&vfs, frange))
         .collect::<Vec<_>>();
-    Some(locs)
+    Ok(Some(locs))
 }
 
 pub(crate) fn completion(
     snap: StateSnapshot,
     params: CompletionParams,
-) -> Option<CompletionResponse> {
+) -> Result<Option<CompletionResponse>> {
     let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
-    let items = snap.analysis.completions(fpos).ok()??;
+    let items = match snap.analysis.completions(fpos)? {
+        None => return Ok(None),
+        Some(items) => items,
+    };
     let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.get_line_map(fpos.file_id)?;
+    let line_map = vfs.file_line_map(fpos.file_id);
     let items = items
         .into_iter()
-        .filter_map(|item| convert::to_completion_item(line_map, item))
+        .map(|item| convert::to_completion_item(line_map, item))
         .collect::<Vec<_>>();
-    Some(CompletionResponse::Array(items))
+    Ok(Some(CompletionResponse::Array(items)))
 }
 
 pub(crate) fn selection_range(
     snap: StateSnapshot,
     params: SelectionRangeParams,
-) -> Option<Vec<SelectionRange>> {
+) -> Result<Option<Vec<SelectionRange>>> {
     let file = convert::from_file(&snap, &params.text_document)?;
-    params
+    let ret = params
         .positions
         .iter()
         .map(|&pos| {
             let pos = convert::from_pos(&snap, file, pos)?;
             let frange = FileRange::new(file, TextRange::empty(pos));
 
-            let mut ranges = snap.analysis.expand_selection(frange).ok()??;
+            let mut ranges = snap.analysis.expand_selection(frange)?.unwrap_or_default();
             if ranges.is_empty() {
                 ranges.push(TextRange::empty(pos));
             }
 
             // FIXME: Use Arc for LineMap.
             let vfs = snap.vfs.read().unwrap();
-            let line_map = vfs.get_line_map(file)?;
+            let line_map = vfs.file_line_map(file);
             let mut ret = SelectionRange {
                 range: convert::to_range(line_map, *ranges.last().unwrap()),
                 parent: None,
@@ -101,7 +113,8 @@ pub(crate) fn selection_range(
                 };
             }
 
-            Some(ret)
+            Ok(ret)
         })
-        .collect()
+        .collect::<Result<Vec<_>>>();
+    ret.map(Some)
 }

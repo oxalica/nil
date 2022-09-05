@@ -24,7 +24,7 @@ impl Path {
         };
         let sid = db.file_source_root(file);
         let root = db.source_root(sid);
-        let mut vpath = root.get_path_for_file(file)?.clone();
+        let mut vpath = root.path_for_file(file).clone();
         for _ in 0..(data.supers.saturating_add(1)) {
             vpath.pop()?;
         }

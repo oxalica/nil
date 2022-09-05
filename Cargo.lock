@@ -312,7 +312,6 @@ dependencies = [
 name = "nil"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "crossbeam-channel",
  "ide",
  "ignore",
