@@ -283,7 +283,7 @@ impl LowerCtx<'_> {
 }
 
 enum AttrKind {
-    Static(SmolStr, AstPtr),
+    Static(SmolStr),
     Dynamic(Option<ast::Expr>),
 }
 
@@ -295,7 +295,7 @@ impl AttrKind {
                 let name = n
                     .token()
                     .map_or_else(Default::default, |tok| tok.text().into());
-                return Self::Static(name, AstPtr::new(n.syntax()));
+                return Self::Static(name);
             }
             // Unwrap parenthesis around string literals.
             // `{ ${(("foo"))} = 1; }` => `{ "foo" = 1; }`
@@ -335,8 +335,7 @@ impl AttrKind {
                     }
                 }
             });
-        let ptr = AstPtr::new(string_node.syntax());
-        Self::Static(content.into(), ptr)
+        Self::Static(content.into())
     }
 }
 
@@ -410,8 +409,8 @@ impl MergingSet {
             no_attrs = false;
 
             let ptr = AstPtr::new(attr.syntax());
-            let (text, ptr) = match AttrKind::classify(attr) {
-                AttrKind::Static(name, ptr) => (name, ptr),
+            let text = match AttrKind::classify(attr) {
+                AttrKind::Static(name) => name,
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 AttrKind::Dynamic(expr) => {
                     ctx.diagnostic(Diagnostic::new(
@@ -471,10 +470,9 @@ impl MergingSet {
         };
 
         loop {
-            let mut attr_ptr = AstPtr::new(next_attr.syntax());
+            let attr_ptr = AstPtr::new(next_attr.syntax());
             let entry = match AttrKind::classify(next_attr) {
-                AttrKind::Static(text, ptr) => {
-                    attr_ptr = ptr;
+                AttrKind::Static(text) => {
                     match self.statics.entry(text.clone()) {
                         Entry::Occupied(entry) => {
                             // Append this location to the existing name.

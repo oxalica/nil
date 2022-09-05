@@ -95,7 +95,10 @@ mod tests {
     fn special_attr() {
         check(r#"let $0" " = 1; in { inherit $1" "; }"#);
         check(r#"let "$0 " = 1; in { inherit $1" "; }"#);
-        check(r#"let " " = 1; in rec { inherit $0" "; x = { inherit ${$1" "}; }; }"#);
+
+        // The location of static `${}` attrs are the whole `${}`. Not the inner string.
+        // This behavior is relied by `ide::rename`.
+        check(r#"let " " = 1; in rec { inherit $0" "; x = { inherit $1${" "}; }; }"#);
     }
 
     #[test]
