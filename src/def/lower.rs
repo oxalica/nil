@@ -1,8 +1,9 @@
 use super::{
-    AstPtr, Attrpath, BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Literal,
-    Module, ModuleSourceMap, Name, NameId, NameKind, Pat, PathAnchor, PathData,
+    AstPtr, Attrpath, BindingValue, Bindings, DefDatabase, Expr, ExprId, Literal, Module,
+    ModuleSourceMap, Name, NameId, NameKind, Pat, PathAnchor, PathData,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
+use indexmap::map::Entry;
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
@@ -162,7 +163,7 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::List(elements), ptr)
             }
             ast::Expr::LetIn(e) => {
-                let mut set = MergingSet::new(Some(NameKind::LetIn));
+                let mut set = MergingSet::new(NameKind::LetIn);
                 set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
                 if bindings.statics.is_empty() && bindings.inherit_froms.is_empty() {
@@ -179,18 +180,18 @@ impl LowerCtx<'_> {
             }
             ast::Expr::AttrSet(e) => {
                 // RecAttrset is popular than LetAttrset, and is preferred.
-                let (def_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
-                    (Some(NameKind::RecAttrset), Expr::RecAttrset)
+                let (name_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
+                    (NameKind::RecAttrset, Expr::RecAttrset)
                 } else if e.let_token().is_some() {
                     self.diagnostic(Diagnostic::new(
                         e.syntax().text_range(),
                         DiagnosticKind::LetAttrset,
                     ));
-                    (Some(NameKind::RecAttrset), Expr::LetAttrset)
+                    (NameKind::RecAttrset, Expr::LetAttrset)
                 } else {
-                    (None, Expr::Attrset)
+                    (NameKind::PlainAttrset, Expr::Attrset)
                 };
-                let mut set = MergingSet::new(def_kind);
+                let mut set = MergingSet::new(name_kind);
                 set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
                 self.alloc_expr(ctor(bindings), ptr)
@@ -339,19 +340,23 @@ impl AttrKind {
     }
 }
 
+#[derive(Debug)]
 struct MergingSet {
-    def_kind: Option<NameKind>,
-    statics: IndexMap<BindingKey, MergingEntry>,
+    name_kind: NameKind,
+    statics: IndexMap<SmolStr, MergingEntry>,
     inherit_froms: Vec<ExprId>,
     dynamics: Vec<(ExprId, MergingEntry)>,
 }
 
+#[derive(Debug)]
 struct MergingEntry {
-    /// The LHS range of the definition's Attr node, for error reporting.
-    def_ptr: AstPtr,
+    /// The key of this entry.
+    /// For dynamic bindings, this is None.
+    name: Option<NameId>,
     value: MergingValue,
 }
 
+#[derive(Debug)]
 enum MergingValue {
     Placeholder,
     Attrset(Option<AstPtr>, MergingSet),
@@ -365,9 +370,9 @@ impl From<BindingValue> for MergingValue {
 }
 
 impl MergingSet {
-    fn new(def_kind: Option<NameKind>) -> Self {
+    fn new(name_kind: NameKind) -> Self {
         Self {
-            def_kind,
+            name_kind,
             statics: IndexMap::default(),
             inherit_froms: Vec::new(),
             dynamics: Vec::new(),
@@ -376,9 +381,9 @@ impl MergingSet {
 
     // Place an orphaned Expr as dynamic-attrs for error recovery.
     fn recover_error(&mut self, ctx: &mut LowerCtx, expr: ExprId, expr_ptr: AstPtr) {
-        let key = ctx.alloc_expr(Expr::Missing, expr_ptr.clone());
+        let key = ctx.alloc_expr(Expr::Missing, expr_ptr);
         let entry = MergingEntry {
-            def_ptr: expr_ptr,
+            name: None,
             value: BindingValue::Expr(expr).into(),
         };
         self.dynamics.push((key, entry));
@@ -405,7 +410,7 @@ impl MergingSet {
             no_attrs = false;
 
             let ptr = AstPtr::new(attr.syntax());
-            let (name, ptr) = match AttrKind::classify(attr) {
+            let (text, ptr) = match AttrKind::classify(attr) {
                 AttrKind::Static(name, ptr) => (name, ptr),
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 AttrKind::Dynamic(expr) => {
@@ -418,13 +423,11 @@ impl MergingSet {
                     continue;
                 }
             };
-            let key = match self.def_kind {
-                Some(kind) => BindingKey::NameDef(ctx.alloc_name(name.clone(), kind, ptr.clone())),
-                None => BindingKey::Name(name.clone()),
-            };
+
+            let name = ctx.alloc_name(text.clone(), self.name_kind, ptr.clone());
 
             // Inherited names never merge other values. It must be an error.
-            if let Some(v) = self.statics.get_mut(&key) {
+            if let Some(v) = self.statics.get_mut(&text) {
                 v.emit_duplicated_key(ctx, ptr);
                 continue;
             }
@@ -432,15 +435,15 @@ impl MergingSet {
             let value = match from_expr {
                 Some(e) => BindingValue::InheritFrom(e),
                 None => {
-                    let ref_expr = ctx.alloc_expr(Expr::Reference(name), ptr.clone());
+                    let ref_expr = ctx.alloc_expr(Expr::Reference(text.clone()), ptr.clone());
                     BindingValue::Inherit(ref_expr)
                 }
             };
             let entry = MergingEntry {
-                def_ptr: ptr,
+                name: Some(name),
                 value: value.into(),
             };
-            self.statics.insert(key, entry);
+            self.statics.insert(text, entry);
         }
 
         if no_attrs {
@@ -470,21 +473,26 @@ impl MergingSet {
         loop {
             let mut attr_ptr = AstPtr::new(next_attr.syntax());
             let entry = match AttrKind::classify(next_attr) {
-                AttrKind::Static(name, ptr) => {
+                AttrKind::Static(text, ptr) => {
                     attr_ptr = ptr;
-                    let key = match self.def_kind {
-                        Some(kind) => {
-                            BindingKey::NameDef(ctx.alloc_name(name, kind, attr_ptr.clone()))
+                    match self.statics.entry(text.clone()) {
+                        Entry::Occupied(entry) => {
+                            // Append this location to the existing name.
+                            if let Some(name) = entry.get().name {
+                                ctx.source_map.name_map.insert(attr_ptr.clone(), name);
+                                ctx.source_map.name_map_rev[name].push(attr_ptr.clone());
+                            }
+                            entry.into_mut()
                         }
-                        None => BindingKey::Name(name),
-                    };
-                    self.statics
-                        .entry(key)
-                        .or_insert_with(|| MergingEntry::new(attr_ptr.clone()))
+                        Entry::Vacant(entry) => {
+                            let name = ctx.alloc_name(text, self.name_kind, attr_ptr.clone());
+                            entry.insert(MergingEntry::new(Some(name)))
+                        }
+                    }
                 }
                 AttrKind::Dynamic(expr) => {
                     // LetIn doesn't allow dynamic attrs.
-                    if self.def_kind == Some(NameKind::LetIn) {
+                    if self.name_kind == NameKind::LetIn {
                         ctx.diagnostic(Diagnostic::new(
                             attr_ptr.text_range(),
                             DiagnosticKind::InvalidDynamic,
@@ -492,15 +500,14 @@ impl MergingSet {
                         // We don't skip the RHS but still process it as a recovery.
                     }
                     let expr = ctx.lower_expr_opt(expr);
-                    self.dynamics
-                        .push((expr, MergingEntry::new(attr_ptr.clone())));
+                    self.dynamics.push((expr, MergingEntry::new(None)));
                     &mut self.dynamics.last_mut().unwrap().1
                 }
             };
             match attrs.next() {
                 Some(attr) => {
                     // Deeper attrsets created via attrpath is not `rec`.
-                    self = entry.make_attrset(ctx, None, attr_ptr, None);
+                    self = entry.make_attrset(ctx, NameKind::PlainAttrset, attr_ptr, None);
                     next_attr = attr;
                 }
                 None => {
@@ -515,8 +522,13 @@ impl MergingSet {
         Bindings {
             statics: self
                 .statics
-                .into_iter()
-                .map(|(key, entry)| (key, entry.finish(ctx)))
+                .into_values()
+                .map(|entry| {
+                    (
+                        entry.name.expect("Static entry must has Name"),
+                        entry.finish(ctx),
+                    )
+                })
                 .collect(),
             inherit_froms: self.inherit_froms.into(),
             dynamics: self
@@ -535,9 +547,9 @@ impl MergingSet {
 }
 
 impl MergingEntry {
-    fn new(def_ptr: AstPtr) -> Self {
+    fn new(name: Option<NameId>) -> Self {
         Self {
-            def_ptr,
+            name,
             value: MergingValue::Placeholder,
         }
     }
@@ -545,23 +557,21 @@ impl MergingEntry {
     fn make_attrset(
         &mut self,
         ctx: &mut LowerCtx,
-        def_kind: Option<NameKind>,
+        name_kind: NameKind,
         def_ptr: AstPtr,
         value_ptr: Option<AstPtr>,
     ) -> &mut MergingSet {
         match &mut self.value {
             MergingValue::Placeholder => {
-                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(def_kind));
+                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(name_kind));
             }
             MergingValue::Attrset(_, prev_set) => {
-                let prev_is_rec = prev_set.def_kind.is_some();
-                let this_is_rec = def_kind.is_some();
-                if prev_is_rec {
+                if prev_set.name_kind.is_definition() {
                     ctx.diagnostic(Diagnostic::new(
                         def_ptr.text_range(),
                         DiagnosticKind::MergeRecAttrset,
                     ));
-                } else if this_is_rec {
+                } else if name_kind.is_definition() {
                     ctx.diagnostic(Diagnostic::new(
                         def_ptr.text_range(),
                         DiagnosticKind::MergePlainRecAttrset,
@@ -570,13 +580,14 @@ impl MergingEntry {
             }
             // We prefer to become a Attrset as a guess, which allows further merging.
             MergingValue::Final(value) => {
-                let mut set = MergingSet::new(def_kind);
-                if let BindingValue::Expr(expr) = value {
-                    set.recover_error(ctx, *expr, self.def_ptr.clone());
+                let mut set = MergingSet::new(name_kind);
+                if let BindingValue::Expr(expr) = *value {
+                    if let Some(ptr) = ctx.source_map.expr_node(expr) {
+                        set.recover_error(ctx, expr, ptr);
+                    }
                 }
-                self.emit_duplicated_key(ctx, def_ptr.clone());
-                self.def_ptr = def_ptr;
-                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(def_kind));
+                self.emit_duplicated_key(ctx, def_ptr);
+                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(name_kind));
             }
         }
         match &mut self.value {
@@ -591,16 +602,16 @@ impl MergingEntry {
                 Some(ast::Expr::Paren(p)) => e = p.expr(),
                 Some(ast::Expr::AttrSet(e)) => {
                     // RecAttrset is popular than LetAttrset, and is preferred.
-                    let def_kind = if e.rec_token().is_some() {
-                        Some(NameKind::RecAttrset)
+                    let name_kind = if e.rec_token().is_some() {
+                        NameKind::RecAttrset
                     } else if e.let_token().is_some() {
                         break;
                     } else {
-                        None
+                        NameKind::PlainAttrset
                     };
                     let value_ptr = AstPtr::new(e.syntax());
                     return self
-                        .make_attrset(ctx, def_kind, def_ptr, Some(value_ptr))
+                        .make_attrset(ctx, name_kind, def_ptr, Some(value_ptr))
                         .merge_bindings(ctx, e);
                 }
                 _ => break,
@@ -620,13 +631,18 @@ impl MergingEntry {
         }
     }
 
-    fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, ptr: AstPtr) {
-        ctx.diagnostic(
-            Diagnostic::new(ptr.text_range(), DiagnosticKind::DuplicatedKey).with_note(
-                FileRange::new(ctx.file_id, self.def_ptr.text_range()),
+    fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, new_def_ptr: AstPtr) {
+        let mut diag = Diagnostic::new(new_def_ptr.text_range(), DiagnosticKind::DuplicatedKey);
+        if let Some(prev_ptr) = self
+            .name
+            .and_then(|name| ctx.source_map.name_nodes(name).next())
+        {
+            diag = diag.with_note(
+                FileRange::new(ctx.file_id, prev_ptr.text_range()),
                 "Previously defined here",
-            ),
-        );
+            );
+        }
+        ctx.diagnostic(diag);
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
@@ -634,12 +650,10 @@ impl MergingEntry {
             MergingValue::Placeholder => unreachable!(),
             MergingValue::Final(value) => value,
             MergingValue::Attrset(value_ptr, set) => {
-                let is_rec = set.def_kind.is_some();
-                let bindings = set.finish(ctx);
-                let expr = if is_rec {
-                    Expr::RecAttrset(bindings)
+                let expr = if set.name_kind.is_definition() {
+                    Expr::RecAttrset(set.finish(ctx))
                 } else {
-                    Expr::Attrset(bindings)
+                    Expr::Attrset(set.finish(ctx))
                 };
                 let expr = match value_ptr {
                     Some(ptr) => ctx.alloc_expr(expr, ptr),
@@ -966,7 +980,11 @@ mod tests {
                 2: Literal(Int(2))
                 3: Literal(Int(3))
                 4: Literal(Int(4))
-                5: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(3))), (Name("\n"), Expr(Idx::<Expr>(4)))], inherit_froms: [], dynamics: [(Idx::<Expr>(1), Idx::<Expr>(2))] })
+                5: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(0))), (Idx::<Name>(1), Expr(Idx::<Expr>(3))), (Idx::<Name>(2), Expr(Idx::<Expr>(4)))], inherit_froms: [], dynamics: [(Idx::<Expr>(1), Idx::<Expr>(2))] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "c", kind: PlainAttrset }
+                2: Name { text: "\n", kind: PlainAttrset }
             "#]],
         );
     }
@@ -984,7 +1002,13 @@ mod tests {
                 2: Reference("c")
                 3: Reference("d")
                 4: Reference("e")
-                5: Attrset(Bindings { statics: [(Name("a"), Inherit(Idx::<Expr>(0))), (Name("b"), Inherit(Idx::<Expr>(1))), (Name("c"), Inherit(Idx::<Expr>(2))), (Name("f"), InheritFrom(Idx::<Expr>(4))), (Name("g"), InheritFrom(Idx::<Expr>(4)))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
+                5: Attrset(Bindings { statics: [(Idx::<Name>(0), Inherit(Idx::<Expr>(0))), (Idx::<Name>(1), Inherit(Idx::<Expr>(1))), (Idx::<Name>(2), Inherit(Idx::<Expr>(2))), (Idx::<Name>(3), InheritFrom(Idx::<Expr>(4))), (Idx::<Name>(4), InheritFrom(Idx::<Expr>(4)))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
+                3: Name { text: "f", kind: PlainAttrset }
+                4: Name { text: "g", kind: PlainAttrset }
             "#]],
         );
     }
@@ -997,8 +1021,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
         // Path and attrset.
@@ -1007,8 +1035,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
         // Attrset and path.
@@ -1017,8 +1049,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
         // Attrset and attrset.
@@ -1027,8 +1063,12 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
     }
@@ -1043,11 +1083,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: Name { text: "b", kind: RecAttrset }
-                1: Name { text: "c", kind: RecAttrset }
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: RecAttrset }
+                2: Name { text: "c", kind: RecAttrset }
             "#]],
         );
 
@@ -1059,11 +1100,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: Name { text: "b", kind: RecAttrset }
-                1: Name { text: "c", kind: RecAttrset }
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: RecAttrset }
+                2: Name { text: "c", kind: RecAttrset }
             "#]],
         );
 
@@ -1075,8 +1117,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
 
@@ -1088,8 +1134,12 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0))), (Name("c"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: PlainAttrset }
             "#]],
         );
 
@@ -1101,11 +1151,28 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0))), (Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: Name { text: "b", kind: RecAttrset }
-                1: Name { text: "c", kind: RecAttrset }
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: RecAttrset }
+                2: Name { text: "c", kind: RecAttrset }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn attrset_rec_dup() {
+        check_lower(
+            "rec { a = 1; a = 2; }",
+            expect![[r#"
+                13..14: Duplicated name definition
+                  6..7: Previously defined here
+
+                0: Literal(Int(1))
+                1: RecAttrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+
+                0: Name { text: "a", kind: RecAttrset }
             "#]],
         );
     }
@@ -1116,10 +1183,11 @@ mod tests {
             "rec { a.b = 1; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                1: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
 
                 0: Name { text: "a", kind: RecAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
             "#]],
         );
     }
@@ -1131,11 +1199,13 @@ mod tests {
             "{ a.b = rec { c = 1; }; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                1: RecAttrset(Bindings { statics: [(Idx::<Name>(2), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: Name { text: "c", kind: RecAttrset }
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1148,12 +1218,15 @@ mod tests {
                 8..24: `let { ... }` is deprecated. Use `let ... in ...` instead
 
                 0: Literal(Int(1))
-                1: Attrset(Bindings { statics: [(Name("d"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: LetAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
-                4: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
+                1: Attrset(Bindings { statics: [(Idx::<Name>(3), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: LetAttrset(Bindings { statics: [(Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                4: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
 
-                0: Name { text: "c", kind: RecAttrset }
+                0: Name { text: "a", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
+                2: Name { text: "c", kind: RecAttrset }
+                3: Name { text: "d", kind: PlainAttrset }
             "#]],
         );
     }
@@ -1167,9 +1240,12 @@ mod tests {
                 1: Literal(Int(1))
                 2: Reference("a")
                 3: Literal(Int(2))
-                4: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                5: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
+                4: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                5: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
                 6: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(4)), (Idx::<Expr>(2), Idx::<Expr>(5))] })
+
+                0: Name { text: "b", kind: PlainAttrset }
+                1: Name { text: "b", kind: PlainAttrset }
             "#]],
         );
     }
@@ -1196,7 +1272,7 @@ mod tests {
                 1: Literal(Int(1))
                 2: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(1))] })
                 3: Literal(Int(1))
-                4: LetIn(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
+                4: LetIn(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
 
                 0: Name { text: "a", kind: LetIn }
             "#]],

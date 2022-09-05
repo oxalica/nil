@@ -16,7 +16,7 @@
 //! - Unused `let` bindings.
 //! - Unused `with` expressions.
 //! - Unnecessary `rec` attrsets.
-use super::{BindingKey, BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
+use super::{BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use la_arena::ArenaMap;
 use rowan::ast::AstNode;
@@ -117,7 +117,7 @@ pub(crate) fn liveness_check_query(
                     bindings.walk_child_defs(|name, value| {
                         let (BindingValue::Inherit(e)
                         | BindingValue::InheritFrom(e)
-                        | BindingValue::Expr(e)) = *value;
+                        | BindingValue::Expr(e)) = value;
                         discovered_let_rhs.insert(name, e);
                     });
 
@@ -149,10 +149,10 @@ pub(crate) fn liveness_check_query(
                 unused_withs.push(expr);
             }
             Expr::RecAttrset(bindings)
-                if bindings.statics.iter().all(|(key, _)| match key {
-                    &BindingKey::NameDef(name) => visited_defs.get(name).is_none(),
-                    BindingKey::Name(_) => unreachable!(),
-                }) =>
+                if bindings
+                    .statics
+                    .iter()
+                    .all(|&(name, _)| visited_defs.get(name).is_none()) =>
             {
                 unused_recs.push(expr);
             }

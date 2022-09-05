@@ -176,6 +176,25 @@ mod tests {
     }
 
     #[test]
+    fn merged_binding() {
+        check(
+            "let a.a = 1; a.b = 2; a = { c = 3; }; in $0a",
+            expect![[r#"
+                <a>.a = 1;
+                <a>.b = 2;
+                <a> = { c = 3; };
+            "#]],
+        );
+        check(
+            "rec { b = $0a; a = { a = 1; }; a = { a = 2; }; }",
+            expect![[r#"
+                <a> = { a = 1; };
+                <a> = { a = 2; };
+            "#]],
+        );
+    }
+
+    #[test]
     fn builtin() {
         check("let true = 1; in $0true && false", expect!["<true> = 1;"]);
         check("let true = 1; in true && $0false", expect![""]);

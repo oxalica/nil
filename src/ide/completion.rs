@@ -56,12 +56,14 @@ impl From<BuiltinKind> for CompletionItemKind {
     }
 }
 
-impl From<NameKind> for CompletionItemKind {
-    fn from(k: NameKind) -> Self {
+impl TryFrom<NameKind> for CompletionItemKind {
+    type Error = ();
+    fn try_from(k: NameKind) -> Result<Self, Self::Error> {
         match k {
-            NameKind::LetIn => Self::LetBinding,
-            NameKind::RecAttrset => Self::Field,
-            NameKind::Param | NameKind::PatField => Self::Param,
+            NameKind::LetIn => Ok(Self::LetBinding),
+            NameKind::RecAttrset => Ok(Self::Field),
+            NameKind::Param | NameKind::PatField => Ok(Self::Param),
+            NameKind::PlainAttrset => Err(()),
         }
     }
 }
@@ -153,7 +155,10 @@ fn complete_expr(
             label: text.clone(),
             source_range,
             replace: text.clone(),
-            kind: module[*name].kind.into(),
+            kind: module[*name]
+                .kind
+                .try_into()
+                .expect("NonRecAttrset names are not definitions"),
         })
         .for_each(&mut feed);
 

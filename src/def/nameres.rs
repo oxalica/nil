@@ -1,4 +1,4 @@
-use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameId};
+use super::{BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameId};
 use crate::{builtin, Diagnostic, DiagnosticKind, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
@@ -124,13 +124,13 @@ impl ModuleScopes {
     ) -> ScopeId {
         let mut defs = HashMap::default();
 
-        for (key, value) in bindings.statics.iter() {
-            if let &BindingKey::NameDef(name) = key {
+        for &(name, value) in bindings.statics.iter() {
+            if module[name].kind.is_definition() {
                 defs.insert(module[name].text.clone(), name);
             }
 
             // Inherited attrs are resolved in the outer scope.
-            if let &BindingValue::Inherit(expr) = value {
+            if let BindingValue::Inherit(expr) = value {
                 assert!(matches!(&module[expr], Expr::Reference(_)));
                 self.traverse_expr(module, expr, scope);
             }
@@ -145,13 +145,13 @@ impl ModuleScopes {
             })
         };
 
-        for (_, value) in bindings.statics.iter() {
+        for &(_, value) in bindings.statics.iter() {
             match value {
                 // Traversed before.
                 BindingValue::Inherit(_) |
                 // Traversed later.
                 BindingValue::InheritFrom(_) => {},
-                &BindingValue::Expr(e) => {
+                BindingValue::Expr(e) => {
                     self.traverse_expr(module, e, scope);
                 }
             }
@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn attrset_non_rec() {
+    fn attrset_plain() {
         check_scopes("$2a: { inherit a; b = $1c: $0a; e = 1; inherit (a) f; }");
         check_scopes("$1a: { inherit a; b = c: a; e = 1; inherit ($0a) f; }");
     }

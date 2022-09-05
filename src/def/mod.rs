@@ -264,9 +264,16 @@ pub struct Name {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NameKind {
     LetIn,
+    PlainAttrset,
     RecAttrset,
     Param,
     PatField,
+}
+
+impl NameKind {
+    pub fn is_definition(self) -> bool {
+        !matches!(self, Self::PlainAttrset)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -287,15 +294,9 @@ pub type Attrpath = Box<[ExprId]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bindings {
-    pub statics: Box<[(BindingKey, BindingValue)]>,
+    pub statics: Box<[(NameId, BindingValue)]>,
     pub inherit_froms: Box<[ExprId]>,
     pub dynamics: Box<[(ExprId, ExprId)]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BindingKey {
-    NameDef(NameId),
-    Name(SmolStr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -323,11 +324,9 @@ impl Bindings {
         }
     }
 
-    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameId, &BindingValue)) {
-        for (key, value) in self.statics.iter() {
-            if let &BindingKey::NameDef(name) = key {
-                f(name, value);
-            }
+    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameId, BindingValue)) {
+        for &(name, value) in self.statics.iter() {
+            f(name, value);
         }
     }
 }
