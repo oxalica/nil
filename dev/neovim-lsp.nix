@@ -2,7 +2,6 @@
 # Run `nvim-test` inside the shell to test.
 # Env vars:
 # - `NIL_PATH`: The path to "nil" LSP binary. Default: `target/debug/nil`
-# - `NIL_LOG_PATH`: Where to redirect LSP's stderr. Default: `/tmp/nil.log`
 { pkgs ? import <nixpkgs> { } }:
 let
   neovim = pkgs.neovim.override {
@@ -70,14 +69,10 @@ let
     caps = require('cmp_nvim_lsp').update_capabilities(caps)
 
     local lsp_path = vim.env.NIL_PATH or 'target/debug/nil'
-    local log_path = vim.env.NIL_LOG_PATH or '/tmp/nil.log'
     require('lspconfig').nil_ls.setup {
       autostart = true,
       capabilities = caps,
-      cmd = {
-        '${pkgs.bash}/bin/bash', '-c',
-        vim.fn.shellescape(lsp_path) .. ' 2>>' .. vim.fn.shellescape(log_path),
-      },
+      cmd = { lsp_path },
     }
   '';
 
