@@ -7,11 +7,11 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
 ## Features
 
 - [x] Goto definition. `textDocument/definition`
-  - [x] Local bindings.
-  - [x] Target of relative paths.
+  - [x] References to parameters, `let` and `rec {}` bindings.
+  - [x] Relative paths.
 - [x] Find references. `textDocument/reference`
-  - [x] Local binding references.
-  - [x] With expression references.
+  - [x] Parameters, `let` and `rec {}` bindings.
+  - [x] With expression.
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
   - [x] Local bindings and rec-attrset fields.
@@ -53,21 +53,35 @@ Flake output structure:
 [nix-flakes]: https://nixos.wiki/wiki/Flakes
 [nix-flakes-install]: https://nixos.wiki/wiki/Flakes#Installing_flakes
 
-### For neovim `nvim-lspconfig` user
+## Editor integration
 
-Add the following vimscript to your configuration.
+### Neovim native LSP and [`nvim-lspconfig`]
 
-```vim
-lua <<EOF
-  require('lspconfig').rnix.setup {
-    autostart = true,
-    -- Ensure `nil` is in your PATH.
-    cmd = { "nil" },
+[`nvim-lspconfig`]: https://github.com/neovim/nvim-lspconfig
+
+We are officially supported by `nvim-lspconfig`, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/0fafc3ef648bd612757630097c96b725a36a0476/doc/server_configurations.txt#nil_ls).
+
+### Vim/Neovim via [`coc.nvim`]
+
+[`coc.nvim`]: https://github.com/neoclide/coc.nvim
+
+Merge this setting into your `coc-settings.json`, which can be opened by `:CocConfig`.
+
+```json
+{
+  "languageserver": {
+    "nix": {
+      "command": "nil",
+      "filetypes": ["nix"],
+      "rootPatterns":  ["flake.nix"]
+    }
   }
-EOF
+}
 ```
 
-### For emacs `eglot` user
+### Emacs [`eglot`]
+
+[`eglot`]: https://github.com/joaotavora/eglot
 
 Add the following elisp code to your configuration. (using `use-package`)
 
