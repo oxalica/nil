@@ -84,6 +84,7 @@ impl State {
             .on::<req::GotoDefinition>(handler::goto_definition)
             .on::<req::References>(handler::references)
             .on::<req::Completion>(handler::completion)
+            .on::<req::SelectionRangeRequest>(handler::selection_range)
             .finish();
     }
 

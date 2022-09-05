@@ -1,10 +1,12 @@
 use crate::{convert, StateSnapshot};
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Location, OneOf, ReferenceParams, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    GotoDefinitionResponse, Location, OneOf, ReferenceParams, SelectionRange, SelectionRangeParams,
+    SelectionRangeProviderCapability, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions,
 };
 use nil::FileRange;
+use text_size::TextRange;
 
 pub(crate) fn server_capabilities() -> ServerCapabilities {
     ServerCapabilities {
@@ -21,6 +23,7 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
             ..Default::default()
         }),
         references_provider: Some(OneOf::Left(true)),
+        selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         ..Default::default()
     }
 }
@@ -65,4 +68,40 @@ pub(crate) fn completion(
         .filter_map(|item| convert::to_completion_item(line_map, item))
         .collect::<Vec<_>>();
     Some(CompletionResponse::Array(items))
+}
+
+pub(crate) fn selection_range(
+    snap: StateSnapshot,
+    params: SelectionRangeParams,
+) -> Option<Vec<SelectionRange>> {
+    let file = convert::from_file(&snap, &params.text_document)?;
+    params
+        .positions
+        .iter()
+        .map(|&pos| {
+            let pos = convert::from_pos(&snap, file, pos)?;
+            let frange = FileRange::new(file, TextRange::empty(pos));
+
+            let mut ranges = snap.analysis.expand_selection(frange).ok()??;
+            if ranges.is_empty() {
+                ranges.push(TextRange::empty(pos));
+            }
+
+            // FIXME: Use Arc for LineMap.
+            let vfs = snap.vfs.read().unwrap();
+            let line_map = vfs.get_line_map(file)?;
+            let mut ret = SelectionRange {
+                range: convert::to_range(line_map, *ranges.last().unwrap()),
+                parent: None,
+            };
+            for &r in ranges.iter().rev().skip(1) {
+                ret = SelectionRange {
+                    range: convert::to_range(line_map, r),
+                    parent: Some(ret.into()),
+                };
+            }
+
+            Some(ret)
+        })
+        .collect()
 }

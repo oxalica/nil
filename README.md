@@ -26,6 +26,7 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] Warnings of unnecessary syntax.
   - [x] Warnings of unused bindings, `with` and `rec`.
   - [ ] Client pulled diagnostics.
+- [x] Expand selection. `textDocument/selectionRange`
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 

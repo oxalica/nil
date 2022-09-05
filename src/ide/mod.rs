@@ -1,5 +1,6 @@
 mod completion;
 mod diagnostics;
+mod expand_selection;
 mod goto_definition;
 mod references;
 
@@ -96,5 +97,9 @@ impl Analysis {
 
     pub fn references(&self, pos: FilePos) -> Cancellable<Option<Vec<FileRange>>> {
         self.with_db(|db| references::references(db, pos))
+    }
+
+    pub fn expand_selection(&self, frange: FileRange) -> Cancellable<Option<Vec<TextRange>>> {
+        self.with_db(|db| expand_selection::expand_selection(db, frange))
     }
 }

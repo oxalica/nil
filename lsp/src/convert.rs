@@ -1,19 +1,29 @@
 use crate::{LineMap, StateSnapshot, Vfs};
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
-    Position, Range, TextDocumentPositionParams,
+    Position, Range, TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use nil::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
-use text_size::TextRange;
+use text_size::{TextRange, TextSize};
+
+pub(crate) fn from_file(snap: &StateSnapshot, doc: &TextDocumentIdentifier) -> Option<FileId> {
+    let vfs = snap.vfs.read().unwrap();
+    vfs.get_file_for_uri(&doc.uri)
+}
+
+pub(crate) fn from_pos(snap: &StateSnapshot, file: FileId, pos: Position) -> Option<TextSize> {
+    let vfs = snap.vfs.read().unwrap();
+    let line_map = vfs.get_line_map(file)?;
+    let pos = line_map.pos(pos.line, pos.character);
+    Some(pos)
+}
 
 pub(crate) fn from_file_pos(
     snap: &StateSnapshot,
     params: &TextDocumentPositionParams,
 ) -> Option<FilePos> {
-    let vfs = snap.vfs.read().unwrap();
-    let file = vfs.get_file_for_uri(&params.text_document.uri)?;
-    let line_map = vfs.get_line_map(file)?;
-    let pos = line_map.pos(params.position.line, params.position.character);
+    let file = from_file(snap, &params.text_document)?;
+    let pos = from_pos(snap, file, params.position)?;
     Some(FilePos::new(file, pos))
 }
 
