@@ -210,7 +210,6 @@ mod tests {
 
     fn check_lex(src: &str, expect: Expect) {
         let toks = lex(src.as_bytes());
-        dbg!(&toks);
         let out = toks
             .iter()
             .map(|(tok, range)| format!("{:?} {:?}\n", tok, &src[*range]))

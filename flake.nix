@@ -18,9 +18,16 @@
 
         pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
           set -e
-          cargo fmt --check
-          cargo clippy --all-targets --all-features -- --deny warnings
-          cargo test -p '*'
+          die() { echo "$*" >&2; exit 1; }
+
+          rg --fixed-strings 'dbg!' --glob '*.rs' \
+            && die 'Found dbg!()'
+          cargo fmt --quiet --check >/dev/null \
+            || die 'Format failed'
+          cargo clippy --quiet --all-targets --all-features --package '*' -- --deny warnings \
+            || die 'Clippy failed'
+          cargo test --quiet --package '*' \
+            || die 'Test failed'
         '';
 
       in {
