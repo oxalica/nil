@@ -18,7 +18,7 @@ fn main() -> Result<()> {
     setup_logger();
 
     let (conn, io_threads) = Connection::stdio();
-    lsp::main_loop(conn)?;
+    nil::main_loop(conn)?;
     io_threads.join()?;
     Ok(())
 }

@@ -1,9 +1,9 @@
 use crate::{LineMap, StateSnapshot, Vfs};
+use ide::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
     Position, Range, TextDocumentIdentifier, TextDocumentPositionParams,
 };
-use nil::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
 use text_size::{TextRange, TextSize};
 
 pub(crate) fn from_file(snap: &StateSnapshot, doc: &TextDocumentIdentifier) -> Option<FileId> {

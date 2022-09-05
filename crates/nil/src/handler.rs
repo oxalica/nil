@@ -1,11 +1,11 @@
 use crate::{convert, StateSnapshot};
+use ide::FileRange;
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
     GotoDefinitionResponse, Location, OneOf, ReferenceParams, SelectionRange, SelectionRangeParams,
     SelectionRangeProviderCapability, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind, TextDocumentSyncOptions,
 };
-use nil::FileRange;
 use text_size::TextRange;
 
 pub(crate) fn server_capabilities() -> ServerCapabilities {

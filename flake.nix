@@ -20,13 +20,14 @@
           set -e
           die() { echo "$*" >&2; exit 1; }
 
+          cd "$(git rev-parse --show-toplevel)"
           rg --fixed-strings 'dbg!' --glob '*.rs' \
             && die 'Found dbg!()'
           cargo fmt --quiet --check >/dev/null \
             || die 'Format failed'
-          cargo clippy --quiet --all-targets --all-features --package '*' -- --deny warnings \
+          cargo clippy --quiet --all-targets --all-features -- --deny warnings \
             || die 'Clippy failed'
-          cargo test --quiet --package '*' \
+          cargo test --quiet \
             || die 'Test failed'
         '';
 
@@ -39,7 +40,7 @@
               "unstable-${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
-            buildAndTestSubdir = "lsp";
+            buildAndTestSubdir = "crates/nil";
           };
         };
 

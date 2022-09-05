@@ -1,5 +1,5 @@
+use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use lsp_types::Url;
-use nil::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

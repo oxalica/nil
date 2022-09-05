@@ -1,10 +1,10 @@
 use crate::{convert, handler, Vfs};
 use anyhow::{bail, Result};
 use crossbeam_channel::{Receiver, Sender};
+use ide::{Analysis, AnalysisHost, VfsPath};
 use lsp_server::{ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
-use nil::{Analysis, AnalysisHost, VfsPath};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;

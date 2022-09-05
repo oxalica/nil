@@ -146,6 +146,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ide"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "either",
+ "expect-test",
+ "indexmap",
+ "la-arena",
+ "ordered-float",
+ "phf",
+ "rowan",
+ "salsa",
+ "smol_str",
+ "syntax",
+]
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -237,25 +254,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lsp"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "crossbeam-channel",
- "ignore",
- "indexmap",
- "log",
- "lsp-server",
- "lsp-types",
- "nil",
- "serde",
- "serde_json",
- "text-size",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "lsp-server"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -315,16 +313,18 @@ name = "nil"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "either",
- "expect-test",
+ "crossbeam-channel",
+ "ide",
+ "ignore",
  "indexmap",
- "la-arena",
- "ordered-float",
- "phf",
- "rowan",
- "salsa",
- "smol_str",
- "syntax",
+ "log",
+ "lsp-server",
+ "lsp-types",
+ "serde",
+ "serde_json",
+ "text-size",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
