@@ -100,13 +100,13 @@ fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<Fi
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     exprs: Arena<Expr>,
-    name_defs: Arena<NameDef>,
+    names: Arena<Name>,
     entry_expr: ExprId,
     diagnostics: Vec<Diagnostic>,
 }
 
 pub type ExprId = Idx<Expr>;
-pub type NameDefId = Idx<NameDef>;
+pub type NameId = Idx<Name>;
 
 impl ops::Index<ExprId> for Module {
     type Output = Expr;
@@ -115,10 +115,10 @@ impl ops::Index<ExprId> for Module {
     }
 }
 
-impl ops::Index<NameDefId> for Module {
-    type Output = NameDef;
-    fn index(&self, index: NameDefId) -> &Self::Output {
-        &self.name_defs[index]
+impl ops::Index<NameId> for Module {
+    type Output = Name;
+    fn index(&self, index: NameId) -> &Self::Output {
+        &self.names[index]
     }
 }
 
@@ -131,10 +131,8 @@ impl Module {
         self.exprs.iter()
     }
 
-    pub fn name_defs(
-        &self,
-    ) -> impl Iterator<Item = (NameDefId, &'_ NameDef)> + ExactSizeIterator + '_ {
-        self.name_defs.iter()
+    pub fn names(&self) -> impl Iterator<Item = (NameId, &'_ Name)> + ExactSizeIterator + '_ {
+        self.names.iter()
     }
 
     pub(crate) fn module_references_query(
@@ -160,8 +158,8 @@ pub type AstPtr = rowan::ast::SyntaxNodePtr<syntax::NixLanguage>;
 pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
-    name_def_map: HashMap<AstPtr, NameDefId>,
-    name_def_map_rev: ArenaMap<NameDefId, Vec<AstPtr>>,
+    name_map: HashMap<AstPtr, NameId>,
+    name_map_rev: ArenaMap<NameId, Vec<AstPtr>>,
 }
 
 impl ModuleSourceMap {
@@ -173,13 +171,13 @@ impl ModuleSourceMap {
         self.expr_map_rev.get(&expr_id).cloned()
     }
 
-    pub fn node_name_def(&self, node: AstPtr) -> Option<NameDefId> {
-        self.name_def_map.get(&node).copied()
+    pub fn node_name(&self, node: AstPtr) -> Option<NameId> {
+        self.name_map.get(&node).copied()
     }
 
-    pub fn name_def_nodes(&self, def_id: NameDefId) -> impl Iterator<Item = AstPtr> + '_ {
-        self.name_def_map_rev
-            .get(def_id)
+    pub fn name_nodes(&self, name_id: NameId) -> impl Iterator<Item = AstPtr> + '_ {
+        self.name_map_rev
+            .get(name_id)
             .into_iter()
             .flatten()
             .cloned()
@@ -191,7 +189,7 @@ pub enum Expr {
     Missing,
     Reference(SmolStr),
     Literal(Literal),
-    Lambda(Option<NameDefId>, Option<Pat>, ExprId),
+    Lambda(Option<NameId>, Option<Pat>, ExprId),
     With(ExprId, ExprId),
     Assert(ExprId, ExprId),
     IfThenElse(ExprId, ExprId, ExprId),
@@ -258,13 +256,13 @@ impl Expr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NameDef {
-    pub name: SmolStr,
-    pub kind: NameDefKind,
+pub struct Name {
+    pub text: SmolStr,
+    pub kind: NameKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NameDefKind {
+pub enum NameKind {
     LetIn,
     RecAttrset,
     Param,
@@ -281,7 +279,7 @@ pub enum Literal {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pat {
-    pub fields: Box<[(Option<NameDefId>, Option<ExprId>)]>,
+    pub fields: Box<[(Option<NameId>, Option<ExprId>)]>,
     pub ellipsis: bool,
 }
 
@@ -296,7 +294,7 @@ pub struct Bindings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BindingKey {
-    NameDef(NameDefId),
+    NameDef(NameId),
     Name(SmolStr),
 }
 
@@ -325,10 +323,10 @@ impl Bindings {
         }
     }
 
-    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameDefId, &BindingValue)) {
+    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameId, &BindingValue)) {
         for (key, value) in self.statics.iter() {
-            if let &BindingKey::NameDef(def) = key {
-                f(def, value);
+            if let &BindingKey::NameDef(name) = key {
+                f(name, value);
             }
         }
     }

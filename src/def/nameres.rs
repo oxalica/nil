@@ -1,4 +1,4 @@
-use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameDefId};
+use super::{BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameId};
 use crate::{builtin, Diagnostic, DiagnosticKind, FileId};
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
@@ -27,7 +27,7 @@ impl ModuleScopes {
         let mut this = Self::default();
         let root_scope = this.scopes.alloc(ScopeData {
             parent: None,
-            kind: ScopeKind::NameDefs(Default::default()),
+            kind: ScopeKind::Definitions(Default::default()),
         });
         this.traverse_expr(&*module, module.entry_expr, root_scope);
         Arc::new(this)
@@ -45,11 +45,11 @@ impl ModuleScopes {
     fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
         let scope = self.scope_by_expr(expr_id)?;
         // 1. Local defs.
-        if let Some(def) = self
+        if let Some(name) = self
             .ancestors(scope)
-            .find_map(|data| data.as_name_defs()?.get(name))
+            .find_map(|data| data.as_definitions()?.get(name))
         {
-            return Some(ResolveResult::NameDef(*def));
+            return Some(ResolveResult::Definition(*name));
         }
         // 2. Builtin names.
         if let Some(name) = builtin::BUILTINS.get_key(name) {
@@ -73,18 +73,18 @@ impl ModuleScopes {
             Expr::Lambda(param, pat, body) => {
                 let mut defs = HashMap::default();
                 if let &Some(name_id) = param {
-                    defs.insert(module[name_id].name.clone(), name_id);
+                    defs.insert(module[name_id].text.clone(), name_id);
                 }
                 if let Some(pat) = pat {
                     for name_id in pat.fields.iter().filter_map(|(opt_id, _)| *opt_id) {
-                        defs.insert(module[name_id].name.clone(), name_id);
+                        defs.insert(module[name_id].text.clone(), name_id);
                     }
                 }
 
                 let scope = if !defs.is_empty() {
                     self.scopes.alloc(ScopeData {
                         parent: Some(scope),
-                        kind: ScopeKind::NameDefs(defs),
+                        kind: ScopeKind::Definitions(defs),
                     })
                 } else {
                     scope
@@ -125,8 +125,8 @@ impl ModuleScopes {
         let mut defs = HashMap::default();
 
         for (key, value) in bindings.statics.iter() {
-            if let &BindingKey::NameDef(def) = key {
-                defs.insert(module[def].name.clone(), def);
+            if let &BindingKey::NameDef(name) = key {
+                defs.insert(module[name].text.clone(), name);
             }
 
             // Inherited attrs are resolved in the outer scope.
@@ -141,7 +141,7 @@ impl ModuleScopes {
         } else {
             self.scopes.alloc(ScopeData {
                 parent: Some(scope),
-                kind: ScopeKind::NameDefs(defs),
+                kind: ScopeKind::Definitions(defs),
             })
         };
 
@@ -169,18 +169,9 @@ impl ModuleScopes {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveResult {
-    NameDef(NameDefId),
+    Definition(NameId),
     Builtin(&'static str),
     WithExprs(Vec<ExprId>),
-}
-
-impl ResolveResult {
-    pub fn as_name_def(&self) -> Option<NameDefId> {
-        match self {
-            Self::NameDef(v) => Some(*v),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,14 +182,14 @@ pub struct ScopeData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ScopeKind {
-    NameDefs(HashMap<SmolStr, NameDefId>),
+    Definitions(HashMap<SmolStr, NameId>),
     WithExpr(ExprId),
 }
 
 impl ScopeData {
-    pub fn as_name_defs(&self) -> Option<&HashMap<SmolStr, NameDefId>> {
+    pub fn as_definitions(&self) -> Option<&HashMap<SmolStr, NameId>> {
         match &self.kind {
-            ScopeKind::NameDefs(defs) => Some(defs),
+            ScopeKind::Definitions(defs) => Some(defs),
             _ => None,
         }
     }
@@ -267,7 +258,7 @@ impl NameResolution {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct NameReference {
     // Assume almost all defs are referenced somewhere.
-    def_refs: ArenaMap<NameDefId, Vec<ExprId>>,
+    def_refs: ArenaMap<NameId, Vec<ExprId>>,
     // But there are just some "with"s.
     with_refs: HashMap<ExprId, Vec<ExprId>>,
 }
@@ -279,9 +270,9 @@ impl NameReference {
         for (expr, resolved) in name_res.iter() {
             match resolved {
                 ResolveResult::Builtin(_) => {}
-                &ResolveResult::NameDef(def) => match this.def_refs.get_mut(def) {
+                &ResolveResult::Definition(name) => match this.def_refs.get_mut(name) {
                     Some(refs) => refs.push(expr),
-                    None => this.def_refs.insert(def, vec![expr]),
+                    None => this.def_refs.insert(name, vec![expr]),
                 },
                 ResolveResult::WithExprs(withs) => withs
                     .iter()
@@ -291,8 +282,8 @@ impl NameReference {
         Arc::new(this)
     }
 
-    pub fn def_references(&self, def: NameDefId) -> Option<&[ExprId]> {
-        Some(&**self.def_refs.get(def)?)
+    pub fn name_references(&self, name: NameId) -> Option<&[ExprId]> {
+        Some(&**self.def_refs.get(name)?)
     }
 
     pub fn with_references(&self, with_expr: ExprId) -> Option<&[ExprId]> {
@@ -327,12 +318,12 @@ mod tests {
         let def_poses = scopes
             .ancestors(scope_id)
             .flat_map(|scope| match &scope.kind {
-                ScopeKind::NameDefs(defs) => {
+                ScopeKind::Definitions(defs) => {
                     let mut poses = defs
                         .iter()
-                        .map(|(_, def)| {
+                        .map(|(_, name)| {
                             source_map
-                                .name_def_nodes(*def)
+                                .name_nodes(*name)
                                 .next()
                                 .unwrap()
                                 .text_range()
@@ -377,8 +368,8 @@ mod tests {
             .get(expr_id)
             .map(|ret| {
                 match ret {
-                    &ResolveResult::NameDef(def) => source_map
-                        .name_def_nodes(def)
+                    &ResolveResult::Definition(name) => source_map
+                        .name_nodes(name)
                         .map(|ptr| ptr.to_node(&parse.syntax_node()).text_range().start())
                         .collect(),
                     ResolveResult::WithExprs(exprs) => exprs

@@ -1,6 +1,6 @@
 use super::{
     AstPtr, Attrpath, BindingKey, BindingValue, Bindings, DefDatabase, Expr, ExprId, Literal,
-    Module, ModuleSourceMap, NameDef, NameDefId, NameDefKind, Pat, PathAnchor, PathData,
+    Module, ModuleSourceMap, Name, NameId, NameKind, Pat, PathAnchor, PathData,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
 use indexmap::IndexMap;
@@ -21,7 +21,7 @@ pub(super) fn lower(
         file_id,
         module: Module {
             exprs: Arena::new(),
-            name_defs: Arena::new(),
+            names: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
             diagnostics: Vec::new(),
@@ -50,10 +50,10 @@ impl LowerCtx<'_> {
         id
     }
 
-    fn alloc_name_def(&mut self, name: SmolStr, kind: NameDefKind, ptr: AstPtr) -> NameDefId {
-        let id = self.module.name_defs.alloc(NameDef { name, kind });
-        self.source_map.name_def_map.insert(ptr.clone(), id);
-        self.source_map.name_def_map_rev.insert(id, vec![ptr]);
+    fn alloc_name(&mut self, text: SmolStr, kind: NameKind, ptr: AstPtr) -> NameId {
+        let id = self.module.names.alloc(Name { text, kind });
+        self.source_map.name_map.insert(ptr.clone(), id);
+        self.source_map.name_map_rev.insert(id, vec![ptr]);
         id
     }
 
@@ -61,12 +61,12 @@ impl LowerCtx<'_> {
         self.module.diagnostics.push(diag);
     }
 
-    fn lower_name(&mut self, node: ast::Name, kind: NameDefKind) -> NameDefId {
+    fn lower_name(&mut self, node: ast::Name, kind: NameKind) -> NameId {
         let name = node
             .token()
             .map_or_else(Default::default, |tok| tok.text().into());
         let ptr = AstPtr::new(node.syntax());
-        self.alloc_name_def(name, kind, ptr)
+        self.alloc_name(name, kind, ptr)
     }
 
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
@@ -98,14 +98,13 @@ impl LowerCtx<'_> {
             ast::Expr::Paren(e) => self.lower_expr_opt(e.expr()),
             ast::Expr::Lambda(e) => {
                 let (param, pat) = e.param().map_or((None, None), |param| {
-                    let name = param.name().map(|n| self.lower_name(n, NameDefKind::Param));
+                    let name = param.name().map(|n| self.lower_name(n, NameKind::Param));
                     let pat = param.pat().map(|pat| {
                         let fields = pat
                             .fields()
                             .map(|field| {
-                                let field_name = field
-                                    .name()
-                                    .map(|n| self.lower_name(n, NameDefKind::PatField));
+                                let field_name =
+                                    field.name().map(|n| self.lower_name(n, NameKind::PatField));
                                 let default_expr = field.default_expr().map(|e| self.lower_expr(e));
                                 (field_name, default_expr)
                             })
@@ -163,7 +162,7 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::List(elements), ptr)
             }
             ast::Expr::LetIn(e) => {
-                let mut set = MergingSet::new(Some(NameDefKind::LetIn));
+                let mut set = MergingSet::new(Some(NameKind::LetIn));
                 set.merge_bindings(self, &e);
                 let bindings = set.finish(self);
                 if bindings.statics.is_empty() && bindings.inherit_froms.is_empty() {
@@ -181,13 +180,13 @@ impl LowerCtx<'_> {
             ast::Expr::AttrSet(e) => {
                 // RecAttrset is popular than LetAttrset, and is preferred.
                 let (def_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
-                    (Some(NameDefKind::RecAttrset), Expr::RecAttrset)
+                    (Some(NameKind::RecAttrset), Expr::RecAttrset)
                 } else if e.let_token().is_some() {
                     self.diagnostic(Diagnostic::new(
                         e.syntax().text_range(),
                         DiagnosticKind::LetAttrset,
                     ));
-                    (Some(NameDefKind::RecAttrset), Expr::LetAttrset)
+                    (Some(NameKind::RecAttrset), Expr::LetAttrset)
                 } else {
                     (None, Expr::Attrset)
                 };
@@ -341,7 +340,7 @@ impl AttrKind {
 }
 
 struct MergingSet {
-    def_kind: Option<NameDefKind>,
+    def_kind: Option<NameKind>,
     statics: IndexMap<BindingKey, MergingEntry>,
     inherit_froms: Vec<ExprId>,
     dynamics: Vec<(ExprId, MergingEntry)>,
@@ -366,7 +365,7 @@ impl From<BindingValue> for MergingValue {
 }
 
 impl MergingSet {
-    fn new(def_kind: Option<NameDefKind>) -> Self {
+    fn new(def_kind: Option<NameKind>) -> Self {
         Self {
             def_kind,
             statics: IndexMap::default(),
@@ -420,9 +419,7 @@ impl MergingSet {
                 }
             };
             let key = match self.def_kind {
-                Some(kind) => {
-                    BindingKey::NameDef(ctx.alloc_name_def(name.clone(), kind, ptr.clone()))
-                }
+                Some(kind) => BindingKey::NameDef(ctx.alloc_name(name.clone(), kind, ptr.clone())),
                 None => BindingKey::Name(name.clone()),
             };
 
@@ -477,7 +474,7 @@ impl MergingSet {
                     attr_ptr = ptr;
                     let key = match self.def_kind {
                         Some(kind) => {
-                            BindingKey::NameDef(ctx.alloc_name_def(name, kind, attr_ptr.clone()))
+                            BindingKey::NameDef(ctx.alloc_name(name, kind, attr_ptr.clone()))
                         }
                         None => BindingKey::Name(name),
                     };
@@ -487,7 +484,7 @@ impl MergingSet {
                 }
                 AttrKind::Dynamic(expr) => {
                     // LetIn doesn't allow dynamic attrs.
-                    if self.def_kind == Some(NameDefKind::LetIn) {
+                    if self.def_kind == Some(NameKind::LetIn) {
                         ctx.diagnostic(Diagnostic::new(
                             attr_ptr.text_range(),
                             DiagnosticKind::InvalidDynamic,
@@ -548,7 +545,7 @@ impl MergingEntry {
     fn make_attrset(
         &mut self,
         ctx: &mut LowerCtx,
-        def_kind: Option<NameDefKind>,
+        def_kind: Option<NameKind>,
         def_ptr: AstPtr,
         value_ptr: Option<AstPtr>,
     ) -> &mut MergingSet {
@@ -595,7 +592,7 @@ impl MergingEntry {
                 Some(ast::Expr::AttrSet(e)) => {
                     // RecAttrset is popular than LetAttrset, and is preferred.
                     let def_kind = if e.rec_token().is_some() {
-                        Some(NameDefKind::RecAttrset)
+                        Some(NameKind::RecAttrset)
                     } else if e.let_token().is_some() {
                         break;
                     } else {
@@ -679,11 +676,11 @@ mod tests {
         for (i, e) in module.exprs.iter() {
             writeln!(got, "{}: {:?}", i.into_raw(), e).unwrap();
         }
-        if !module.name_defs.is_empty() {
+        if !module.names.is_empty() {
             writeln!(got).unwrap();
         }
-        for (i, def) in module.name_defs.iter() {
-            writeln!(got, "{}: {:?}", i.into_raw(), def).unwrap();
+        for (i, name) in module.names.iter() {
+            writeln!(got, "{}: {:?}", i.into_raw(), name).unwrap();
         }
         expect.assert_eq(&got);
     }
@@ -784,9 +781,9 @@ mod tests {
             "a: 0",
             expect![[r#"
                 0: Literal(Int(0))
-                1: Lambda(Some(Idx::<NameDef>(0)), None, Idx::<Expr>(0))
+                1: Lambda(Some(Idx::<Name>(0)), None, Idx::<Expr>(0))
 
-                0: NameDef { name: "a", kind: Param }
+                0: Name { text: "a", kind: Param }
             "#]],
         );
         check_lower(
@@ -800,18 +797,18 @@ mod tests {
             "a@{ ... }: 0",
             expect![[r#"
                 0: Literal(Int(0))
-                1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: true }), Idx::<Expr>(0))
+                1: Lambda(Some(Idx::<Name>(0)), Some(Pat { fields: [], ellipsis: true }), Idx::<Expr>(0))
 
-                0: NameDef { name: "a", kind: Param }
+                0: Name { text: "a", kind: Param }
             "#]],
         );
         check_lower(
             "{ } @ a: 0",
             expect![[r#"
                 0: Literal(Int(0))
-                1: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))
+                1: Lambda(Some(Idx::<Name>(0)), Some(Pat { fields: [], ellipsis: false }), Idx::<Expr>(0))
 
-                0: NameDef { name: "a", kind: Param }
+                0: Name { text: "a", kind: Param }
             "#]],
         );
         check_lower(
@@ -819,10 +816,10 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(0))
                 1: Literal(Int(0))
-                2: Lambda(None, Some(Pat { fields: [(Some(Idx::<NameDef>(0)), None), (Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0)))], ellipsis: true }), Idx::<Expr>(1))
+                2: Lambda(None, Some(Pat { fields: [(Some(Idx::<Name>(0)), None), (Some(Idx::<Name>(1)), Some(Idx::<Expr>(0)))], ellipsis: true }), Idx::<Expr>(1))
 
-                0: NameDef { name: "a", kind: PatField }
-                1: NameDef { name: "b", kind: PatField }
+                0: Name { text: "a", kind: PatField }
+                1: Name { text: "b", kind: PatField }
             "#]],
         );
         check_lower(
@@ -830,11 +827,11 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(0))
                 1: Literal(Int(0))
-                2: Lambda(Some(Idx::<NameDef>(0)), Some(Pat { fields: [(Some(Idx::<NameDef>(1)), Some(Idx::<Expr>(0))), (Some(Idx::<NameDef>(2)), None)], ellipsis: false }), Idx::<Expr>(1))
+                2: Lambda(Some(Idx::<Name>(0)), Some(Pat { fields: [(Some(Idx::<Name>(1)), Some(Idx::<Expr>(0))), (Some(Idx::<Name>(2)), None)], ellipsis: false }), Idx::<Expr>(1))
 
-                0: NameDef { name: "c", kind: Param }
-                1: NameDef { name: "a", kind: PatField }
-                2: NameDef { name: "b", kind: PatField }
+                0: Name { text: "c", kind: Param }
+                1: Name { text: "a", kind: PatField }
+                2: Name { text: "b", kind: PatField }
             "#]],
         );
     }
@@ -1046,11 +1043,11 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
                 3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "b", kind: RecAttrset }
-                1: NameDef { name: "c", kind: RecAttrset }
+                0: Name { text: "b", kind: RecAttrset }
+                1: Name { text: "c", kind: RecAttrset }
             "#]],
         );
 
@@ -1062,11 +1059,11 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
                 3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "b", kind: RecAttrset }
-                1: NameDef { name: "c", kind: RecAttrset }
+                0: Name { text: "b", kind: RecAttrset }
+                1: Name { text: "c", kind: RecAttrset }
             "#]],
         );
 
@@ -1104,11 +1101,11 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<NameDef>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0))), (NameDef(Idx::<Name>(1)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
                 3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "b", kind: RecAttrset }
-                1: NameDef { name: "c", kind: RecAttrset }
+                0: Name { text: "b", kind: RecAttrset }
+                1: Name { text: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1120,9 +1117,9 @@ mod tests {
             expect![[r#"
                 0: Literal(Int(1))
                 1: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                2: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "a", kind: RecAttrset }
+                0: Name { text: "a", kind: RecAttrset }
             "#]],
         );
     }
@@ -1134,11 +1131,11 @@ mod tests {
             "{ a.b = rec { c = 1; }; }",
             expect![[r#"
                 0: Literal(Int(1))
-                1: RecAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                1: RecAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
                 2: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
                 3: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "c", kind: RecAttrset }
+                0: Name { text: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1152,11 +1149,11 @@ mod tests {
 
                 0: Literal(Int(1))
                 1: Attrset(Bindings { statics: [(Name("d"), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: LetAttrset(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                2: LetAttrset(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
                 3: Attrset(Bindings { statics: [(Name("b"), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
                 4: Attrset(Bindings { statics: [(Name("a"), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
 
-                0: NameDef { name: "c", kind: RecAttrset }
+                0: Name { text: "c", kind: RecAttrset }
             "#]],
         );
     }
@@ -1199,9 +1196,9 @@ mod tests {
                 1: Literal(Int(1))
                 2: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(1))] })
                 3: Literal(Int(1))
-                4: LetIn(Bindings { statics: [(NameDef(Idx::<NameDef>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
+                4: LetIn(Bindings { statics: [(NameDef(Idx::<Name>(0)), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] }, Idx::<Expr>(3))
 
-                0: NameDef { name: "a", kind: LetIn }
+                0: Name { text: "a", kind: LetIn }
             "#]],
         );
     }

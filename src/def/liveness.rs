@@ -16,7 +16,7 @@
 //! - Unused `let` bindings.
 //! - Unused `with` expressions.
 //! - Unnecessary `rec` attrsets.
-use super::{BindingKey, BindingValue, DefDatabase, Expr, ExprId, NameDefId, ResolveResult};
+use super::{BindingKey, BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use la_arena::ArenaMap;
 use rowan::ast::AstNode;
@@ -27,7 +27,7 @@ use syntax::ast;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct LivenessCheckResult {
-    name_defs: Box<[NameDefId]>,
+    names: Box<[NameId]>,
     withs: Box<[ExprId]>,
     rec_attrsets: Box<[ExprId]>,
 }
@@ -42,9 +42,9 @@ impl LivenessCheckResult {
         let root = db.parse(file).syntax_node();
         let mut diags = Vec::new();
         diags.extend(
-            self.name_defs
+            self.names
                 .iter()
-                .flat_map(|&def| source_map.name_def_nodes(def))
+                .flat_map(|&def| source_map.name_nodes(def))
                 .map(|ptr| Diagnostic::new(ptr.text_range(), DiagnosticKind::UnusedBinding)),
         );
         diags.extend(self.withs.iter().map(|&expr| {
@@ -80,7 +80,7 @@ pub(crate) fn liveness_check_query(
     let mut unused_defs = Vec::new();
 
     // For rec-attrset check.
-    let mut visited_defs: ArenaMap<NameDefId, ()> = ArenaMap::default();
+    let mut visited_defs: ArenaMap<NameId, ()> = ArenaMap::default();
     // For traversal of let-in bindings.
     let mut visited_def_rhs = ArenaMap::default();
     let mut visited_withs = ArenaMap::default();
@@ -89,15 +89,15 @@ pub(crate) fn liveness_check_query(
     while !stack.is_empty() {
         // N.B. This should be dropped in every loop.
         // Or it will make this whole check cost quadratic time!
-        let mut discovered_let_rhs: HashMap<NameDefId, ExprId> = HashMap::new();
+        let mut discovered_let_rhs: HashMap<NameId, ExprId> = HashMap::new();
 
         // Traverse all reachable Exprs from roots.
         while let Some(expr) = stack.pop() {
             match &module[expr] {
                 Expr::Reference(_) => match name_res.get(expr) {
-                    Some(&ResolveResult::NameDef(def)) => {
-                        visited_defs.insert(def, ());
-                        if let Some(rhs) = discovered_let_rhs.remove(&def) {
+                    Some(&ResolveResult::Definition(name)) => {
+                        visited_defs.insert(name, ());
+                        if let Some(rhs) = discovered_let_rhs.remove(&name) {
                             // Dedup inherit-from expressions.
                             if visited_def_rhs.get(rhs).is_none() {
                                 visited_def_rhs.insert(rhs, ());
@@ -114,11 +114,11 @@ pub(crate) fn liveness_check_query(
                 },
                 Expr::LetIn(bindings, body) => {
                     // Pre-mark all let-binding.
-                    bindings.walk_child_defs(|def, value| {
+                    bindings.walk_child_defs(|name, value| {
                         let (BindingValue::Inherit(e)
                         | BindingValue::InheritFrom(e)
                         | BindingValue::Expr(e)) = *value;
-                        discovered_let_rhs.insert(def, e);
+                        discovered_let_rhs.insert(name, e);
                     });
 
                     // Traverse the body as root.
@@ -130,7 +130,7 @@ pub(crate) fn liveness_check_query(
 
         // Record unused let-bindings and continue traversal inside them,
         // as if themselves are reachable.
-        unused_defs.extend(discovered_let_rhs.iter().map(|(&def, _)| def));
+        unused_defs.extend(discovered_let_rhs.iter().map(|(&name, _)| name));
         stack.extend(discovered_let_rhs.iter().map(|(_, &rhs)| rhs));
     }
 
@@ -150,7 +150,7 @@ pub(crate) fn liveness_check_query(
             }
             Expr::RecAttrset(bindings)
                 if bindings.statics.iter().all(|(key, _)| match key {
-                    &BindingKey::NameDef(def) => visited_defs.get(def).is_none(),
+                    &BindingKey::NameDef(name) => visited_defs.get(name).is_none(),
                     BindingKey::Name(_) => unreachable!(),
                 }) =>
             {
@@ -161,7 +161,7 @@ pub(crate) fn liveness_check_query(
     }
 
     Arc::new(LivenessCheckResult {
-        name_defs: unused_defs.into(),
+        names: unused_defs.into(),
         withs: unused_withs.into(),
         rec_attrsets: unused_recs.into(),
     })

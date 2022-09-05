@@ -46,9 +46,9 @@ pub(crate) fn goto_definition(
 
     let name_res = db.name_resolution(file_id);
     match name_res.get(expr_id)? {
-        &ResolveResult::NameDef(def) => {
+        &ResolveResult::Definition(name) => {
             let targets = source_map
-                .name_def_nodes(def)
+                .name_nodes(name)
                 .filter_map(|ptr| {
                     let name_node = ptr.to_node(&parse.syntax_node());
                     let full_node = name_node.ancestors().find(|n| {

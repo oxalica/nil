@@ -39,15 +39,15 @@ pub(crate) fn references(
     let name_ref = db.name_reference(file_id);
     let refs = match kind {
         DefKind::Attr(ptr) => {
-            let def = source_map.node_name_def(ptr)?;
-            name_ref.def_references(def)
+            let name = source_map.node_name(ptr)?;
+            name_ref.name_references(name)
         }
         DefKind::With(ptr) => {
             let expr = source_map.node_expr(ptr)?;
             name_ref.with_references(expr)
         }
     };
-    // When {def,with}_references returns None, it means no references,
+    // When {name,with}_references returns None, it means no references,
     // not a failure.
     let refs = refs.map_or(Vec::new(), |refs| {
         refs.iter()

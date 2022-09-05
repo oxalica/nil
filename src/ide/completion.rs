@@ -1,5 +1,5 @@
 use crate::builtin::BuiltinKind;
-use crate::def::{AstPtr, NameDefKind};
+use crate::def::{AstPtr, NameKind};
 use crate::{builtin, DefDatabase, FileId, FilePos};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
@@ -56,12 +56,12 @@ impl From<BuiltinKind> for CompletionItemKind {
     }
 }
 
-impl From<NameDefKind> for CompletionItemKind {
-    fn from(k: NameDefKind) -> Self {
+impl From<NameKind> for CompletionItemKind {
+    fn from(k: NameKind) -> Self {
         match k {
-            NameDefKind::LetIn => Self::LetBinding,
-            NameDefKind::RecAttrset => Self::Field,
-            NameDefKind::Param | NameDefKind::PatField => Self::Param,
+            NameKind::LetIn => Self::LetBinding,
+            NameKind::RecAttrset => Self::Field,
+            NameKind::Param | NameKind::PatField => Self::Param,
         }
     }
 }
@@ -147,13 +147,13 @@ fn complete_expr(
     // Names in current scopes.
     scopes
         .ancestors(scope_id)
-        .filter_map(|scope| scope.as_name_defs())
+        .filter_map(|scope| scope.as_definitions())
         .flatten()
-        .map(|(name, &def)| CompletionItem {
-            label: name.clone(),
+        .map(|(text, name)| CompletionItem {
+            label: text.clone(),
             source_range,
-            replace: name.clone(),
-            kind: module[def].kind.into(),
+            replace: text.clone(),
+            kind: module[*name].kind.into(),
         })
         .for_each(&mut feed);
 
