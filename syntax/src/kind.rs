@@ -2,12 +2,13 @@ macro_rules! def {
     (
         $(
             $(#[$meta:meta])*
-            $variant:ident $(= [$($tt:tt)*])?,
+            $variant:ident $(= [$($tt:tt)*])? $(@ $anchor:ident)?,
         )*
     ) => {
         #[allow(bad_style)]
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-        #[repr(u16)]
+        #[repr(u8)]
+        #[non_exhaustive]
         pub enum SyntaxKind {
             $(
                 $(#[$meta])*
@@ -21,22 +22,23 @@ macro_rules! def {
                 ($($tt)*) => { $crate::SyntaxKind::$variant };
             )?)*
         }
+
+        impl SyntaxKind {
+            $($(const $anchor: Self = Self::$variant;)?)*
+        }
     };
 }
 
 def! {
     // Placeholder.
-    ERROR,
-
-    // Entry node.
-    SOURCE_FILE,
+    ERROR @FIRST,
 
     // Whitespace.
     SPACE,
     COMMENT,
 
     // Keywords.
-    KW_ASSERT = [assert],
+    KW_ASSERT = [assert] @KEYWORD_FIRST,
     KW_ELSE = [else],
     KW_IF = [if],
     KW_IN = [in],
@@ -45,10 +47,10 @@ def! {
     KW_OR = [or],
     KW_REC = [rec],
     KW_THEN = [then],
-    KW_WITH = [with],
+    KW_WITH = [with] @KEYWORD_LAST,
 
     // Symbols len=1.
-    AT = [@],
+    AT = [@] @SYMBOL_FIRST,
     BANG = [!],
     COLON = [:],
     COMMA = [,],
@@ -84,7 +86,7 @@ def! {
     SLASH2 = ["//"],
 
     // Symbols len=3.
-    DOT3 = [...],
+    DOT3 = [...] @SYMBOL_LAST,
 
     // Literals and identifiers.
     FLOAT,
@@ -103,7 +105,10 @@ def! {
     STRING_FRAGMENT,
     STRING_ESCAPE,
 
-    // Nodes.
+    // Entry node.
+    SOURCE_FILE,
+
+    // Other nodes.
     APPLY,
     ASSERT,
     ATTR_PATH,
@@ -129,24 +134,23 @@ def! {
     SELECT,
     STRING,
     UNARY_OP,
-    WITH,
-
-    #[doc(hidden)]
-    __LAST,
+    WITH @LAST,
 }
 
-impl From<u16> for SyntaxKind {
-    #[inline]
-    fn from(d: u16) -> SyntaxKind {
-        assert!(d <= (SyntaxKind::__LAST as u16));
-        unsafe { std::mem::transmute::<u16, SyntaxKind>(d) }
+impl SyntaxKind {
+    #[inline(always)]
+    pub fn is_whitespace(self) -> bool {
+        matches!(self, Self::COMMENT | Self::SPACE)
     }
-}
 
-impl From<SyntaxKind> for u16 {
-    #[inline]
-    fn from(k: SyntaxKind) -> u16 {
-        k as u16
+    #[inline(always)]
+    pub fn is_keyword(self) -> bool {
+        (Self::KEYWORD_FIRST as u8..=Self::KEYWORD_LAST as u8).contains(&(self as u8))
+    }
+
+    #[inline(always)]
+    pub fn is_symbol(self) -> bool {
+        (Self::SYMBOL_FIRST as u8..=Self::SYMBOL_LAST as u8).contains(&(self as u8))
     }
 }
 
@@ -158,8 +162,10 @@ impl From<SyntaxKind> for rowan::SyntaxKind {
 }
 
 impl From<rowan::SyntaxKind> for SyntaxKind {
+    #[inline(always)]
     fn from(k: rowan::SyntaxKind) -> Self {
-        assert!(k.0 <= (SyntaxKind::__LAST as u16));
-        unsafe { std::mem::transmute::<u16, SyntaxKind>(k.0) }
+        assert!((Self::FIRST as u16..=Self::LAST as u16).contains(&k.0));
+        // SAFETY: Guarded by the assert.
+        unsafe { std::mem::transmute::<u8, SyntaxKind>(k.0 as u8) }
     }
 }

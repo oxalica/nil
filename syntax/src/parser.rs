@@ -730,10 +730,6 @@ impl<'i> Parser<'i> {
 }
 
 impl SyntaxKind {
-    fn is_whitespace(self) -> bool {
-        matches!(self, COMMENT | SPACE)
-    }
-
     // This must matches Parser::attr_opt.
     fn can_start_attr(self) -> bool {
         matches!(self, T!["${"] | T!['"'] | T![or] | IDENT)

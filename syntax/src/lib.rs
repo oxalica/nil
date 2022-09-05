@@ -71,12 +71,14 @@ pub enum NixLanguage {}
 impl rowan::Language for NixLanguage {
     type Kind = SyntaxKind;
 
+    #[inline(always)]
     fn kind_from_raw(raw: rowan::SyntaxKind) -> SyntaxKind {
-        SyntaxKind::from(raw.0)
+        raw.into()
     }
 
+    #[inline(always)]
     fn kind_to_raw(kind: SyntaxKind) -> rowan::SyntaxKind {
-        rowan::SyntaxKind(kind.into())
+        kind.into()
     }
 }
 
