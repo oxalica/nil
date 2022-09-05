@@ -50,7 +50,8 @@
             rust
             gdb
             jq
-            (import ./neovim-env.nix { inherit pkgs; })
+            (import ./dev/neovim-lsp.nix { inherit pkgs; })
+            (import ./dev/vim-coc.nix { inherit pkgs; })
             pre-commit
           ];
           RUST_BACKTRACE = "short";

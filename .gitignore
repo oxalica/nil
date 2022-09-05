@@ -1,6 +1,7 @@
 /target
 /.envrc
 /result*
+/test.nix
 
 # Profiling
 /*.svg

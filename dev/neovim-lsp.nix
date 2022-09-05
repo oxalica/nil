@@ -5,11 +5,10 @@
 # - `NIL_LOG_PATH`: Where to redirect LSP's stderr. Default: `/tmp/nil.log`
 { pkgs ? import <nixpkgs> { } }:
 let
-  neovim = (pkgs.neovim.override {
-    withPython3 = false;
-
+  neovim = pkgs.neovim.override {
     configure = {
       customRC = ''
+        source ${./vimrc.vim}
         lua <<EOF
         ${luaRc}
         EOF
@@ -21,37 +20,13 @@ let
         nvim-cmp
         cmp_luasnip
         cmp-nvim-lsp
-        # https://github.com/neovim/nvim-lspconfig/pull/2053
-        (nvim-lspconfig.overrideAttrs (old: {
-          version = "pr-2053";
-          src = pkgs.fetchFromGitHub {
-            owner = "neovim";
-            repo = "nvim-lspconfig";
-            rev = "e094ff79c6f5b806f601c930d37870988bb5feaa";
-            hash = "sha256-50sXmJMb7MUPWwtE/tt3neP3TNmC2guvMzJqeS4Tp98=";
-          };
-        }))
+        nvim-lspconfig
       ];
     };
-  }).overrideAttrs (old: {
-    buildCommand = old.buildCommand + ''
-      mv $out/bin/nvim{,-test}
-    '';
-  });
+  };
 
   # lua
   luaRc = ''
-    -- Make it easier to use.
-    vim.o.mouse = 'a'
-    vim.o.number = true
-    vim.o.cursorline = true
-
-    vim.o.laststatus = 2 -- Always show statusline.
-    vim.o.statusline =
-      '%<%f %m%r%y %LL ' ..
-      '%=' ..
-      ' 0x%-4.B %-16.(%lL,%cC%V,%oB%) %P'
-
     local cmp = require('cmp')
     cmp.setup {
       snippet = {
@@ -73,21 +48,21 @@ let
     }
 
     local lsp_mappings = {
-      { 'gD', 'vim.lsp.buf.declaration()' },
-      { 'gd', 'vim.lsp.buf.definition()' },
-      { 'gi', 'vim.lsp.buf.implementation()' },
-      { 'gr', 'vim.lsp.buf.references()' },
-      { '[d', 'vim.diagnostic.goto_prev()' },
-      { ']d', 'vim.diagnostic.goto_next()' },
-      { '<space><space>', 'vim.lsp.buf.hover()' },
-      { '<space>s', 'vim.lsp.buf.signature_help()' },
-      { '<space>r', 'vim.lsp.buf.rename()' },
-      { '<space>a', 'vim.lsp.buf.code_action()' },
-      { '<space>d', 'vim.diagnostic.open_float()' },
-      { '<space>q', 'vim.diagnostic.setloclist()' },
+      { 'gD', vim.lsp.buf.declaration },
+      { 'gd', vim.lsp.buf.definition },
+      { 'gi', vim.lsp.buf.implementation },
+      { 'gr', vim.lsp.buf.references },
+      { '[d', vim.diagnostic.goto_prev },
+      { ']d', vim.diagnostic.goto_next },
+      { ' ' , vim.lsp.buf.hover },
+      { ' s', vim.lsp.buf.signature_help },
+      { ' r', vim.lsp.buf.rename },
+      { ' a', vim.lsp.buf.code_action },
+      { ' d', vim.diagnostic.open_float },
+      { ' q', vim.diagnostic.setloclist },
     }
-    for i, lr in pairs(lsp_mappings) do
-      vim.api.nvim_set_keymap('n', lr[1], '<cmd>lua ' .. lr[2] .. '<cr>', { noremap = true, silent = true })
+    for i, map in pairs(lsp_mappings) do
+      vim.keymap.set('n', map[1], function() map[2]() end)
     end
 
     -- https://github.com/neovim/nvim-lspconfig/wiki/Autocompletion
@@ -106,5 +81,7 @@ let
     }
   '';
 
-in
-  neovim
+in pkgs.runCommand "nvim-lsp" { } ''
+  mkdir -p $out/bin
+  ln -s ${neovim}/bin/nvim $out/bin/nvim-lsp
+''
