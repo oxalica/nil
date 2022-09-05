@@ -34,13 +34,19 @@
       in {
         packages = rec {
           default = nil;
-          nil = pkgs.rustPlatform.buildRustPackage {
+          nil = let
+            mtime = self.lastModifiedDate;
+            date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
+            rev = self.shortRev or (throw "Git changes are not committed");
+          in pkgs.rustPlatform.buildRustPackage {
             pname = "nil";
-            version = let mtime = self.lastModifiedDate; in
-              "unstable-${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
-            src = ./.;
-            cargoLock.lockFile = ./Cargo.lock;
+            version = "unstable-${date}";
+            src = self;
+            cargoLock.lockFile = self + "/Cargo.lock";
             buildAndTestSubdir = "crates/nil";
+
+            CFG_DATE = date;
+            CFG_REV = rev;
           };
         };
 

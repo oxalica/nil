@@ -17,6 +17,13 @@ fn main() -> Result<()> {
 
     setup_logger();
 
+    if env::args().any(|arg| arg == "--version") {
+        let date = option_env!("CFG_DATE").unwrap_or("unknown");
+        let rev = option_env!("CFG_REV").unwrap_or("unknown");
+        println!("nil {} {}", date, rev);
+        return Ok(());
+    }
+
     let (conn, io_threads) = Connection::stdio();
     nil::main_loop(conn)?;
     io_threads.join()?;
