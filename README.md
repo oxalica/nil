@@ -34,7 +34,7 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [ ] Names introduced by `inherit`.
   - [ ] Names used by `inherit`.
   - [ ] Conflict detection.
-  - [ ] Rename to string literals.
+  - [x] Rename to string literals.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 

@@ -22,16 +22,18 @@ pub(crate) fn rename(
     new_name: &str,
 ) -> RenameResult<WorkspaceEdit> {
     let (_, name) = find_name(db, fpos).ok_or_else(|| "No references found".to_owned())?;
-    if !is_valid_ident(new_name) {
-        return Err("Invalid new identifier".into());
-    }
+
+    let is_new_name_ident = is_valid_ident(new_name);
+    let new_attr = match is_new_name_ident {
+        true => new_name.into(),
+        false => escape_name_to_string(new_name),
+    };
 
     let file_id = fpos.file_id;
     let parse = db.parse(file_id);
     let source_map = db.source_map(file_id);
 
     let mut edits = Vec::new();
-    let new_name = SmolStr::from(new_name);
 
     // Rename definitions.
     for ptr in source_map.name_nodes(name) {
@@ -41,13 +43,16 @@ pub(crate) fn rename(
         }
         edits.push(TextEdit {
             delete: node.text_range(),
-            insert: new_name.clone(),
+            insert: new_attr.clone(),
         });
     }
 
     // Rename usages.
     let name_refs = db.name_reference(file_id);
     let refs = name_refs.name_references(name).unwrap_or_default();
+    if !is_new_name_ident && !refs.is_empty() {
+        return Err("Cannot rename to a string literal while it is referenced".into());
+    }
     for &expr in refs {
         let ptr = source_map
             .expr_node(expr)
@@ -58,7 +63,7 @@ pub(crate) fn rename(
         }
         edits.push(TextEdit {
             delete: ptr.text_range(),
-            insert: new_name.clone(),
+            insert: new_attr.clone(),
         });
     }
 
@@ -137,6 +142,10 @@ fn is_valid_ident(name: &str) -> bool {
             .iter()
             .all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'\'' || b == b'-')
         && !KEYWORDS.contains(&bytes)
+}
+
+fn escape_name_to_string(name: &str) -> SmolStr {
+    ("\"".to_owned() + &name.replace('\\', "\\\\").replace('"', "\\\"") + "\"").into()
 }
 
 #[cfg(test)]
@@ -341,6 +350,27 @@ mod tests {
             "{ a = rec { b = $0c; }; a.c = b; }",
             "x",
             expect!["{ a = rec { b = x; }; a.x = b; }"],
+        );
+    }
+
+    #[test]
+    fn rename_to_string() {
+        check("{ $0a = 1; }", "1", expect![[r#"{ "1" = 1; }"#]]);
+        check(
+            "{ $0a.a = 1; a.b = 1; }",
+            "1",
+            expect![[r#"{ "1".a = 1; "1".b = 1; }"#]],
+        );
+        check("let $0a = 1; in 1", "1", expect![[r#"let "1" = 1; in 1"#]]);
+        check(
+            "let $0a = 1; in a",
+            "1",
+            expect!["Cannot rename to a string literal while it is referenced"],
+        );
+        check(
+            "rec { $0a = a; }",
+            "1",
+            expect!["Cannot rename to a string literal while it is referenced"],
         );
     }
 }
