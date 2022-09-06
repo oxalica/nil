@@ -3,6 +3,7 @@ mod builtin;
 mod def;
 mod diagnostic;
 mod ide;
+mod text_edit;
 
 #[cfg(test)]
 mod tests;
@@ -17,3 +18,4 @@ pub use base::{
 };
 pub use def::{DefDatabase, Module, ModuleSourceMap};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity};
+pub use text_edit::{TextEdit, WorkspaceEdit};

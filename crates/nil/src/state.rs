@@ -89,6 +89,8 @@ impl State {
             .on::<req::References>(handler::references)
             .on::<req::Completion>(handler::completion)
             .on::<req::SelectionRangeRequest>(handler::selection_range)
+            .on::<req::PrepareRenameRequest>(handler::prepare_rename)
+            .on::<req::Rename>(handler::rename)
             .finish();
     }
 

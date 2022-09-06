@@ -27,6 +27,14 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] Warnings of unused bindings, `with` and `rec`.
   - [ ] Client pulled diagnostics.
 - [x] Expand selection. `textDocument/selectionRange`
+- [x] Renaming. `textDocument/renamme`, `textDocument/prepareRename`
+  - [x] Identifiers in parameters and bindings, from `let`, rec and non-rec attrsets.
+  - [x] Static string literal bindings.
+  - [x] Merged path-value binding names.
+  - [ ] Names introduced by `inherit`.
+  - [ ] Names used by `inherit`.
+  - [ ] Conflict detection.
+  - [ ] Rename to string literals.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 

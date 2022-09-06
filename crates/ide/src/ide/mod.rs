@@ -3,12 +3,14 @@ mod diagnostics;
 mod expand_selection;
 mod goto_definition;
 mod references;
+mod rename;
 
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
-use crate::{Change, Diagnostic, FileId, FilePos, FileRange};
+use crate::{Change, Diagnostic, FileId, FilePos, FileRange, WorkspaceEdit};
 use rowan::TextRange;
 use salsa::{Database, Durability, ParallelDatabase};
+use smol_str::SmolStr;
 use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
@@ -21,6 +23,8 @@ pub struct NavigationTarget {
 }
 
 pub use salsa::Cancelled;
+
+use self::rename::RenameResult;
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
@@ -98,6 +102,18 @@ impl Analysis {
 
     pub fn references(&self, pos: FilePos) -> Cancellable<Option<Vec<FileRange>>> {
         self.with_db(|db| references::references(db, pos))
+    }
+
+    pub fn prepare_rename(&self, fpos: FilePos) -> Cancellable<RenameResult<(TextRange, SmolStr)>> {
+        self.with_db(|db| rename::prepare_rename(db, fpos))
+    }
+
+    pub fn rename(
+        &self,
+        fpos: FilePos,
+        new_name: &str,
+    ) -> Cancellable<RenameResult<WorkspaceEdit>> {
+        self.with_db(|db| rename::rename(db, fpos, new_name))
     }
 
     pub fn expand_selection(&self, frange: FileRange) -> Cancellable<Option<Vec<TextRange>>> {

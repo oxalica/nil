@@ -2,9 +2,10 @@ use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Location, OneOf, ReferenceParams, SelectionRange, SelectionRangeParams,
-    SelectionRangeProviderCapability, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions,
+    GotoDefinitionResponse, Location, OneOf, PrepareRenameResponse, ReferenceParams, RenameOptions,
+    RenameParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
+    ServerCapabilities, TextDocumentPositionParams, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use text_size::TextRange;
 
@@ -24,6 +25,10 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
         }),
         references_provider: Some(OneOf::Left(true)),
         selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+        rename_provider: Some(OneOf::Right(RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        })),
         ..Default::default()
     }
 }
@@ -117,4 +122,29 @@ pub(crate) fn selection_range(
         })
         .collect::<Result<Vec<_>>>();
     ret.map(Some)
+}
+
+pub(crate) fn prepare_rename(
+    snap: StateSnapshot,
+    params: TextDocumentPositionParams,
+) -> Result<Option<PrepareRenameResponse>> {
+    let fpos = convert::from_file_pos(&snap, &params)?;
+    let (range, text) = snap
+        .analysis
+        .prepare_rename(fpos)?
+        .map_err(convert::to_rename_error)?;
+    let vfs = snap.vfs.read().unwrap();
+    let resp = convert::to_prepare_rename_response(&vfs, fpos.file_id, range, text.into());
+    Ok(Some(resp))
+}
+
+pub(crate) fn rename(snap: StateSnapshot, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+    let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
+    let ws_edit = snap
+        .analysis
+        .rename(fpos, &params.new_name)?
+        .map_err(convert::to_rename_error)?;
+    let vfs = snap.vfs.read().unwrap();
+    let resp = convert::to_workspace_edit(&vfs, ws_edit);
+    Ok(Some(resp))
 }

@@ -1,5 +1,10 @@
-use crate::{LineMap, Result, StateSnapshot, Vfs};
-use ide::{CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity};
+use crate::{LineMap, LspError, Result, StateSnapshot, Vfs};
+use ide::{
+    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity, TextEdit,
+    WorkspaceEdit,
+};
+use lsp::PrepareRenameResponse;
+use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
     Position, Range, TextDocumentIdentifier, TextDocumentPositionParams,
@@ -134,5 +139,56 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
         })),
         // TODO
         ..Default::default()
+    }
+}
+
+pub(crate) fn to_rename_error(message: String) -> LspError {
+    LspError {
+        code: ErrorCode::InvalidRequest,
+        message,
+    }
+}
+
+pub(crate) fn to_prepare_rename_response(
+    vfs: &Vfs,
+    file: FileId,
+    range: TextRange,
+    text: String,
+) -> PrepareRenameResponse {
+    let line_map = vfs.file_line_map(file);
+    let range = to_range(line_map, range);
+    PrepareRenameResponse::RangeWithPlaceholder {
+        range,
+        placeholder: text,
+    }
+}
+
+pub(crate) fn to_workspace_edit(vfs: &Vfs, ws_edit: WorkspaceEdit) -> lsp::WorkspaceEdit {
+    let content_edits = ws_edit
+        .content_edits
+        .into_iter()
+        .map(|(file, edits)| {
+            let uri = vfs.uri_for_file(file);
+            let edits = edits
+                .into_iter()
+                .map(|edit| {
+                    let line_map = vfs.file_line_map(file);
+                    to_text_edit(line_map, edit)
+                })
+                .collect();
+            (uri, edits)
+        })
+        .collect();
+    lsp::WorkspaceEdit {
+        changes: Some(content_edits),
+        document_changes: None,
+        change_annotations: None,
+    }
+}
+
+pub(crate) fn to_text_edit(line_map: &LineMap, edit: TextEdit) -> lsp::TextEdit {
+    lsp::TextEdit {
+        range: to_range(line_map, edit.delete),
+        new_text: edit.insert.into(),
     }
 }

@@ -3,13 +3,27 @@ mod handler;
 mod state;
 mod vfs;
 
-use lsp_server::Connection;
+use lsp_server::{Connection, ErrorCode};
 use lsp_types::InitializeParams;
-use std::env;
 use std::path::PathBuf;
+use std::{env, fmt};
 
 pub(crate) use state::{State, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
+
+#[derive(Debug)]
+pub(crate) struct LspError {
+    code: ErrorCode,
+    message: String,
+}
+
+impl fmt::Display for LspError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for LspError {}
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
