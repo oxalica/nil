@@ -220,8 +220,9 @@ mod tests {
 
     #[test]
     fn line_map_ascii() {
-        let (s, map) = LineMap::normalize("hello\nworld\nend".into()).unwrap();
-        assert_eq!(s, "hello\nworld\nend");
+        let s = "hello\nworld\nend";
+        let (norm, map) = LineMap::normalize(s.into()).unwrap();
+        assert_eq!(norm, s);
         assert_eq!(&map.line_starts, &[0, 6, 12, 15]);
 
         let mapping = [
@@ -240,8 +241,14 @@ mod tests {
 
     #[test]
     fn line_map_unicode() {
-        let (s, map) = LineMap::normalize("_A_ß_ℝ_💣_".into()).unwrap();
-        assert_eq!(s, "_A_ß_ℝ_💣_");
+        //    |         | UTF-8       | UTF-16
+        // A  | U+00041 | 41          | 0041
+        // ß  | U+000DF | C3 9F       | 00DF
+        // ℝ  | U+0211D | E2 84 9D    | 211D
+        // 💣 | U+1F4A3 | F0 9F 92 A3 | D83D DCA3
+        let s = "_A_ß_ℝ_💣_";
+        let (norm, map) = LineMap::normalize(s.into()).unwrap();
+        assert_eq!(norm, s);
         assert_eq!(&map.line_starts, &[0, 15]);
         assert_eq!(
             &map.char_diffs,
