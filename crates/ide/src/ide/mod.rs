@@ -4,6 +4,7 @@ mod expand_selection;
 mod goto_definition;
 mod references;
 mod rename;
+mod syntax_highlighting;
 
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
@@ -14,6 +15,7 @@ use smol_str::SmolStr;
 use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
+pub use syntax_highlighting::{HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationTarget {
@@ -88,6 +90,18 @@ impl Analysis {
         Cancelled::catch(|| f(&self.db))
     }
 
+    pub fn expand_selection(&self, frange: FileRange) -> Cancellable<Option<Vec<TextRange>>> {
+        self.with_db(|db| expand_selection::expand_selection(db, frange))
+    }
+
+    pub fn syntax_highlight(
+        &self,
+        file: FileId,
+        range: Option<TextRange>,
+    ) -> Cancellable<Vec<HlRange>> {
+        self.with_db(|db| syntax_highlighting::highlight(db, file, range))
+    }
+
     pub fn diagnostics(&self, file: FileId) -> Cancellable<Vec<Diagnostic>> {
         self.with_db(|db| diagnostics::diagnostics(db, file))
     }
@@ -114,9 +128,5 @@ impl Analysis {
         new_name: &str,
     ) -> Cancellable<RenameResult<WorkspaceEdit>> {
         self.with_db(|db| rename::rename(db, fpos, new_name))
-    }
-
-    pub fn expand_selection(&self, frange: FileRange) -> Cancellable<Option<Vec<TextRange>>> {
-        self.with_db(|db| expand_selection::expand_selection(db, frange))
     }
 }

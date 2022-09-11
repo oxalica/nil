@@ -183,6 +183,10 @@ impl LineMap {
         Some((text, this))
     }
 
+    pub fn line_count(&self) -> u32 {
+        self.line_starts.len() as u32 - 1
+    }
+
     pub fn pos(&self, line: u32, mut col: u32) -> TextSize {
         let pos = self.line_starts.get(line as usize).copied().unwrap_or(0);
         if let Some(diffs) = self.char_diffs.get(&line) {
@@ -210,6 +214,19 @@ impl LineMap {
                 .sum::<u32>();
         }
         (line as u32, col)
+    }
+
+    pub fn line_end_col(&self, line: u32) -> u32 {
+        let mut len = self.line_starts[line as usize + 1] - self.line_starts[line as usize];
+        if let Some(diffs) = self.char_diffs.get(&line) {
+            len -= diffs.iter().map(|&(_, diff)| diff as u32).sum::<u32>();
+        }
+        // Lines except the last one has a trailing `\n`.
+        // Note that `line_starts` has one element more than actual total lines.
+        if line + 1 + 1 != self.line_starts.len() as u32 {
+            len -= 1;
+        }
+        len
     }
 }
 
@@ -277,5 +294,27 @@ mod tests {
             assert_eq!(map.line_col(pos.into()), (line, col));
             assert_eq!(map.pos(line, col), pos.into());
         }
+    }
+
+    #[test]
+    fn line_count() {
+        let (_, map) = LineMap::normalize("".into()).unwrap();
+        assert_eq!(map.line_count(), 1);
+        let (_, map) = LineMap::normalize("\n".into()).unwrap();
+        assert_eq!(map.line_count(), 2);
+        let (_, map) = LineMap::normalize("foo\nbar".into()).unwrap();
+        assert_eq!(map.line_count(), 2);
+        let (_, map) = LineMap::normalize("foo\nbar\n".into()).unwrap();
+        assert_eq!(map.line_count(), 3);
+    }
+
+    #[test]
+    fn line_end_col() {
+        // See comments in `line_map_unicode`.
+        let (_, map) = LineMap::normalize("hello\nAßℝ💣\n\nend".into()).unwrap();
+        assert_eq!(map.line_end_col(0), 5);
+        assert_eq!(map.line_end_col(1), 5);
+        assert_eq!(map.line_end_col(2), 0);
+        assert_eq!(map.line_end_col(3), 3);
     }
 }

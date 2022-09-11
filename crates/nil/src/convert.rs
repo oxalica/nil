@@ -1,13 +1,13 @@
-use crate::{LineMap, LspError, Result, StateSnapshot, Vfs};
+use crate::{semantic_tokens, LineMap, LspError, Result, StateSnapshot, Vfs};
 use ide::{
-    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, Severity, TextEdit,
-    WorkspaceEdit,
+    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange, Severity,
+    TextEdit, WorkspaceEdit,
 };
-use lsp::PrepareRenameResponse;
+use lsp::SemanticToken;
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
-    Position, Range, TextDocumentIdentifier, TextDocumentPositionParams,
+    Position, PrepareRenameResponse, Range, TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use text_size::{TextRange, TextSize};
 
@@ -30,6 +30,12 @@ pub(crate) fn from_file_pos(
     let file = from_file(snap, &params.text_document)?;
     let pos = from_pos(snap, file, params.position)?;
     Ok(FilePos::new(file, pos))
+}
+
+pub(crate) fn from_range(snap: &StateSnapshot, file: FileId, range: Range) -> Result<TextRange> {
+    let start = from_pos(snap, file, range.start)?;
+    let end = from_pos(snap, file, range.end)?;
+    Ok(TextRange::new(start, end))
 }
 
 pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Location {
@@ -191,4 +197,63 @@ pub(crate) fn to_text_edit(line_map: &LineMap, edit: TextEdit) -> lsp::TextEdit 
         range: to_range(line_map, edit.delete),
         new_text: edit.insert.into(),
     }
+}
+
+pub(crate) fn to_semantic_tokens(
+    snap: &StateSnapshot,
+    file: FileId,
+    hls: &[HlRange],
+) -> Vec<SemanticToken> {
+    let vfs = snap.vfs.read().unwrap();
+    let line_map = vfs.file_line_map(file);
+
+    // We must now exceed the last line.
+    let line_count = line_map.line_count();
+    if line_count == 0 {
+        return Vec::new();
+    }
+    let last_line = line_count - 1;
+
+    let mut toks = Vec::with_capacity(hls.len());
+    let (mut prev_line, mut prev_start) = (0, 0);
+    for hl in hls {
+        let (ty_idx, mod_set) = semantic_tokens::to_semantic_type_and_modifiers(hl.tag);
+        let range = to_range(line_map, hl.range);
+        for line in range.start.line..=range.end.line.min(last_line) {
+            // N.B. For relative encoding, column offset is relative to
+            // the previous token *in the same line*.
+            if line != prev_line {
+                prev_start = 0;
+            }
+
+            let mut start = 0;
+            let mut end = line_map.line_end_col(line);
+            if line == range.start.line {
+                start = start.max(range.start.character);
+            }
+            if line == range.end.line {
+                end = end.min(range.end.character);
+            }
+
+            // Don't emit empty token.
+            // N.B. When there is a newline at EOF and a unterminated string,
+            // the newline itself is in highlighted range.
+            // We must ignore this case since newlines cannot be highlighted in LSP.
+            if start == end {
+                continue;
+            }
+
+            toks.push(SemanticToken {
+                delta_line: line - prev_line,
+                delta_start: start - prev_start,
+                length: end - start,
+                token_type: ty_idx as u32,
+                token_modifiers_bitset: mod_set.0,
+            });
+
+            (prev_line, prev_start) = (line, start);
+        }
+    }
+
+    toks
 }

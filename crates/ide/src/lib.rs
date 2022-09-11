@@ -9,13 +9,14 @@ mod text_edit;
 mod tests;
 
 pub use self::ide::{
-    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, NavigationTarget,
-    RootDatabase,
+    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, HlKeyword, HlOperator,
+    HlPunct, HlRange, HlTag, NavigationTarget, RootDatabase,
 };
 pub use base::{
     Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,
     VfsPath,
 };
-pub use def::{DefDatabase, Module, ModuleSourceMap};
+pub use builtin::BuiltinKind;
+pub use def::{DefDatabase, Module, ModuleSourceMap, NameKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity};
 pub use text_edit::{TextEdit, WorkspaceEdit};

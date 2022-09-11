@@ -35,6 +35,12 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [ ] Names used by `inherit`.
   - [ ] Conflict detection.
   - [x] Rename to string literals.
+- [x] Semantic highlighting. `textDocument/semanticTokens/{range,full}`
+  - [ ] Delta response. `textDocument/semanticTokens/full/delta`
+  - :warning: Currently it has performance issue in large files with [`coc.nvim`].
+    `vim` would consume 100% CPU and is slow to respond when editing `all-packages.nix`.
+    Though our LSP server's CPU usage is quite low.
+    Other LSP clients are not tested.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 

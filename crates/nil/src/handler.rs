@@ -1,11 +1,15 @@
+use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
     GotoDefinitionResponse, Location, OneOf, PrepareRenameResponse, ReferenceParams, RenameOptions,
     RenameParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
-    ServerCapabilities, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions, WorkspaceEdit,
+    SemanticTokens, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use text_size::TextRange;
 
@@ -29,6 +33,17 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
             prepare_provider: Some(true),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         })),
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+                legend: SemanticTokensLegend {
+                    token_types: SEMANTIC_TOKEN_TYPES.to_vec(),
+                    token_modifiers: SEMANTIC_TOKEN_MODIFIERS.to_vec(),
+                },
+                range: Some(true),
+                full: Some(SemanticTokensFullOptions::Delta { delta: Some(false) }),
+            },
+        )),
         ..Default::default()
     }
 }
@@ -147,4 +162,31 @@ pub(crate) fn rename(snap: StateSnapshot, params: RenameParams) -> Result<Option
     let vfs = snap.vfs.read().unwrap();
     let resp = convert::to_workspace_edit(&vfs, ws_edit);
     Ok(Some(resp))
+}
+
+pub(crate) fn semantic_token_full(
+    snap: StateSnapshot,
+    params: SemanticTokensParams,
+) -> Result<Option<SemanticTokensResult>> {
+    let file = convert::from_file(&snap, &params.text_document)?;
+    let hls = snap.analysis.syntax_highlight(file, None)?;
+    let toks = convert::to_semantic_tokens(&snap, file, &hls);
+    Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+        result_id: None,
+        data: toks,
+    })))
+}
+
+pub(crate) fn semantic_token_range(
+    snap: StateSnapshot,
+    params: SemanticTokensRangeParams,
+) -> Result<Option<SemanticTokensRangeResult>> {
+    let file = convert::from_file(&snap, &params.text_document)?;
+    let range = convert::from_range(&snap, file, params.range)?;
+    let hls = snap.analysis.syntax_highlight(file, Some(range))?;
+    let toks = convert::to_semantic_tokens(&snap, file, &hls);
+    Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
+        result_id: None,
+        data: toks,
+    })))
 }

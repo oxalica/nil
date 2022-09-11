@@ -1,5 +1,6 @@
 mod convert;
 mod handler;
+mod semantic_tokens;
 mod state;
 mod vfs;
 

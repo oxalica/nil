@@ -91,6 +91,8 @@ impl State {
             .on::<req::SelectionRangeRequest>(handler::selection_range)
             .on::<req::PrepareRenameRequest>(handler::prepare_rename)
             .on::<req::Rename>(handler::rename)
+            .on::<req::SemanticTokensFullRequest>(handler::semantic_token_full)
+            .on::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
             .finish();
     }
 
