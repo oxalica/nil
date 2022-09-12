@@ -78,6 +78,7 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
             mods.insert(TokenModIdx::Unresolved);
             TokenTypeIdx::Variable
         }
+        HlTag::AttrField => TokenTypeIdx::Property,
         HlTag::Builtin(kind) => {
             mods.insert(TokenModIdx::DefaultLibrary);
             match kind {

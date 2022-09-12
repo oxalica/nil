@@ -1,7 +1,7 @@
 //! This is actually so-called "semantic highlighting".
 //! Ref: <https://github.com/rust-lang/rust-analyzer/blob/a670ff888437f4b6a3d24cc2996e9f969a87cbae/crates/ide/src/syntax_highlighting/tags.rs>
 use crate::builtin::BUILTINS;
-use crate::def::{AstPtr, NameKind, ResolveResult};
+use crate::def::{AstPtr, Expr, NameKind, ResolveResult};
 use crate::{BuiltinKind, DefDatabase, FileId};
 use rowan::{NodeOrToken, TextRange, WalkEvent};
 use syntax::{SyntaxKind, SyntaxToken, T};
@@ -18,6 +18,7 @@ pub enum HlTag {
     NameRef(NameKind),
     UnresolvedRef,
 
+    AttrField,
     Builtin(BuiltinKind),
     Comment,
     FloatLiteral,
@@ -118,8 +119,19 @@ pub(crate) fn highlight(
                     }
                 }
                 Some(node) if node.kind() == SyntaxKind::NAME => {
-                    let name = source_map.node_name(AstPtr::new(&node))?;
-                    HlTag::NameDef(module[name].kind)
+                    let ptr = AstPtr::new(&node);
+                    match source_map.node_name(ptr.clone()) {
+                        Some(name) => HlTag::NameDef(module[name].kind),
+                        None => {
+                            match source_map.node_expr(ptr) {
+                                // `Attr`s are converted into string literals.
+                                Some(expr) if matches!(&module[expr], Expr::Literal(_)) => {
+                                    HlTag::AttrField
+                                }
+                                _ => return None,
+                            }
+                        }
+                    }
                 }
                 _ => return None,
             },
@@ -244,5 +256,11 @@ mod tests {
         check("with {}; $0a", expect!["NameRef(PlainAttrset)"]);
 
         check("$0not_found", expect!["UnresolvedRef"]);
+    }
+
+    #[test]
+    fn attr() {
+        check("{}.$0a", expect!["AttrField"]);
+        check("{} ? $0a", expect!["AttrField"]);
     }
 }
