@@ -5,10 +5,12 @@ use lsp_server::{ErrorCode, Message, Notification, Request, RequestId, Response}
 use lsp_types::notification::Notification as _;
 use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
 use serde::Serialize;
+use std::cell::Cell;
 use std::collections::HashSet;
-use std::fs;
+use std::panic::UnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Once, RwLock};
+use std::{fs, panic};
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 
@@ -202,11 +204,17 @@ impl<'s> RequestDispatcher<'s> {
         self
     }
 
-    fn on<R: req::Request>(mut self, f: fn(StateSnapshot, R::Params) -> Result<R::Result>) -> Self {
+    fn on<R: req::Request>(mut self, f: fn(StateSnapshot, R::Params) -> Result<R::Result>) -> Self
+    where
+        R::Params: UnwindSafe,
+    {
         if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
             let req = self.1.take().unwrap();
             let ret = match serde_json::from_value::<R::Params>(req.params) {
-                Ok(params) => result_to_response(req.id, f(self.0.snapshot(), params)),
+                Ok(params) => {
+                    let snap = self.0.snapshot();
+                    result_to_response(req.id, with_catch_unwind(R::METHOD, || f(snap, params)))
+                }
                 Err(err) => Ok(Response::new_err(
                     req.id,
                     ErrorCode::InvalidParams as i32,
@@ -247,6 +255,42 @@ impl<'s> NotificationDispatcher<'s> {
     fn finish(self) -> Result<()> {
         // TODO: We are not done yet.
         Ok(())
+    }
+}
+
+fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -> Result<T> {
+    static INSTALL_PANIC_HOOK: Once = Once::new();
+    thread_local! {
+        static PANIC_LOCATION: Cell<String> = Cell::new(String::new());
+    }
+
+    INSTALL_PANIC_HOOK.call_once(|| {
+        let old_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |info| {
+            if let Some(loc) = info.location() {
+                PANIC_LOCATION.with(|inner| {
+                    inner.set(loc.to_string());
+                });
+            }
+            old_hook(info);
+        }))
+    });
+
+    match panic::catch_unwind(f) {
+        Ok(ret) => ret,
+        Err(payload) => {
+            let reason = payload
+                .downcast_ref::<String>()
+                .map(|s| &**s)
+                .or_else(|| payload.downcast_ref::<&str>().map(|s| &**s))
+                .unwrap_or("unknown");
+            let mut loc = PANIC_LOCATION.with(|inner| inner.take());
+            if loc.is_empty() {
+                loc = "unknown".into();
+            }
+            let msg = format!("Request handler of {} panicked at {}: {}", ctx, loc, reason);
+            Err(msg.into())
+        }
     }
 }
 
