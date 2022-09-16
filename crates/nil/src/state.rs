@@ -13,6 +13,7 @@ use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic};
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
+const FILTER_FILE_EXTENTION: &str = "nix";
 
 pub struct State {
     host: AnalysisHost,
@@ -44,6 +45,14 @@ impl State {
             for entry in ignore::WalkBuilder::new(root).follow_links(false).build() {
                 (|| -> Option<()> {
                     let entry = entry.ok()?;
+                    if entry
+                        .path()
+                        .extension()
+                        .map_or(true, |ext| ext != FILTER_FILE_EXTENTION)
+                    {
+                        return None;
+                    }
+
                     let relative_path = entry.path().strip_prefix(root).ok()?;
                     let vpath = VfsPath::from_path(relative_path)?;
                     let text = fs::read_to_string(entry.path()).ok();
