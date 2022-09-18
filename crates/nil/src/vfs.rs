@@ -9,7 +9,7 @@ use text_size::TextSize;
 
 pub struct Vfs {
     // FIXME: Currently this list is append-only.
-    files: Vec<Option<(Arc<str>, LineMap)>>,
+    files: Vec<(Arc<str>, Arc<LineMap>)>,
     /// The root directory, which must be absolute.
     local_root: PathBuf,
     local_file_set: FileSet,
@@ -38,12 +38,6 @@ impl Vfs {
         }
     }
 
-    fn alloc_file_id(&mut self) -> FileId {
-        let id = u32::try_from(self.files.len()).expect("Length overflow");
-        self.files.push(None);
-        FileId(id)
-    }
-
     fn uri_to_vpath(&self, uri: &Url) -> Result<VfsPath> {
         let path = uri
             .to_file_path()
@@ -54,35 +48,38 @@ impl Vfs {
         Ok(VfsPath::from_path(relative_path).expect("URI is UTF-8"))
     }
 
-    pub fn set_uri_content(&mut self, uri: &Url, text: Option<String>) -> Result<()> {
+    pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {
         let vpath = self.uri_to_vpath(uri)?;
         self.set_path_content(vpath, text);
         Ok(())
     }
 
-    pub fn set_path_content(&mut self, path: VfsPath, text: Option<String>) -> Option<FileId> {
-        let content = text.and_then(LineMap::normalize);
-        let (file, (text, line_map)) = match (self.local_file_set.get_file_for_path(&path), content)
-        {
-            (Some(file), None) => {
-                self.local_file_set.remove_file(file);
-                self.root_changed = true;
-                self.files[file.0 as usize] = None;
-                return None;
+    pub fn set_path_content(&mut self, path: VfsPath, text: String) {
+        // For invalid files (currently, too large), we store them as empty files in database,
+        // but remove them from `local_file_set`. Thus any interactions on them would fail.
+        let (text, line_map, is_valid) = LineMap::normalize(text)
+            .map(|(text, line_map)| (text, line_map, true))
+            .unwrap_or_default();
+        let text = <Arc<str>>::from(text);
+        let line_map = Arc::new(line_map);
+        match self.local_file_set.get_file_for_path(&path) {
+            Some(file) => {
+                self.files[file.0 as usize] = (text.clone(), line_map);
+                self.change.change_file(file, text);
+                if !is_valid {
+                    self.local_file_set.remove_file(file);
+                }
             }
-            (None, None) => return None,
-            (Some(file), Some(content)) => (file, content),
-            (None, Some(content)) => {
-                let file = self.alloc_file_id();
+            None => {
+                if !is_valid {
+                    return;
+                }
+                let file = FileId(u32::try_from(self.files.len()).expect("Length overflow"));
                 self.local_file_set.insert(file, path);
-                self.root_changed = true;
-                (file, content)
+                self.files.push((text.clone(), line_map));
+                self.change.change_file(file, text);
             }
         };
-        let text = <Arc<str>>::from(text);
-        self.change.change_file(file, Some(text.clone()));
-        self.files[file.0 as usize] = Some((text, line_map));
-        Some(file)
     }
 
     pub fn get_file_for_uri(&self, uri: &Url) -> Result<FileId> {
@@ -116,15 +113,12 @@ impl Vfs {
         change
     }
 
-    pub fn file_line_map(&self, file_id: FileId) -> &LineMap {
-        &self.files[file_id.0 as usize]
-            .as_ref()
-            .expect("File must be valid")
-            .1
+    pub fn file_line_map(&self, file_id: FileId) -> Arc<LineMap> {
+        self.files[file_id.0 as usize].1.clone()
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct LineMap {
     line_starts: Vec<u32>,
     char_diffs: HashMap<u32, Vec<(u32, CodeUnitsDiff)>>,
@@ -134,6 +128,12 @@ pub struct LineMap {
 enum CodeUnitsDiff {
     One = 1,
     Two = 2,
+}
+
+impl Default for LineMap {
+    fn default() -> Self {
+        Self::normalize(String::new()).unwrap().1
+    }
 }
 
 impl LineMap {

@@ -1,4 +1,6 @@
-use crate::{semantic_tokens, LineMap, LspError, Result, StateSnapshot, Vfs};
+use std::sync::Arc;
+
+use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
     CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange, Severity,
     TextEdit, WorkspaceEdit,
@@ -11,37 +13,39 @@ use lsp_types::{
 };
 use text_size::{TextRange, TextSize};
 
-pub(crate) fn from_file(snap: &StateSnapshot, doc: &TextDocumentIdentifier) -> Result<FileId> {
-    let vfs = snap.vfs.read().unwrap();
+pub(crate) fn from_file(vfs: &Vfs, doc: &TextDocumentIdentifier) -> Result<FileId> {
     vfs.get_file_for_uri(&doc.uri)
 }
 
-pub(crate) fn from_pos(snap: &StateSnapshot, file: FileId, pos: Position) -> Result<TextSize> {
-    let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.file_line_map(file);
-    let pos = line_map.pos(pos.line, pos.character);
-    Ok(pos)
+pub(crate) fn from_pos(line_map: &LineMap, pos: Position) -> Result<TextSize> {
+    Ok(line_map.pos(pos.line, pos.character))
 }
 
 pub(crate) fn from_file_pos(
-    snap: &StateSnapshot,
+    vfs: &Vfs,
     params: &TextDocumentPositionParams,
-) -> Result<FilePos> {
-    let file = from_file(snap, &params.text_document)?;
-    let pos = from_pos(snap, file, params.position)?;
-    Ok(FilePos::new(file, pos))
+) -> Result<(Arc<LineMap>, FilePos)> {
+    let file = from_file(vfs, &params.text_document)?;
+    let line_map = vfs.file_line_map(file);
+    let pos = from_pos(&line_map, params.position)?;
+    Ok((line_map, FilePos::new(file, pos)))
 }
 
-pub(crate) fn from_range(snap: &StateSnapshot, file: FileId, range: Range) -> Result<TextRange> {
-    let start = from_pos(snap, file, range.start)?;
-    let end = from_pos(snap, file, range.end)?;
-    Ok(TextRange::new(start, end))
+pub(crate) fn from_range(
+    vfs: &Vfs,
+    file: FileId,
+    range: Range,
+) -> Result<(Arc<LineMap>, TextRange)> {
+    let line_map = vfs.file_line_map(file);
+    let start = from_pos(&line_map, range.start)?;
+    let end = from_pos(&line_map, range.end)?;
+    Ok((line_map, TextRange::new(start, end)))
 }
 
 pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Location {
     let uri = vfs.uri_for_file(frange.file_id);
     let line_map = vfs.file_line_map(frange.file_id);
-    Location::new(uri, to_range(line_map, frange.range))
+    Location::new(uri, to_range(&line_map, frange.range))
 }
 
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
@@ -64,7 +68,7 @@ pub(crate) fn to_diagnostics(
                 Severity::Warning => Some(DiagnosticSeverity::WARNING),
                 Severity::IncompleteSyntax => continue,
             },
-            range: to_range(line_map, diag.range),
+            range: to_range(&line_map, diag.range),
             code: None,
             code_description: None,
             source: None,
@@ -102,7 +106,7 @@ pub(crate) fn to_diagnostics(
 
             ret.push(lsp::Diagnostic {
                 severity: Some(DiagnosticSeverity::HINT),
-                range: to_range(line_map, frange.range),
+                range: to_range(&line_map, frange.range),
                 code: primary_diag.code.clone(),
                 code_description: primary_diag.code_description.clone(),
                 source: primary_diag.source.clone(),
@@ -156,12 +160,10 @@ pub(crate) fn to_rename_error(message: String) -> LspError {
 }
 
 pub(crate) fn to_prepare_rename_response(
-    vfs: &Vfs,
-    file: FileId,
+    line_map: &LineMap,
     range: TextRange,
     text: String,
 ) -> PrepareRenameResponse {
-    let line_map = vfs.file_line_map(file);
     let range = to_range(line_map, range);
     PrepareRenameResponse::RangeWithPlaceholder {
         range,
@@ -179,7 +181,7 @@ pub(crate) fn to_workspace_edit(vfs: &Vfs, ws_edit: WorkspaceEdit) -> lsp::Works
                 .into_iter()
                 .map(|edit| {
                     let line_map = vfs.file_line_map(file);
-                    to_text_edit(line_map, edit)
+                    to_text_edit(&line_map, edit)
                 })
                 .collect();
             (uri, edits)
@@ -199,14 +201,7 @@ pub(crate) fn to_text_edit(line_map: &LineMap, edit: TextEdit) -> lsp::TextEdit 
     }
 }
 
-pub(crate) fn to_semantic_tokens(
-    snap: &StateSnapshot,
-    file: FileId,
-    hls: &[HlRange],
-) -> Vec<SemanticToken> {
-    let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.file_line_map(file);
-
+pub(crate) fn to_semantic_tokens(line_map: &LineMap, hls: &[HlRange]) -> Vec<SemanticToken> {
     // We must now exceed the last line.
     let line_count = line_map.line_count();
     if line_count == 0 {

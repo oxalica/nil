@@ -55,7 +55,7 @@ impl State {
 
                     let relative_path = entry.path().strip_prefix(root).ok()?;
                     let vpath = VfsPath::from_path(relative_path)?;
-                    let text = fs::read_to_string(entry.path()).ok();
+                    let text = fs::read_to_string(entry.path()).ok().unwrap_or_default();
                     vfs.set_path_content(vpath, text);
                     Some(())
                 })();
@@ -112,7 +112,7 @@ impl State {
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
                 let uri = &params.text_document.uri;
                 st.opened_files.write().unwrap().insert(uri.clone());
-                st.set_vfs_file_content(uri, Some(params.text_document.text))?;
+                st.set_vfs_file_content(uri, params.text_document.text)?;
                 Ok(())
             })?
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
@@ -125,7 +125,7 @@ impl State {
             })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 if let Some(chg) = params.content_changes.into_iter().next() {
-                    st.set_vfs_file_content(&params.text_document.uri, Some(chg.text))?;
+                    st.set_vfs_file_content(&params.text_document.uri, chg.text)?;
                 }
                 Ok(())
             })?
@@ -145,7 +145,7 @@ impl State {
         }
     }
 
-    fn set_vfs_file_content(&mut self, uri: &Url, text: Option<String>) -> Result<()> {
+    fn set_vfs_file_content(&mut self, uri: &Url, text: String) -> Result<()> {
         self.vfs.write().unwrap().set_uri_content(uri, text)?;
         self.apply_vfs_change();
         Ok(())
@@ -157,7 +157,7 @@ impl State {
         let file_changes = change
             .file_changes
             .iter()
-            .map(|(file, text)| (*file, text.is_some()))
+            .map(|(file, text)| (*file, !text.is_empty()))
             .collect::<Vec<_>>();
         tracing::debug!("Change: {:?}", change);
         self.host.apply_change(change);
@@ -320,5 +320,11 @@ fn result_to_response(id: RequestId, ret: Result<impl Serialize>) -> Result<Resp
 #[derive(Debug)]
 pub struct StateSnapshot {
     pub(crate) analysis: Analysis,
-    pub(crate) vfs: Arc<RwLock<Vfs>>,
+    vfs: Arc<RwLock<Vfs>>,
+}
+
+impl StateSnapshot {
+    pub(crate) fn vfs(&self) -> impl std::ops::Deref<Target = Vfs> + '_ {
+        self.vfs.read().unwrap()
+    }
 }

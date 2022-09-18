@@ -52,12 +52,12 @@ pub(crate) fn goto_definition(
     snap: StateSnapshot,
     params: GotoDefinitionParams,
 ) -> Result<Option<GotoDefinitionResponse>> {
-    let fpos = convert::from_file_pos(&snap, &params.text_document_position_params)?;
+    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
     let targets = match snap.analysis.goto_definition(fpos)? {
         None => return Ok(None),
         Some(targets) => targets,
     };
-    let vfs = snap.vfs.read().unwrap();
+    let vfs = snap.vfs();
     let targets = targets
         .into_iter()
         .map(|target| {
@@ -71,12 +71,12 @@ pub(crate) fn references(
     snap: StateSnapshot,
     params: ReferenceParams,
 ) -> Result<Option<Vec<Location>>> {
-    let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
+    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let refs = match snap.analysis.references(fpos)? {
         None => return Ok(None),
         Some(refs) => refs,
     };
-    let vfs = snap.vfs.read().unwrap();
+    let vfs = snap.vfs();
     let locs = refs
         .into_iter()
         .map(|frange| convert::to_location(&vfs, frange))
@@ -88,16 +88,14 @@ pub(crate) fn completion(
     snap: StateSnapshot,
     params: CompletionParams,
 ) -> Result<Option<CompletionResponse>> {
-    let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
+    let (line_map, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let items = match snap.analysis.completions(fpos)? {
         None => return Ok(None),
         Some(items) => items,
     };
-    let vfs = snap.vfs.read().unwrap();
-    let line_map = vfs.file_line_map(fpos.file_id);
     let items = items
         .into_iter()
-        .map(|item| convert::to_completion_item(line_map, item))
+        .map(|item| convert::to_completion_item(&line_map, item))
         .collect::<Vec<_>>();
     Ok(Some(CompletionResponse::Array(items)))
 }
@@ -106,12 +104,13 @@ pub(crate) fn selection_range(
     snap: StateSnapshot,
     params: SelectionRangeParams,
 ) -> Result<Option<Vec<SelectionRange>>> {
-    let file = convert::from_file(&snap, &params.text_document)?;
+    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let line_map = snap.vfs().file_line_map(file);
     let ret = params
         .positions
         .iter()
         .map(|&pos| {
-            let pos = convert::from_pos(&snap, file, pos)?;
+            let pos = convert::from_pos(&line_map, pos)?;
             let frange = FileRange::new(file, TextRange::empty(pos));
 
             let mut ranges = snap.analysis.expand_selection(frange)?.unwrap_or_default();
@@ -119,16 +118,13 @@ pub(crate) fn selection_range(
                 ranges.push(TextRange::empty(pos));
             }
 
-            // FIXME: Use Arc for LineMap.
-            let vfs = snap.vfs.read().unwrap();
-            let line_map = vfs.file_line_map(file);
             let mut ret = SelectionRange {
-                range: convert::to_range(line_map, *ranges.last().unwrap()),
+                range: convert::to_range(&line_map, *ranges.last().unwrap()),
                 parent: None,
             };
             for &r in ranges.iter().rev().skip(1) {
                 ret = SelectionRange {
-                    range: convert::to_range(line_map, r),
+                    range: convert::to_range(&line_map, r),
                     parent: Some(ret.into()),
                 };
             }
@@ -143,24 +139,22 @@ pub(crate) fn prepare_rename(
     snap: StateSnapshot,
     params: TextDocumentPositionParams,
 ) -> Result<Option<PrepareRenameResponse>> {
-    let fpos = convert::from_file_pos(&snap, &params)?;
+    let (line_map, fpos) = convert::from_file_pos(&snap.vfs(), &params)?;
     let (range, text) = snap
         .analysis
         .prepare_rename(fpos)?
         .map_err(convert::to_rename_error)?;
-    let vfs = snap.vfs.read().unwrap();
-    let resp = convert::to_prepare_rename_response(&vfs, fpos.file_id, range, text.into());
+    let resp = convert::to_prepare_rename_response(&line_map, range, text.into());
     Ok(Some(resp))
 }
 
 pub(crate) fn rename(snap: StateSnapshot, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-    let fpos = convert::from_file_pos(&snap, &params.text_document_position)?;
+    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let ws_edit = snap
         .analysis
         .rename(fpos, &params.new_name)?
         .map_err(convert::to_rename_error)?;
-    let vfs = snap.vfs.read().unwrap();
-    let resp = convert::to_workspace_edit(&vfs, ws_edit);
+    let resp = convert::to_workspace_edit(&snap.vfs(), ws_edit);
     Ok(Some(resp))
 }
 
@@ -168,9 +162,10 @@ pub(crate) fn semantic_token_full(
     snap: StateSnapshot,
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokensResult>> {
-    let file = convert::from_file(&snap, &params.text_document)?;
+    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let line_map = snap.vfs().file_line_map(file);
     let hls = snap.analysis.syntax_highlight(file, None)?;
-    let toks = convert::to_semantic_tokens(&snap, file, &hls);
+    let toks = convert::to_semantic_tokens(&line_map, &hls);
     Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
         result_id: None,
         data: toks,
@@ -181,10 +176,10 @@ pub(crate) fn semantic_token_range(
     snap: StateSnapshot,
     params: SemanticTokensRangeParams,
 ) -> Result<Option<SemanticTokensRangeResult>> {
-    let file = convert::from_file(&snap, &params.text_document)?;
-    let range = convert::from_range(&snap, file, params.range)?;
+    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let (line_map, range) = convert::from_range(&snap.vfs(), file, params.range)?;
     let hls = snap.analysis.syntax_highlight(file, Some(range))?;
-    let toks = convert::to_semantic_tokens(&snap, file, &hls);
+    let toks = convert::to_semantic_tokens(&line_map, &hls);
     Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
         result_id: None,
         data: toks,

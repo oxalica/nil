@@ -34,7 +34,7 @@ impl TestDB {
         for (i, (path, text)) in (0u32..).zip(&f.files) {
             let file = FileId(i);
             file_set.insert(file, path.clone());
-            change.change_file(file, Some(text.to_owned().into()));
+            change.change_file(file, text.to_owned().into());
         }
         let entry = file_set
             .get_file_for_path(&"/default.nix".try_into().unwrap())

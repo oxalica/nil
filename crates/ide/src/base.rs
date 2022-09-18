@@ -201,7 +201,7 @@ pub trait SourceDatabase {
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Change {
     pub roots: Option<Vec<SourceRoot>>,
-    pub file_changes: Vec<(FileId, Option<Arc<str>>)>,
+    pub file_changes: Vec<(FileId, Arc<str>)>,
 }
 
 impl Change {
@@ -217,7 +217,7 @@ impl Change {
         self.roots = Some(roots);
     }
 
-    pub fn change_file(&mut self, file_id: FileId, content: Option<Arc<str>>) {
+    pub fn change_file(&mut self, file_id: FileId, content: Arc<str>) {
         self.file_changes.push((file_id, content));
     }
 
@@ -232,7 +232,6 @@ impl Change {
             }
         }
         for (file_id, content) in self.file_changes {
-            let content = content.unwrap_or_else(|| String::new().into());
             db.set_file_content_with_durability(file_id, content, Durability::LOW);
         }
     }
@@ -243,7 +242,7 @@ impl fmt::Debug for Change {
         let modified = self
             .file_changes
             .iter()
-            .filter(|(_, content)| content.is_some())
+            .filter(|(_, content)| !content.is_empty())
             .count();
         let cleared = self.file_changes.len() - modified;
         f.debug_struct("Change")
