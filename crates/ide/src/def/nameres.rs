@@ -33,7 +33,7 @@ impl ModuleScopes {
         Arc::new(this)
     }
 
-    pub fn scope_by_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
+    pub fn scope_for_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
         self.scope_by_expr.get(expr_id).copied()
     }
 
@@ -43,7 +43,7 @@ impl ModuleScopes {
 
     /// Resolve a name in the scope of an Expr.
     fn resolve_name(&self, expr_id: ExprId, name: &SmolStr) -> Option<ResolveResult> {
-        let scope = self.scope_by_expr(expr_id)?;
+        let scope = self.scope_for_expr(expr_id)?;
         // 1. Local defs.
         if let Some(name) = self
             .ancestors(scope)
@@ -246,7 +246,7 @@ impl NameResolution {
             .iter()
             .filter(|(_, res)| res.is_none())
             .filter_map(move |(&e, _)| {
-                let ptr = source_map.expr_node(e)?;
+                let ptr = source_map.node_for_expr(e)?;
                 let range = ptr.text_range();
                 Some(Diagnostic::new(range, DiagnosticKind::UndefinedName))
             })
@@ -314,7 +314,7 @@ mod tests {
         let scopes = db.scopes(f[0].file_id);
 
         // "innermost@pos var@pos | middle@pos | outmost@pos"
-        let scope_id = scopes.scope_by_expr(expr_id).expect("No scope data");
+        let scope_id = scopes.scope_for_expr(expr_id).expect("No scope data");
         let def_poses = scopes
             .ancestors(scope_id)
             .flat_map(|scope| match &scope.kind {
@@ -323,7 +323,7 @@ mod tests {
                         .iter()
                         .map(|(_, name)| {
                             source_map
-                                .name_nodes(*name)
+                                .nodes_for_name(*name)
                                 .next()
                                 .unwrap()
                                 .text_range()
@@ -334,7 +334,7 @@ mod tests {
                     poses
                 }
                 &ScopeKind::WithExpr(expr) => {
-                    vec![source_map.expr_node(expr).unwrap().text_range().start()]
+                    vec![source_map.node_for_expr(expr).unwrap().text_range().start()]
                 }
             })
             .collect::<Vec<_>>();
@@ -369,14 +369,14 @@ mod tests {
             .map(|ret| {
                 match ret {
                     &ResolveResult::Definition(name) => source_map
-                        .name_nodes(name)
+                        .nodes_for_name(name)
                         .map(|ptr| ptr.to_node(&parse.syntax_node()).text_range().start())
                         .collect(),
                     ResolveResult::WithExprs(exprs) => exprs
                         .iter()
                         .map(|&e| {
                             source_map
-                                .expr_node(e)
+                                .node_for_expr(e)
                                 .unwrap()
                                 .to_node(&parse.syntax_node())
                                 .text_range()

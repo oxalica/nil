@@ -44,11 +44,11 @@ impl LivenessCheckResult {
         diags.extend(
             self.names
                 .iter()
-                .flat_map(|&def| source_map.name_nodes(def))
+                .flat_map(|&def| source_map.nodes_for_name(def))
                 .map(|ptr| Diagnostic::new(ptr.text_range(), DiagnosticKind::UnusedBinding)),
         );
         diags.extend(self.withs.iter().map(|&expr| {
-            let ptr = source_map.expr_node(expr).unwrap();
+            let ptr = source_map.node_for_expr(expr).unwrap();
             let node = ast::With::cast(ptr.to_node(&root)).unwrap();
             let header_range = match (node.with_token(), node.semicolon_token()) {
                 (Some(start), Some(end)) => start.text_range().cover(end.text_range()),
@@ -57,7 +57,7 @@ impl LivenessCheckResult {
             Diagnostic::new(header_range, DiagnosticKind::UnusedWith)
         }));
         diags.extend(self.rec_attrsets.iter().map(|&expr| {
-            let ptr = source_map.expr_node(expr).unwrap();
+            let ptr = source_map.node_for_expr(expr).unwrap();
             let node = ast::AttrSet::cast(ptr.to_node(&root)).unwrap();
             let range = node.rec_token().map_or_else(
                 || TextRange::empty(ptr.text_range().start()),

@@ -580,7 +580,7 @@ impl MergingEntry {
             MergingValue::Final(value) => {
                 let mut set = MergingSet::new(name_kind);
                 if let BindingValue::Expr(expr) = *value {
-                    if let Some(ptr) = ctx.source_map.expr_node(expr) {
+                    if let Some(ptr) = ctx.source_map.node_for_expr(expr) {
                         set.recover_error(ctx, expr, ptr);
                     }
                 }
@@ -633,7 +633,7 @@ impl MergingEntry {
         let mut diag = Diagnostic::new(new_def_ptr.text_range(), DiagnosticKind::DuplicatedKey);
         if let Some(prev_ptr) = self
             .name
-            .and_then(|name| ctx.source_map.name_nodes(name).next())
+            .and_then(|name| ctx.source_map.nodes_for_name(name).next())
         {
             diag = diag.with_note(
                 FileRange::new(ctx.file_id, prev_ptr.text_range()),

@@ -110,7 +110,7 @@ pub(crate) fn highlight(
 
             SyntaxKind::IDENT => match tok.parent() {
                 Some(node) if node.kind() == SyntaxKind::REF => {
-                    let expr = source_map.node_expr(AstPtr::new(&node))?;
+                    let expr = source_map.expr_for_node(AstPtr::new(&node))?;
                     match nameres.get(expr) {
                         None => HlTag::UnresolvedRef,
                         Some(ResolveResult::Definition(def)) => HlTag::NameRef(module[*def].kind),
@@ -120,10 +120,10 @@ pub(crate) fn highlight(
                 }
                 Some(node) if node.kind() == SyntaxKind::NAME => {
                     let ptr = AstPtr::new(&node);
-                    match source_map.node_name(ptr.clone()) {
+                    match source_map.name_for_node(ptr.clone()) {
                         Some(name) => HlTag::NameDef(module[name].kind),
                         None => {
-                            match source_map.node_expr(ptr) {
+                            match source_map.expr_for_node(ptr) {
                                 // `Attr`s are converted into string literals.
                                 Some(expr) if matches!(&module[expr], Expr::Literal(_)) => {
                                     HlTag::AttrField

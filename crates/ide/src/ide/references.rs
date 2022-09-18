@@ -39,11 +39,11 @@ pub(crate) fn references(
     let name_ref = db.name_reference(file_id);
     let refs = match kind {
         DefKind::Attr(ptr) => {
-            let name = source_map.node_name(ptr)?;
+            let name = source_map.name_for_node(ptr)?;
             name_ref.name_references(name)
         }
         DefKind::With(ptr) => {
-            let expr = source_map.node_expr(ptr)?;
+            let expr = source_map.expr_for_node(ptr)?;
             name_ref.with_references(expr)
         }
     };
@@ -52,7 +52,7 @@ pub(crate) fn references(
     let refs = refs.map_or(Vec::new(), |refs| {
         refs.iter()
             .map(|&expr| {
-                let ptr = source_map.expr_node(expr).expect("Id must be valid");
+                let ptr = source_map.node_for_expr(expr).expect("Id must be valid");
                 FileRange::new(file_id, ptr.text_range())
             })
             .collect()

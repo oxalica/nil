@@ -109,9 +109,9 @@ fn complete_expr(
 ) -> Option<Vec<CompletionItem>> {
     let module = db.module(file_id);
     let source_map = db.source_map(file_id);
-    let expr_id = source_map.node_expr(AstPtr::new(ref_node.syntax()))?;
+    let expr_id = source_map.expr_for_node(AstPtr::new(ref_node.syntax()))?;
     let scopes = db.scopes(file_id);
-    let scope_id = scopes.scope_by_expr(expr_id)?;
+    let scope_id = scopes.scope_for_expr(expr_id)?;
 
     let prefix = SmolStr::from(ref_node.token()?.text());
     let mut items = Vec::new();

@@ -62,7 +62,7 @@ impl Vfs {
             .unwrap_or_default();
         let text = <Arc<str>>::from(text);
         let line_map = Arc::new(line_map);
-        match self.local_file_set.get_file_for_path(&path) {
+        match self.local_file_set.file_for_path(&path) {
             Some(file) => {
                 self.files[file.0 as usize] = (text.clone(), line_map);
                 self.change.change_file(file, text);
@@ -82,10 +82,10 @@ impl Vfs {
         };
     }
 
-    pub fn get_file_for_uri(&self, uri: &Url) -> Result<FileId> {
+    pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {
         let vpath = self.uri_to_vpath(uri)?;
         self.local_file_set
-            .get_file_for_path(&vpath)
+            .file_for_path(&vpath)
             .ok_or_else(|| format!("URI not found: {}", uri).into())
     }
 
@@ -103,7 +103,7 @@ impl Vfs {
             // TODO: Configurable.
             let entry = ["/flake.nix", "/default.nix"].iter().find_map(|&path| {
                 let path = VfsPath::new(path).unwrap();
-                self.local_file_set.get_file_for_path(&path)
+                self.local_file_set.file_for_path(&path)
             });
             change.set_roots(vec![SourceRoot::new_local(
                 self.local_file_set.clone(),
@@ -113,7 +113,7 @@ impl Vfs {
         change
     }
 
-    pub fn file_line_map(&self, file_id: FileId) -> Arc<LineMap> {
+    pub fn line_map_for_file(&self, file_id: FileId) -> Arc<LineMap> {
         self.files[file_id.0 as usize].1.clone()
     }
 }
@@ -187,7 +187,7 @@ impl LineMap {
         self.line_starts.len() as u32 - 1
     }
 
-    pub fn pos(&self, line: u32, mut col: u32) -> TextSize {
+    pub fn pos_for_line_col(&self, line: u32, mut col: u32) -> TextSize {
         let pos = self.line_starts.get(line as usize).copied().unwrap_or(0);
         if let Some(diffs) = self.char_diffs.get(&line) {
             for &(char_pos, diff) in diffs {
@@ -199,7 +199,7 @@ impl LineMap {
         (pos + col).into()
     }
 
-    pub fn line_col(&self, pos: TextSize) -> (u32, u32) {
+    pub fn line_col_for_pos(&self, pos: TextSize) -> (u32, u32) {
         let pos = u32::from(pos);
         let line = self
             .line_starts
@@ -216,7 +216,7 @@ impl LineMap {
         (line as u32, col)
     }
 
-    pub fn line_end_col(&self, line: u32) -> u32 {
+    pub fn end_col_for_line(&self, line: u32) -> u32 {
         let mut len = self.line_starts[line as usize + 1] - self.line_starts[line as usize];
         if let Some(diffs) = self.char_diffs.get(&line) {
             len -= diffs.iter().map(|&(_, diff)| diff as u32).sum::<u32>();
@@ -251,8 +251,8 @@ mod tests {
             (12, 2, 0),
         ];
         for (pos, line, col) in mapping {
-            assert_eq!(map.line_col(pos.into()), (line, col));
-            assert_eq!(map.pos(line, col), pos.into());
+            assert_eq!(map.line_col_for_pos(pos.into()), (line, col));
+            assert_eq!(map.pos_for_line_col(line, col), pos.into());
         }
     }
 
@@ -291,8 +291,8 @@ mod tests {
             (14, 0, 9),
         ];
         for (pos, line, col) in mapping {
-            assert_eq!(map.line_col(pos.into()), (line, col));
-            assert_eq!(map.pos(line, col), pos.into());
+            assert_eq!(map.line_col_for_pos(pos.into()), (line, col));
+            assert_eq!(map.pos_for_line_col(line, col), pos.into());
         }
     }
 
@@ -312,9 +312,9 @@ mod tests {
     fn line_end_col() {
         // See comments in `line_map_unicode`.
         let (_, map) = LineMap::normalize("hello\nAßℝ💣\n\nend".into()).unwrap();
-        assert_eq!(map.line_end_col(0), 5);
-        assert_eq!(map.line_end_col(1), 5);
-        assert_eq!(map.line_end_col(2), 0);
-        assert_eq!(map.line_end_col(3), 3);
+        assert_eq!(map.end_col_for_line(0), 5);
+        assert_eq!(map.end_col_for_line(1), 5);
+        assert_eq!(map.end_col_for_line(2), 0);
+        assert_eq!(map.end_col_for_line(3), 3);
     }
 }

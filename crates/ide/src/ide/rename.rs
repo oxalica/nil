@@ -36,7 +36,7 @@ pub(crate) fn rename(
     let mut edits = Vec::new();
 
     // Rename definitions.
-    for ptr in source_map.name_nodes(name) {
+    for ptr in source_map.nodes_for_name(name) {
         let node = ptr.to_node(&parse.syntax_node());
         if matches!(node.parent(), Some(p) if p.kind() == SyntaxKind::INHERIT) {
             return Err("Renaming `inherit`ed variables is not supported yet".into());
@@ -55,7 +55,7 @@ pub(crate) fn rename(
     }
     for &expr in refs {
         let ptr = source_map
-            .expr_node(expr)
+            .node_for_expr(expr)
             .expect("Must be a valid Expr::Reference");
         let node = ptr.to_node(&parse.syntax_node());
         if matches!(node.parent(), Some(p) if p.kind() == SyntaxKind::INHERIT) {
@@ -115,11 +115,11 @@ fn find_name(
     let ptr = AstPtr::new(&node);
 
     let source_map = db.source_map(file_id);
-    if let Some(name) = source_map.node_name(ptr.clone()) {
+    if let Some(name) = source_map.name_for_node(ptr.clone()) {
         return Some((ptr.text_range(), name));
     }
 
-    if let Some(expr) = source_map.node_expr(ptr.clone()) {
+    if let Some(expr) = source_map.expr_for_node(ptr.clone()) {
         let nameres = db.name_resolution(file_id);
         if let Some(ResolveResult::Definition(name)) = nameres.get(expr) {
             return Some((ptr.text_range(), *name));

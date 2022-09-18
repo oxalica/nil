@@ -95,7 +95,7 @@ impl FileSet {
         }
     }
 
-    pub fn get_file_for_path(&self, path: &VfsPath) -> Option<FileId> {
+    pub fn file_for_path(&self, path: &VfsPath) -> Option<FileId> {
         self.files.get(path).copied()
     }
 
@@ -126,8 +126,8 @@ impl SourceRoot {
         Self { file_set, entry }
     }
 
-    pub fn get_file_for_path(&self, path: &VfsPath) -> Option<FileId> {
-        self.file_set.get_file_for_path(path)
+    pub fn file_for_path(&self, path: &VfsPath) -> Option<FileId> {
+        self.file_set.file_for_path(path)
     }
 
     pub fn path_for_file(&self, file: FileId) -> &VfsPath {

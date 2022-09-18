@@ -26,7 +26,7 @@ pub(crate) fn goto_definition(
     })?;
 
     let source_map = db.source_map(file_id);
-    let expr_id = source_map.node_expr(ptr)?;
+    let expr_id = source_map.expr_for_node(ptr)?;
 
     if tok.kind() == SyntaxKind::PATH {
         let module = db.module(file_id);
@@ -48,7 +48,7 @@ pub(crate) fn goto_definition(
     match name_res.get(expr_id)? {
         &ResolveResult::Definition(name) => {
             let targets = source_map
-                .name_nodes(name)
+                .nodes_for_name(name)
                 .filter_map(|ptr| {
                     let name_node = ptr.to_node(&parse.syntax_node());
                     let full_node = name_node.ancestors().find(|n| {
@@ -74,7 +74,7 @@ pub(crate) fn goto_definition(
                     // ^--^       focus
                     // ^--------^ full
                     let with_node = source_map
-                        .expr_node(with_expr)
+                        .node_for_expr(with_expr)
                         .expect("WithExprs must be valid")
                         .to_node(&parse.syntax_node());
                     let with_node = ast::With::cast(with_node).expect("WithExprs must be valid");

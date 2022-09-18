@@ -29,9 +29,9 @@ impl Path {
             vpath.pop()?;
         }
         vpath.push(&data.relative);
-        root.get_file_for_path(&vpath).or_else(|| {
+        root.file_for_path(&vpath).or_else(|| {
             vpath.push_segment("default.nix").unwrap();
-            root.get_file_for_path(&vpath)
+            root.file_for_path(&vpath)
         })
     }
 

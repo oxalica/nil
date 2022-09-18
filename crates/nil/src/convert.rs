@@ -14,11 +14,11 @@ use lsp_types::{
 use text_size::{TextRange, TextSize};
 
 pub(crate) fn from_file(vfs: &Vfs, doc: &TextDocumentIdentifier) -> Result<FileId> {
-    vfs.get_file_for_uri(&doc.uri)
+    vfs.file_for_uri(&doc.uri)
 }
 
 pub(crate) fn from_pos(line_map: &LineMap, pos: Position) -> Result<TextSize> {
-    Ok(line_map.pos(pos.line, pos.character))
+    Ok(line_map.pos_for_line_col(pos.line, pos.character))
 }
 
 pub(crate) fn from_file_pos(
@@ -26,7 +26,7 @@ pub(crate) fn from_file_pos(
     params: &TextDocumentPositionParams,
 ) -> Result<(Arc<LineMap>, FilePos)> {
     let file = from_file(vfs, &params.text_document)?;
-    let line_map = vfs.file_line_map(file);
+    let line_map = vfs.line_map_for_file(file);
     let pos = from_pos(&line_map, params.position)?;
     Ok((line_map, FilePos::new(file, pos)))
 }
@@ -36,7 +36,7 @@ pub(crate) fn from_range(
     file: FileId,
     range: Range,
 ) -> Result<(Arc<LineMap>, TextRange)> {
-    let line_map = vfs.file_line_map(file);
+    let line_map = vfs.line_map_for_file(file);
     let start = from_pos(&line_map, range.start)?;
     let end = from_pos(&line_map, range.end)?;
     Ok((line_map, TextRange::new(start, end)))
@@ -44,13 +44,13 @@ pub(crate) fn from_range(
 
 pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Location {
     let uri = vfs.uri_for_file(frange.file_id);
-    let line_map = vfs.file_line_map(frange.file_id);
+    let line_map = vfs.line_map_for_file(frange.file_id);
     Location::new(uri, to_range(&line_map, frange.range))
 }
 
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
-    let (line1, col1) = line_map.line_col(range.start());
-    let (line2, col2) = line_map.line_col(range.end());
+    let (line1, col1) = line_map.line_col_for_pos(range.start());
+    let (line2, col2) = line_map.line_col_for_pos(range.end());
     Range::new(Position::new(line1, col1), Position::new(line2, col2))
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn to_diagnostics(
     file: FileId,
     diags: &[Diagnostic],
 ) -> Vec<lsp::Diagnostic> {
-    let line_map = vfs.file_line_map(file);
+    let line_map = vfs.line_map_for_file(file);
     let mut ret = Vec::with_capacity(diags.len() * 2);
     for diag in diags {
         let primary_diag = lsp::Diagnostic {
@@ -180,7 +180,7 @@ pub(crate) fn to_workspace_edit(vfs: &Vfs, ws_edit: WorkspaceEdit) -> lsp::Works
             let edits = edits
                 .into_iter()
                 .map(|edit| {
-                    let line_map = vfs.file_line_map(file);
+                    let line_map = vfs.line_map_for_file(file);
                     to_text_edit(&line_map, edit)
                 })
                 .collect();
@@ -222,7 +222,7 @@ pub(crate) fn to_semantic_tokens(line_map: &LineMap, hls: &[HlRange]) -> Vec<Sem
             }
 
             let mut start = 0;
-            let mut end = line_map.line_end_col(line);
+            let mut end = line_map.end_col_for_line(line);
             if line == range.start.line {
                 start = start.max(range.start.character);
             }

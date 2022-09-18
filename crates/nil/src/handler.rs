@@ -105,7 +105,7 @@ pub(crate) fn selection_range(
     params: SelectionRangeParams,
 ) -> Result<Option<Vec<SelectionRange>>> {
     let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().file_line_map(file);
+    let line_map = snap.vfs().line_map_for_file(file);
     let ret = params
         .positions
         .iter()
@@ -163,7 +163,7 @@ pub(crate) fn semantic_token_full(
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokensResult>> {
     let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().file_line_map(file);
+    let line_map = snap.vfs().line_map_for_file(file);
     let hls = snap.analysis.syntax_highlight(file, None)?;
     let toks = convert::to_semantic_tokens(&line_map, &hls);
     Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {

@@ -37,7 +37,7 @@ impl TestDB {
             change.change_file(file, text.to_owned().into());
         }
         let entry = file_set
-            .get_file_for_path(&"/default.nix".try_into().unwrap())
+            .file_for_path(&"/default.nix".try_into().unwrap())
             .context("Missing entry file")?;
         change.set_roots(vec![SourceRoot::new_local(file_set, Some(entry))]);
         change.apply(&mut db);

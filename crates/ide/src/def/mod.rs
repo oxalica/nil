@@ -163,19 +163,19 @@ pub struct ModuleSourceMap {
 }
 
 impl ModuleSourceMap {
-    pub fn node_expr(&self, node: AstPtr) -> Option<ExprId> {
+    pub fn expr_for_node(&self, node: AstPtr) -> Option<ExprId> {
         self.expr_map.get(&node).copied()
     }
 
-    pub fn expr_node(&self, expr_id: ExprId) -> Option<AstPtr> {
+    pub fn node_for_expr(&self, expr_id: ExprId) -> Option<AstPtr> {
         self.expr_map_rev.get(&expr_id).cloned()
     }
 
-    pub fn node_name(&self, node: AstPtr) -> Option<NameId> {
+    pub fn name_for_node(&self, node: AstPtr) -> Option<NameId> {
         self.name_map.get(&node).copied()
     }
 
-    pub fn name_nodes(&self, name_id: NameId) -> impl Iterator<Item = AstPtr> + '_ {
+    pub fn nodes_for_name(&self, name_id: NameId) -> impl Iterator<Item = AstPtr> + '_ {
         self.name_map_rev
             .get(name_id)
             .into_iter()
