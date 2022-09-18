@@ -55,6 +55,5 @@ fn setup_logger() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_env(LOG_FILTER_ENV))
         .with_writer(writer)
-        .with_ansi(false)
         .init();
 }
