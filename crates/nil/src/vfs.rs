@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, mem};
-use text_size::TextSize;
+use text_size::{TextRange, TextSize};
 
 pub struct Vfs {
     // FIXME: Currently this list is append-only.
@@ -80,6 +80,34 @@ impl Vfs {
                 self.change.change_file(file, text);
             }
         };
+    }
+
+    pub fn change_file_content(
+        &mut self,
+        file: FileId,
+        del_range: TextRange,
+        ins_text: &str,
+    ) -> Result<()> {
+        let new_text = {
+            let text = &*self.files[file.0 as usize].0;
+            if TextSize::of(text) < del_range.end() {
+                return Err(format!("Invalid range {:?}", del_range).into());
+            }
+            let mut buf = String::with_capacity(
+                text.len() - usize::from(del_range.len()) + ins_text.len() as usize,
+            );
+            buf += &text[..usize::from(del_range.start())];
+            buf += ins_text;
+            buf += &text[usize::from(del_range.end())..];
+            buf
+        };
+        // This is not quite efficient, but we already do many O(n) traversals.
+        let (new_text, line_map) = LineMap::normalize(new_text).ok_or("File too large")?;
+        let new_text = <Arc<str>>::from(new_text);
+        log::debug!("File {:?} content changed: {:?}", file, new_text);
+        self.files[file.0 as usize] = (new_text.clone(), Arc::new(line_map));
+        self.change.change_file(file, new_text);
+        Ok(())
     }
 
     pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {

@@ -124,8 +124,18 @@ impl State {
                 Ok(())
             })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
-                if let Some(chg) = params.content_changes.into_iter().next() {
-                    st.set_vfs_file_content(&params.text_document.uri, chg.text)?;
+                let mut vfs = st.vfs.write().unwrap();
+                if let Ok(file) = vfs.file_for_uri(&params.text_document.uri) {
+                    for change in params.content_changes {
+                        if let Some((_, range)) = change
+                            .range
+                            .and_then(|range| convert::from_range(&vfs, file, range).ok())
+                        {
+                            let _ = vfs.change_file_content(file, range, &change.text);
+                        }
+                    }
+                    drop(vfs);
+                    st.apply_vfs_change();
                 }
                 Ok(())
             })?
