@@ -1,5 +1,7 @@
 nil: Language server for Nix Expression Language
 
+[![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
+
 🚧 *This project is under development, but be happy to try it out!*
 
 Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and completes with no delay!

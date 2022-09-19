@@ -1,0 +1,74 @@
+name: CI
+on:
+  pull_request:
+  push:
+
+env:
+  RUST_BACKTRACE: full
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          components: rustfmt
+      - name: Check format
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: clippy
+      - name: Check clippy
+        run: cargo clippy --all -- -D warnings
+
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        channel: [stable, beta]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.channel }}
+      - name: Build
+        run: cargo build --all
+      - name: Test
+        run: cargo test --all -- --include-ignored
+
+  nix:
+    name: Nix packaging
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Nix
+        uses: cachix/install-nix-action@v17
+      - name: Flake check
+        run: nix flake check --no-update-lock-file --show-trace --verbose
+      - name: Flake build
+        run: nix build --no-update-lock-file --show-trace --verbose --print-build-logs
