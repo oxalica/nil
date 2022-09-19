@@ -7,9 +7,13 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.flake-utils.follows = "flake-utils";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
+    };
   };
 
-  outputs = { self, flake-utils, nixpkgs, rust-overlay }:
+  outputs = { self, flake-utils, nixpkgs, rust-overlay, ...}:
     flake-utils.lib.eachDefaultSystem (system:
       let
         inherit (builtins) substring;
