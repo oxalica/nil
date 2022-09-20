@@ -102,7 +102,6 @@ pub(crate) fn highlight(
             T![...] => HlTag::Punct(HlPunct::Ellipsis),
 
             T![if] | T![then] | T![else] => HlTag::Keyword(HlKeyword::Conditional),
-            // FIXME: `or` is always a keyword currently.
             T![or] => HlTag::Keyword(HlKeyword::Operator),
             T![assert] | T![in] | T![inherit] | T![let] | T![rec] | T![with] => {
                 HlTag::Keyword(HlKeyword::Other)
@@ -188,8 +187,12 @@ mod tests {
     #[test]
     fn keyword() {
         check("$0if 1 then 2 else 3", expect!["Keyword(Conditional)"]);
-        check("a.b $0or c", expect!["Keyword(Operator)"]);
         check("$0let in 1", expect!["Keyword(Other)"]);
+        check("a.b $0or c", expect!["Keyword(Operator)"]);
+
+        // Contextual keywords.
+        check("let or = 1; in a $0or", expect!["NameRef(LetIn)"]);
+        check("{ $0or = 1; }", expect!["NameDef(PlainAttrset)"]);
     }
 
     #[test]

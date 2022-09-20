@@ -9,7 +9,7 @@ SOURCE_FILE@0..24
           IDENT@1..2 "a"
         SPACE@2..3 " "
         REF@3..5
-          KW_OR@3..5 "or"
+          IDENT@3..5 "or"
       SPACE@5..6 " "
       KW_OR@6..8 "or"
       R_PAREN@8..9 ")"
@@ -22,7 +22,7 @@ SOURCE_FILE@0..24
           IDENT@12..13 "a"
         SPACE@13..14 " "
         REF@14..16
-          KW_OR@14..16 "or"
+          IDENT@14..16 "or"
       SPACE@16..17 " "
       KW_OR@17..19 "or"
       SPACE@19..20 " "

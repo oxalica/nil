@@ -15,14 +15,14 @@ SOURCE_FILE@0..21
       SPACE@8..9 " "
       APPLY@9..11
         REF@9..11
-          KW_OR@9..11 "or"
+          IDENT@9..11 "or"
       SPACE@11..12 " "
     PLUS@12..13 "+"
     SPACE@13..14 " "
     APPLY@14..21
       APPLY@14..16
         REF@14..16
-          KW_OR@14..16 "or"
+          IDENT@14..16 "or"
       SPACE@16..17 " "
       REF@17..20
         IDENT@17..20 "foo"

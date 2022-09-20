@@ -5,7 +5,7 @@ SOURCE_FILE@0..50
     ATTR_PATH_VALUE@4..11
       ATTR_PATH@4..7
         NAME@4..6
-          KW_OR@4..6 "or"
+          IDENT@4..6 "or"
         SPACE@6..7 " "
       EQ@7..8 "="
       SPACE@8..9 " "
@@ -27,7 +27,7 @@ SOURCE_FILE@0..50
           DOT@20..21 "."
           ATTR_PATH@21..24
             NAME@21..23
-              KW_OR@21..23 "or"
+              IDENT@21..23 "or"
             SPACE@23..24 " "
           KW_OR@24..26 "or"
           APPLY@26..31
@@ -36,14 +36,14 @@ SOURCE_FILE@0..50
               INT@27..28 "1"
             SPACE@28..29 " "
             REF@29..31
-              KW_OR@29..31 "or"
+              IDENT@29..31 "or"
         SPACE@31..32 " "
         APPLY@32..36
           LITERAL@32..33
             INT@32..33 "2"
           SPACE@33..34 " "
           REF@34..36
-            KW_OR@34..36 "or"
+            IDENT@34..36 "or"
         SPACE@36..37 " "
         R_BRACK@37..38 "]"
       SPACE@38..39 " "
@@ -59,7 +59,7 @@ SOURCE_FILE@0..50
               IDENT@43..44 "a"
             SPACE@44..45 " "
             REF@45..47
-              KW_OR@45..47 "or"
+              IDENT@45..47 "or"
           SPACE@47..48 " "
         REF@48..49
           IDENT@48..49 "b"

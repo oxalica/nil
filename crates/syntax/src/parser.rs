@@ -110,6 +110,12 @@ impl<'i> Parser<'i> {
         self.builder.token(kind.into(), &self.src[range]);
     }
 
+    /// Same with `bump`, but override the kind.
+    fn bump_with_kind(&mut self, kind: SyntaxKind) {
+        let (_, range) = self.tokens.pop().unwrap();
+        self.builder.token(kind.into(), &self.src[range]);
+    }
+
     /// Peek the next token, including whitespaces.
     fn peek_full(&mut self) -> Option<(SyntaxKind, TextRange)> {
         self.steps += 1;
@@ -417,7 +423,7 @@ impl<'i> Parser<'i> {
         } else if self.peek_non_ws() == Some(T![or]) {
             self.start_node_at(cp, APPLY);
             self.start_node(REF);
-            self.bump(); // or
+            self.bump_with_kind(SyntaxKind::IDENT);
             self.finish_node();
             self.finish_node();
         }
@@ -678,7 +684,7 @@ impl<'i> Parser<'i> {
         match self.peek_non_ws() {
             Some(IDENT | T![or]) => {
                 self.start_node(NAME);
-                self.bump();
+                self.bump_with_kind(SyntaxKind::IDENT);
                 self.finish_node();
             }
             Some(T!["${"]) => self.dynamic(),
