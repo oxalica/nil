@@ -1,6 +1,6 @@
 Missing R_PAREN at 6..8
-Unexpected token at 6..8
-Unexpected token at 17..19
+Missing expression at 6..8
+Missing list element expression at 17..19
 SOURCE_FILE@0..24
   APPLY@0..24
     PAREN@0..9

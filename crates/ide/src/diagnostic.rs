@@ -73,10 +73,12 @@ impl Diagnostic {
                 | SynErrorKind::PathTrailingSlash
                 | SynErrorKind::PathDuplicatedSlashes
                 | SynErrorKind::MultipleNoAssoc => Severity::Error,
-                SynErrorKind::UnexpectedToken
-                | SynErrorKind::MissingToken(_)
+                SynErrorKind::MissingToken(_)
                 | SynErrorKind::MissingExpr
+                | SynErrorKind::MissingElemExpr
                 | SynErrorKind::MissingAttr
+                | SynErrorKind::MissingParamIdent
+                | SynErrorKind::MissingBinding
                 | SynErrorKind::NestTooDeep => Severity::IncompleteSyntax,
             },
         }

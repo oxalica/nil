@@ -1,4 +1,4 @@
-Unexpected token at 16..17
+Missing expression at 16..17
 Missing R_CURLY at 16..17
 SOURCE_FILE@0..43
   LET_IN@0..43

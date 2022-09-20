@@ -26,11 +26,13 @@ pub struct Error {
 pub enum ErrorKind {
     NestTooDeep,
     MultipleRoots,
-    UnexpectedToken,
     MultipleNoAssoc,
     MissingToken(SyntaxKind),
     MissingExpr,
+    MissingElemExpr,
     MissingAttr,
+    MissingParamIdent,
+    MissingBinding,
     PathTrailingSlash,
     PathDuplicatedSlashes,
 }
@@ -40,11 +42,13 @@ impl fmt::Display for ErrorKind {
         match self {
             Self::NestTooDeep => "Nest too deep",
             Self::MultipleRoots => "Multiple root expressions",
-            Self::UnexpectedToken => "Unexpected token",
             Self::MultipleNoAssoc => "Invalid usage of no-associative operators",
             Self::MissingToken(tok) => return write!(f, "Missing {:?}", tok),
             Self::MissingExpr => "Missing expression",
+            Self::MissingElemExpr => "Missing list element expression",
             Self::MissingAttr => "Missing attribute",
+            Self::MissingParamIdent => "Missing parameter identifier",
+            Self::MissingBinding => "Mising binding",
             Self::PathTrailingSlash => "Path has trailing slash",
             Self::PathDuplicatedSlashes => "Path has duplicated slashes",
         }

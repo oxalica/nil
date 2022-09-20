@@ -1,10 +1,10 @@
-Unexpected token at 10..11
+Missing expression at 10..11
 Missing KW_THEN at 10..11
 Missing KW_THEN at 22..23
-Unexpected token at 39..40
+Missing expression at 39..40
 Missing KW_ELSE at 39..40
 Missing KW_ELSE at 58..59
-Unexpected token at 82..83
+Missing expression at 82..83
 SOURCE_FILE@0..95
   ATTR_SET@0..94
     L_CURLY@0..1 "{"

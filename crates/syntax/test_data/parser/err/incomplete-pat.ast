@@ -1,5 +1,5 @@
-Unexpected token at 6..7
-Unexpected token at 16..17
+Missing parameter identifier at 6..7
+Missing expression at 16..17
 SOURCE_FILE@0..25
   LAMBDA@0..25
     PARAM@0..21

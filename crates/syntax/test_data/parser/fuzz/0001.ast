@@ -1,5 +1,5 @@
-Unexpected token at 3..4
-Unexpected token at 4..5
+Missing parameter identifier at 3..4
+Missing R_CURLY at 6..6
 Missing COLON at 6..6
 Missing expression at 6..6
 SOURCE_FILE@0..6

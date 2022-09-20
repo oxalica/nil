@@ -1,6 +1,6 @@
 Missing EQ at 4..5
 Missing SEMICOLON at 4..5
-Unexpected token at 12..13
+Missing expression at 12..13
 Missing SEMICOLON at 12..13
 SOURCE_FILE@0..14
   APPLY@0..14

@@ -239,8 +239,8 @@ impl<'i> Parser<'i> {
                 if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt()
                 } else {
-                    self.error(ErrorKind::UnexpectedToken);
                     self.bump();
+                    self.error(ErrorKind::MissingToken(T!['{']));
                 }
             }
             Some(T![if]) => {
@@ -475,15 +475,16 @@ impl<'i> Parser<'i> {
             Some(T![rec] | T![let]) => {
                 let cp = self.checkpoint();
                 self.bump(); // rec|let
-                             // Only recognize 'rec {' and 'let {' if there is an '{'.
+
+                // Only recognize 'rec {' and 'let {' if there is an '{'.
                 if self.peek_non_ws() == Some(T!['{']) {
                     self.start_node_at(cp, ATTR_SET);
                     self.bump(); // '{'
                     self.bindings_until(T!['}']);
                     self.finish_node();
-                // Otherwise, simply skip one token to help better recovery.
+                // Otherwise, simply give up.
                 } else {
-                    self.error(ErrorKind::UnexpectedToken);
+                    self.error(ErrorKind::MissingToken(T!['{']));
                 }
             }
             Some(T!['{']) => {
@@ -498,7 +499,7 @@ impl<'i> Parser<'i> {
                 loop {
                     match self.peek_non_ws() {
                         Some(T![']']) => {
-                            self.bump();
+                            self.bump(); // ]
                             break;
                         }
                         // Ensure it consumes tokens in the loop!
@@ -507,7 +508,7 @@ impl<'i> Parser<'i> {
                             continue;
                         }
                         Some(k) if !k.is_separator() => {
-                            self.error(ErrorKind::UnexpectedToken);
+                            self.error(ErrorKind::MissingElemExpr);
                             self.bump();
                         }
                         _ => {
@@ -519,7 +520,7 @@ impl<'i> Parser<'i> {
                 self.finish_node();
             }
             _ => {
-                self.error(ErrorKind::UnexpectedToken);
+                self.error(ErrorKind::MissingExpr);
             }
         }
     }
@@ -580,37 +581,13 @@ impl<'i> Parser<'i> {
         assert_eq!(self.peek(), Some(T!['{']));
         self.start_node(PAT);
         self.bump(); // '{'
-        let mut expect_delimiter = false;
+
         loop {
-            if self.peek_non_ws() == Some(T![,]) {
-                if !expect_delimiter {
-                    self.error(ErrorKind::UnexpectedToken);
-                }
-                self.bump();
-                expect_delimiter = false;
-                continue;
-            }
-
+            // We must consume something in this match, to make the loop progress.
             match self.peek_non_ws() {
-                None => break,
-                Some(T!['}']) => {
-                    self.bump(); // '}'
-                    break;
-                }
-                Some(T![...]) => {
-                    // Must have a `,` before `...`. But we tolerate this.
-                    if expect_delimiter {
-                        self.error(ErrorKind::UnexpectedToken);
-                    }
+                // Terminates with no parameter, or after `,`.
+                None | Some(T!['}']) => break,
 
-                    self.bump(); // ...
-                    if self.peek_non_ws() == Some(T!['}']) {
-                        self.bump();
-                        break;
-                    }
-                    self.error(ErrorKind::UnexpectedToken);
-                    expect_delimiter = true;
-                }
                 Some(IDENT) => {
                     self.start_node(PAT_FIELD);
                     self.start_node(NAME);
@@ -621,15 +598,36 @@ impl<'i> Parser<'i> {
                         self.expr_function_opt();
                     }
                     self.finish_node();
-                    expect_delimiter = true;
                 }
-                Some(_) => {
-                    self.error(ErrorKind::UnexpectedToken);
+                Some(T![...]) => {
+                    self.bump(); // ...
+                    if self.peek_non_ws() == Some(T!['}']) {
+                        break;
+                    }
+                    self.error(ErrorKind::MissingToken(T!['}']));
+                    // Continue parsing parameters as recovery.
+                }
+                Some(k) => {
+                    self.error(ErrorKind::MissingParamIdent);
                     self.bump();
-                    expect_delimiter = false;
+                    // Don't double error.
+                    if k == T![,] {
+                        continue;
+                    }
                 }
             }
+
+            match self.peek_non_ws() {
+                // Terminates after a parameter.
+                None | Some(T!['}']) => break,
+                // Separator.
+                Some(T![,]) => self.bump(), // ,
+                // Consume nothing here, as the previous match must consume something.
+                _ => self.error(ErrorKind::MissingToken(T![,])),
+            }
         }
+
+        self.want(T!['}']);
         self.finish_node();
     }
 
@@ -700,7 +698,7 @@ impl<'i> Parser<'i> {
                 // Consume one token if it cannot start an AttrPath and is not the guard.
                 // This can happen for some extra tokens (eg. unfinished exprs) in AttrSet or LetIn.
                 Some(_) => {
-                    self.error(ErrorKind::UnexpectedToken);
+                    self.error(ErrorKind::MissingBinding);
                     self.bump();
                 }
             }

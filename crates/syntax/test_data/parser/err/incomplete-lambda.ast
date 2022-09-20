@@ -1,4 +1,4 @@
-Unexpected token at 5..8
+Missing COMMA at 5..8
 Missing L_CURLY at 20..21
 SOURCE_FILE@0..25
   APPLY@0..25

@@ -1,4 +1,4 @@
-Unexpected token at 8..11
+Missing L_CURLY at 11..12
 Missing SEMICOLON at 12..12
 Missing KW_IN at 12..12
 Missing expression at 12..12

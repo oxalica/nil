@@ -1,184 +1,184 @@
 Multiple root expressions at 7..8
 Multiple root expressions at 17..18
-Unexpected token at 17..18
+Missing expression at 17..18
 Multiple root expressions at 18..19
-Unexpected token at 18..19
+Missing expression at 18..19
 Multiple root expressions at 19..20
-Unexpected token at 20..21
-Unexpected token at 21..22
-Unexpected token at 22..23
+Missing list element expression at 20..21
+Missing list element expression at 21..22
+Missing list element expression at 22..23
 Missing R_CURLY at 50..51
-Unexpected token at 50..51
-Unexpected token at 51..52
-Unexpected token at 52..53
-Unexpected token at 53..54
-Unexpected token at 54..55
-Unexpected token at 55..56
-Unexpected token at 56..57
-Unexpected token at 57..58
-Unexpected token at 58..59
-Unexpected token at 59..60
-Unexpected token at 60..61
-Unexpected token at 61..62
-Unexpected token at 62..63
-Unexpected token at 63..64
-Unexpected token at 64..65
-Unexpected token at 65..66
-Unexpected token at 66..67
-Unexpected token at 67..68
-Unexpected token at 68..69
-Unexpected token at 69..70
-Unexpected token at 70..71
-Unexpected token at 71..72
-Unexpected token at 72..73
-Unexpected token at 73..74
-Unexpected token at 74..75
-Unexpected token at 75..76
-Unexpected token at 76..77
-Unexpected token at 77..78
-Unexpected token at 78..79
-Unexpected token at 79..80
-Unexpected token at 80..81
-Unexpected token at 81..82
-Unexpected token at 82..83
-Unexpected token at 83..84
-Unexpected token at 84..85
-Unexpected token at 85..86
-Unexpected token at 86..87
-Unexpected token at 87..88
-Unexpected token at 88..89
-Unexpected token at 89..90
-Unexpected token at 90..91
-Unexpected token at 91..92
-Unexpected token at 92..93
-Unexpected token at 93..94
-Unexpected token at 94..95
-Unexpected token at 95..96
-Unexpected token at 96..97
-Unexpected token at 97..98
-Unexpected token at 98..99
-Unexpected token at 99..100
-Unexpected token at 100..101
-Unexpected token at 101..102
-Unexpected token at 102..103
-Unexpected token at 103..104
-Unexpected token at 104..105
-Unexpected token at 105..106
-Unexpected token at 106..107
-Unexpected token at 107..108
-Unexpected token at 108..109
-Unexpected token at 109..110
-Unexpected token at 110..111
-Unexpected token at 111..112
-Unexpected token at 112..113
-Unexpected token at 113..114
-Unexpected token at 114..115
-Unexpected token at 115..116
-Unexpected token at 116..117
-Unexpected token at 117..118
-Unexpected token at 122..123
-Unexpected token at 123..124
-Unexpected token at 124..125
-Unexpected token at 125..126
-Unexpected token at 126..127
-Unexpected token at 127..128
+Missing expression at 50..51
+Missing expression at 51..52
+Missing expression at 52..53
+Missing expression at 53..54
+Missing expression at 54..55
+Missing expression at 55..56
+Missing expression at 56..57
+Missing expression at 57..58
+Missing expression at 58..59
+Missing expression at 59..60
+Missing expression at 60..61
+Missing expression at 61..62
+Missing expression at 62..63
+Missing expression at 63..64
+Missing expression at 64..65
+Missing expression at 65..66
+Missing expression at 66..67
+Missing expression at 67..68
+Missing expression at 68..69
+Missing expression at 69..70
+Missing expression at 70..71
+Missing expression at 71..72
+Missing expression at 72..73
+Missing expression at 73..74
+Missing expression at 74..75
+Missing expression at 75..76
+Missing expression at 76..77
+Missing expression at 77..78
+Missing expression at 78..79
+Missing expression at 79..80
+Missing expression at 80..81
+Missing expression at 81..82
+Missing expression at 82..83
+Missing expression at 83..84
+Missing expression at 84..85
+Missing expression at 85..86
+Missing expression at 86..87
+Missing expression at 87..88
+Missing expression at 88..89
+Missing expression at 89..90
+Missing expression at 90..91
+Missing expression at 91..92
+Missing expression at 92..93
+Missing expression at 93..94
+Missing expression at 94..95
+Missing expression at 95..96
+Missing expression at 96..97
+Missing expression at 97..98
+Missing expression at 98..99
+Missing expression at 99..100
+Missing expression at 100..101
+Missing expression at 101..102
+Missing expression at 102..103
+Missing expression at 103..104
+Missing expression at 104..105
+Missing expression at 105..106
+Missing expression at 106..107
+Missing expression at 107..108
+Missing expression at 108..109
+Missing expression at 109..110
+Missing expression at 110..111
+Missing expression at 111..112
+Missing expression at 112..113
+Missing expression at 113..114
+Missing expression at 114..115
+Missing expression at 115..116
+Missing expression at 116..117
+Missing expression at 117..118
+Missing expression at 122..123
+Missing expression at 123..124
+Missing expression at 124..125
+Missing expression at 125..126
+Missing expression at 126..127
+Missing expression at 127..128
 Missing R_BRACK at 129..130
 Missing R_BRACK at 129..130
 Multiple root expressions at 129..130
-Unexpected token at 129..130
+Missing expression at 129..130
 Multiple root expressions at 130..131
-Unexpected token at 130..131
+Missing expression at 130..131
 Multiple root expressions at 131..132
-Unexpected token at 131..132
+Missing expression at 131..132
 Multiple root expressions at 132..133
-Unexpected token at 132..133
+Missing expression at 132..133
 Multiple root expressions at 133..133
 Missing R_CURLY at 141..142
-Unexpected token at 141..142
-Unexpected token at 142..143
+Missing expression at 141..142
+Missing expression at 142..143
 Missing EQ at 146..147
 Missing SEMICOLON at 146..147
-Unexpected token at 146..147
-Unexpected token at 147..148
-Unexpected token at 148..149
-Unexpected token at 149..150
-Unexpected token at 150..151
-Unexpected token at 151..152
-Unexpected token at 152..153
-Unexpected token at 153..154
-Unexpected token at 154..155
+Mising binding at 146..147
+Mising binding at 147..148
+Mising binding at 148..149
+Mising binding at 149..150
+Mising binding at 150..151
+Mising binding at 151..152
+Mising binding at 152..153
+Mising binding at 153..154
+Mising binding at 154..155
 Multiple root expressions at 157..158
-Unexpected token at 157..158
+Missing expression at 157..158
 Multiple root expressions at 158..159
-Unexpected token at 158..159
+Missing expression at 158..159
 Multiple root expressions at 159..160
-Unexpected token at 159..160
+Missing expression at 159..160
 Multiple root expressions at 160..161
-Unexpected token at 160..161
+Missing expression at 160..161
 Multiple root expressions at 161..162
-Unexpected token at 161..162
+Missing expression at 161..162
 Multiple root expressions at 162..163
-Unexpected token at 162..163
+Missing expression at 162..163
 Multiple root expressions at 163..164
-Unexpected token at 163..164
+Missing expression at 163..164
 Multiple root expressions at 164..165
-Unexpected token at 164..165
+Missing expression at 164..165
 Multiple root expressions at 165..166
 Missing R_BRACK at 169..170
 Multiple root expressions at 169..170
-Unexpected token at 169..170
+Missing expression at 169..170
 Multiple root expressions at 170..170
-Unexpected token at 170..170
+Missing expression at 170..170
 Multiple root expressions at 170..171
-Unexpected token at 173..174
+Missing expression at 173..174
 Multiple root expressions at 173..174
-Unexpected token at 173..174
+Missing expression at 173..174
 Multiple root expressions at 174..174
-Unexpected token at 174..174
+Missing expression at 174..174
 Multiple root expressions at 174..175
-Unexpected token at 174..175
+Missing expression at 174..175
 Multiple root expressions at 175..176
-Unexpected token at 175..176
+Missing expression at 175..176
 Multiple root expressions at 176..177
-Unexpected token at 176..177
+Missing expression at 176..177
 Multiple root expressions at 177..178
-Unexpected token at 177..178
+Missing expression at 177..178
 Multiple root expressions at 178..179
 Missing R_BRACK at 182..183
 Multiple root expressions at 182..183
-Unexpected token at 182..183
+Missing expression at 182..183
 Multiple root expressions at 183..184
-Unexpected token at 184..185
+Mising binding at 184..185
 Multiple root expressions at 186..187
-Unexpected token at 186..187
+Missing expression at 186..187
 Multiple root expressions at 187..188
-Unexpected token at 190..191
+Missing expression at 190..191
 Multiple root expressions at 190..191
-Unexpected token at 190..191
+Missing expression at 190..191
 Multiple root expressions at 191..210
 Multiple root expressions at 210..211
-Unexpected token at 210..211
+Missing expression at 210..211
 Multiple root expressions at 211..212
-Unexpected token at 211..212
+Missing expression at 211..212
 Multiple root expressions at 212..213
-Unexpected token at 212..213
+Missing expression at 212..213
 Multiple root expressions at 213..214
-Unexpected token at 213..214
+Missing expression at 213..214
 Multiple root expressions at 214..215
-Unexpected token at 214..215
+Missing expression at 214..215
 Multiple root expressions at 215..216
-Unexpected token at 215..216
+Missing expression at 215..216
 Multiple root expressions at 216..217
-Unexpected token at 217..218
-Unexpected token at 218..219
-Unexpected token at 219..220
-Unexpected token at 220..221
+Missing list element expression at 217..218
+Missing list element expression at 218..219
+Missing list element expression at 219..220
+Missing list element expression at 220..221
 Missing R_CURLY at 232..233
-Unexpected token at 232..233
-Unexpected token at 233..234
-Unexpected token at 235..236
-Unexpected token at 236..237
-Unexpected token at 237..238
+Missing expression at 232..233
+Missing expression at 233..234
+Missing list element expression at 235..236
+Missing list element expression at 236..237
+Missing list element expression at 237..238
 Missing expression at 241..241
 Missing R_CURLY at 241..241
 Missing R_BRACK at 241..241

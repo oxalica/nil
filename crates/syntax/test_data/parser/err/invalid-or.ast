@@ -1,6 +1,6 @@
-Unexpected token at 2..4
-Unexpected token at 9..11
-Unexpected token at 14..16
+Missing list element expression at 2..4
+Missing expression at 9..11
+Missing expression at 14..16
 SOURCE_FILE@0..21
   BINARY_OP@0..21
     BINARY_OP@0..12
