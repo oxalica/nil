@@ -1,0 +1,119 @@
+Missing EQ at 17..18
+Missing SEMICOLON at 17..18
+Missing EQ at 46..47
+Missing SEMICOLON at 46..47
+Missing SEMICOLON at 65..66
+Missing attribute at 65..66
+Missing SEMICOLON at 84..85
+Missing attribute at 84..85
+SOURCE_FILE@0..91
+  ATTR_SET@0..90
+    L_CURLY@0..1 "{"
+    SPACE@1..4 "\n  "
+    ATTR_PATH_VALUE@4..10
+      ATTR_PATH@4..6
+        NAME@4..5
+          IDENT@4..5 "a"
+        SPACE@5..6 " "
+      EQ@6..7 "="
+      SPACE@7..8 " "
+      LITERAL@8..9
+        INT@8..9 "1"
+      SEMICOLON@9..10 ";"
+    SPACE@10..13 "\n  "
+    ATTR_PATH_VALUE@13..17
+      ATTR_PATH@13..17
+        NAME@13..14
+          IDENT@13..14 "x"
+        SPACE@14..17 "\n  "
+    ATTR_PATH_VALUE@17..23
+      ATTR_PATH@17..19
+        NAME@17..18
+          IDENT@17..18 "b"
+        SPACE@18..19 " "
+      EQ@19..20 "="
+      SPACE@20..21 " "
+      LITERAL@21..22
+        INT@21..22 "1"
+      SEMICOLON@22..23 ";"
+    SPACE@23..26 "\n  "
+    ATTR_PATH_VALUE@26..37
+      ATTR_PATH@26..33
+        NAME@26..27
+          IDENT@26..27 "x"
+        DOT@27..28 "."
+        SPACE@28..31 "\n  "
+        NAME@31..32
+          IDENT@31..32 "c"
+        SPACE@32..33 " "
+      EQ@33..34 "="
+      SPACE@34..35 " "
+      LITERAL@35..36
+        INT@35..36 "1"
+      SEMICOLON@36..37 ";"
+    SPACE@37..40 "\n  "
+    ATTR_PATH_VALUE@40..46
+      ATTR_PATH@40..46
+        NAME@40..41
+          IDENT@40..41 "x"
+        DOT@41..42 "."
+        NAME@42..43
+          IDENT@42..43 "y"
+        SPACE@43..46 "\n  "
+    ATTR_PATH_VALUE@46..52
+      ATTR_PATH@46..48
+        NAME@46..47
+          IDENT@46..47 "d"
+        SPACE@47..48 " "
+      EQ@48..49 "="
+      SPACE@49..50 " "
+      LITERAL@50..51
+        INT@50..51 "1"
+      SEMICOLON@51..52 ";"
+    SPACE@52..55 "\n  "
+    ATTR_PATH_VALUE@55..65
+      ATTR_PATH@55..59
+        NAME@55..56
+          IDENT@55..56 "x"
+        DOT@56..57 "."
+        NAME@57..58
+          IDENT@57..58 "y"
+        SPACE@58..59 " "
+      EQ@59..60 "="
+      SPACE@60..63 "\n  "
+      REF@63..64
+        IDENT@63..64 "e"
+      SPACE@64..65 " "
+    ATTR_PATH_VALUE@65..69
+      EQ@65..66 "="
+      SPACE@66..67 " "
+      LITERAL@67..68
+        INT@67..68 "1"
+      SEMICOLON@68..69 ";"
+    SPACE@69..72 "\n  "
+    ATTR_PATH_VALUE@72..84
+      ATTR_PATH@72..76
+        NAME@72..73
+          IDENT@72..73 "x"
+        DOT@73..74 "."
+        NAME@74..75
+          IDENT@74..75 "y"
+        SPACE@75..76 " "
+      EQ@76..77 "="
+      SPACE@77..78 " "
+      APPLY@78..84
+        LITERAL@78..79
+          INT@78..79 "1"
+        SPACE@79..82 "\n  "
+        REF@82..83
+          IDENT@82..83 "f"
+        SPACE@83..84 " "
+    ATTR_PATH_VALUE@84..88
+      EQ@84..85 "="
+      SPACE@85..86 " "
+      LITERAL@86..87
+        INT@86..87 "1"
+      SEMICOLON@87..88 ";"
+    SPACE@88..89 "\n"
+    R_CURLY@89..90 "}"
+  SPACE@90..91 "\n"

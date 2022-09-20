@@ -1,3 +1,4 @@
+Missing R_PAREN at 6..8
 Unexpected token at 6..8
 Unexpected token at 17..19
 SOURCE_FILE@0..24
@@ -11,7 +12,9 @@ SOURCE_FILE@0..24
         REF@3..5
           IDENT@3..5 "or"
       SPACE@5..6 " "
-      KW_OR@6..8 "or"
+      APPLY@6..8
+        REF@6..8
+          IDENT@6..8 "or"
       R_PAREN@8..9 ")"
     SPACE@9..10 " "
     LIST@10..23

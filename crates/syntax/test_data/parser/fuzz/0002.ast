@@ -7,6 +7,7 @@ Multiple root expressions at 19..20
 Unexpected token at 20..21
 Unexpected token at 21..22
 Unexpected token at 22..23
+Missing R_CURLY at 50..51
 Unexpected token at 50..51
 Unexpected token at 51..52
 Unexpected token at 52..53
@@ -75,26 +76,28 @@ Unexpected token at 114..115
 Unexpected token at 115..116
 Unexpected token at 116..117
 Unexpected token at 117..118
-Unexpected token at 118..122
 Unexpected token at 122..123
 Unexpected token at 123..124
 Unexpected token at 124..125
 Unexpected token at 125..126
 Unexpected token at 126..127
 Unexpected token at 127..128
-Unexpected token at 128..129
+Missing R_BRACK at 129..130
+Missing R_BRACK at 129..130
+Multiple root expressions at 129..130
 Unexpected token at 129..130
+Multiple root expressions at 130..131
 Unexpected token at 130..131
+Multiple root expressions at 131..132
 Unexpected token at 131..132
+Multiple root expressions at 132..133
 Unexpected token at 132..133
-Unexpected token at 133..133
-Unexpected token at 133..134
-Unexpected token at 134..136
-Unexpected token at 136..141
+Multiple root expressions at 133..133
+Missing R_CURLY at 141..142
 Unexpected token at 141..142
 Unexpected token at 142..143
-Unexpected token at 143..144
-Unexpected token at 144..146
+Missing EQ at 146..147
+Missing SEMICOLON at 146..147
 Unexpected token at 146..147
 Unexpected token at 147..148
 Unexpected token at 148..149
@@ -104,51 +107,80 @@ Unexpected token at 151..152
 Unexpected token at 152..153
 Unexpected token at 153..154
 Unexpected token at 154..155
-Unexpected token at 156..157
+Multiple root expressions at 157..158
 Unexpected token at 157..158
+Multiple root expressions at 158..159
 Unexpected token at 158..159
+Multiple root expressions at 159..160
 Unexpected token at 159..160
+Multiple root expressions at 160..161
 Unexpected token at 160..161
+Multiple root expressions at 161..162
 Unexpected token at 161..162
+Multiple root expressions at 162..163
 Unexpected token at 162..163
+Multiple root expressions at 163..164
 Unexpected token at 163..164
+Multiple root expressions at 164..165
 Unexpected token at 164..165
+Multiple root expressions at 165..166
+Missing R_BRACK at 169..170
+Multiple root expressions at 169..170
 Unexpected token at 169..170
+Multiple root expressions at 170..170
 Unexpected token at 170..170
-Unexpected token at 172..173
+Multiple root expressions at 170..171
 Unexpected token at 173..174
+Multiple root expressions at 173..174
+Unexpected token at 173..174
+Multiple root expressions at 174..174
 Unexpected token at 174..174
+Multiple root expressions at 174..175
 Unexpected token at 174..175
+Multiple root expressions at 175..176
 Unexpected token at 175..176
+Multiple root expressions at 176..177
 Unexpected token at 176..177
+Multiple root expressions at 177..178
 Unexpected token at 177..178
+Multiple root expressions at 178..179
+Missing R_BRACK at 182..183
+Multiple root expressions at 182..183
 Unexpected token at 182..183
+Multiple root expressions at 183..184
 Unexpected token at 184..185
+Multiple root expressions at 186..187
 Unexpected token at 186..187
-Unexpected token at 189..190
+Multiple root expressions at 187..188
 Unexpected token at 190..191
+Multiple root expressions at 190..191
+Unexpected token at 190..191
+Multiple root expressions at 191..210
+Multiple root expressions at 210..211
 Unexpected token at 210..211
+Multiple root expressions at 211..212
 Unexpected token at 211..212
+Multiple root expressions at 212..213
 Unexpected token at 212..213
+Multiple root expressions at 213..214
 Unexpected token at 213..214
+Multiple root expressions at 214..215
 Unexpected token at 214..215
+Multiple root expressions at 215..216
 Unexpected token at 215..216
+Multiple root expressions at 216..217
 Unexpected token at 217..218
 Unexpected token at 218..219
 Unexpected token at 219..220
 Unexpected token at 220..221
+Missing R_CURLY at 232..233
 Unexpected token at 232..233
 Unexpected token at 233..234
-Unexpected token at 234..235
 Unexpected token at 235..236
 Unexpected token at 236..237
 Unexpected token at 237..238
-Unexpected token at 238..238
-Unexpected token at 238..239
-Unexpected token at 239..241
+Missing expression at 241..241
 Missing R_CURLY at 241..241
-Missing R_BRACK at 241..241
-Missing R_BRACK at 241..241
 Missing R_BRACK at 241..241
 Missing R_BRACK at 241..241
 SOURCE_FILE@0..241
@@ -160,15 +192,15 @@ SOURCE_FILE@0..241
       IDENT@8..17 "KKKKKKKKK"
   ERROR@17..18 "%"
   ERROR@18..19 "$"
-  LIST@19..241
+  LIST@19..129
     L_BRACK@19..20 "["
     ERROR@20..21 "^"
     ERROR@21..22 "'"
     ERROR@22..23 "$"
-    PATH_INTERPOLATION@23..156
+    PATH_INTERPOLATION@23..129
       PATH_START@23..23 ""
       PATH_FRAGMENT@23..24 "/"
-      DYNAMIC@24..156
+      DYNAMIC@24..129
         DOLLAR_L_CURLY@24..26 "${"
         REF@26..50
           IDENT@26..50 "KKKKKKKKKKKKKKKcKKkKKKKK"
@@ -240,26 +272,35 @@ SOURCE_FILE@0..241
         ERROR@115..116 "\u{11}"
         ERROR@116..117 "\u{11}"
         ERROR@117..118 "\u{11}"
-        IDENT@118..122 "KKKK"
+        REF@118..122
+          IDENT@118..122 "KKKK"
         ERROR@122..123 "%"
         ERROR@123..124 "\0"
         ERROR@124..125 "\0"
         ERROR@125..126 "\0"
         ERROR@126..127 "\u{14}"
         ERROR@127..128 "$"
-        L_BRACK@128..129 "["
-        R_PAREN@129..130 ")"
-        ERROR@130..131 "^"
-        ERROR@131..132 "'"
-        ERROR@132..133 "$"
-        PATH_START@133..133 ""
-        PATH_FRAGMENT@133..134 "/"
-        DOLLAR_L_CURLY@134..136 "${"
+        LIST@128..129
+          L_BRACK@128..129 "["
+  R_PAREN@129..130 ")"
+  ERROR@130..131 "^"
+  ERROR@131..132 "'"
+  ERROR@132..133 "$"
+  PATH_INTERPOLATION@133..157
+    PATH_START@133..133 ""
+    PATH_FRAGMENT@133..134 "/"
+    DYNAMIC@134..157
+      DOLLAR_L_CURLY@134..136 "${"
+      REF@136..141
         IDENT@136..141 "KKKKK"
-        ERROR@141..142 "\u{6}"
-        ERROR@142..143 "\u{6}"
+      ERROR@141..142 "\u{6}"
+      ERROR@142..143 "\u{6}"
+      ATTR_SET@143..156
         L_CURLY@143..144 "{"
-        IDENT@144..146 "YY"
+        ATTR_PATH_VALUE@144..146
+          ATTR_PATH@144..146
+            NAME@144..146
+              IDENT@144..146 "YY"
         L_CURLY@146..147 "{"
         ERROR@147..148 "'"
         ERROR@148..149 "\0"
@@ -270,79 +311,86 @@ SOURCE_FILE@0..241
         ERROR@153..154 "\0"
         ERROR@154..155 "\0"
         R_CURLY@155..156 "}"
-    R_CURLY@156..157 "}"
-    ERROR@157..158 "\u{1}"
-    ERROR@158..159 "\0"
-    ERROR@159..160 "|"
-    ERROR@160..161 "\0"
-    ERROR@161..162 "\0"
-    ERROR@162..163 "\0"
-    ERROR@163..164 "\0"
-    ERROR@164..165 "\0"
-    LIST@165..241
-      L_BRACK@165..166 "["
-      REF@166..167
-        IDENT@166..167 "a"
-      ATTR_SET@167..169
-        L_CURLY@167..168 "{"
-        R_CURLY@168..169 "}"
-      R_CURLY@169..170 "}"
-      PATH_END@170..170 ""
-      ATTR_SET@170..172
+      R_CURLY@156..157 "}"
+  ERROR@157..158 "\u{1}"
+  ERROR@158..159 "\0"
+  ERROR@159..160 "|"
+  ERROR@160..161 "\0"
+  ERROR@161..162 "\0"
+  ERROR@162..163 "\0"
+  ERROR@163..164 "\0"
+  ERROR@164..165 "\0"
+  LIST@165..169
+    L_BRACK@165..166 "["
+    REF@166..167
+      IDENT@166..167 "a"
+    ATTR_SET@167..169
+      L_CURLY@167..168 "{"
+      R_CURLY@168..169 "}"
+  R_CURLY@169..170 "}"
+  PATH_END@170..170 ""
+  LAMBDA@170..173
+    PARAM@170..172
+      PAT@170..172
         L_CURLY@170..171 "{"
         R_CURLY@171..172 "}"
-      COLON@172..173 ":"
-      R_CURLY@173..174 "}"
-      PATH_END@174..174 ""
-      ERROR@174..175 "\0"
-      ERROR@175..176 "\0"
-      ERROR@176..177 "\0"
-      R_PAREN@177..178 ")"
-      LIST@178..241
-        L_BRACK@178..179 "["
-        REF@179..180
-          IDENT@179..180 "a"
-        ATTR_SET@180..182
-          L_CURLY@180..181 "{"
-          R_CURLY@181..182 "}"
-        R_CURLY@182..183 "}"
-        ATTR_SET@183..186
-          L_CURLY@183..184 "{"
-          L_CURLY@184..185 "{"
-          R_CURLY@185..186 "}"
-        R_CURLY@186..187 "}"
-        ATTR_SET@187..189
-          L_CURLY@187..188 "{"
-          R_CURLY@188..189 "}"
-        COLON@189..190 ":"
-        R_CURLY@190..191 "}"
-        REF@191..210
-          IDENT@191..210 "KKKKKKKKKKKKKKKKKKK"
-        ERROR@210..211 "%"
-        ERROR@211..212 "\0"
-        ERROR@212..213 "\0"
-        ERROR@213..214 "\0"
-        ERROR@214..215 "\u{14}"
-        ERROR@215..216 "$"
-        LIST@216..241
-          L_BRACK@216..217 "["
-          PLUS@217..218 "+"
-          ERROR@218..219 "^"
-          ERROR@219..220 "'"
-          ERROR@220..221 "$"
-          PATH_INTERPOLATION@221..241
-            PATH_START@221..221 ""
-            PATH_FRAGMENT@221..222 "/"
-            DYNAMIC@222..241
-              DOLLAR_L_CURLY@222..224 "${"
-              REF@224..232
-                IDENT@224..232 "KKKKKKKK"
-              ERROR@232..233 "%"
-              ERROR@233..234 "$"
-              L_BRACK@234..235 "["
-              ERROR@235..236 "^"
-              ERROR@236..237 "'"
-              ERROR@237..238 "$"
-              PATH_START@238..238 ""
-              PATH_FRAGMENT@238..239 "/"
+    COLON@172..173 ":"
+  R_CURLY@173..174 "}"
+  PATH_END@174..174 ""
+  ERROR@174..175 "\0"
+  ERROR@175..176 "\0"
+  ERROR@176..177 "\0"
+  R_PAREN@177..178 ")"
+  LIST@178..182
+    L_BRACK@178..179 "["
+    REF@179..180
+      IDENT@179..180 "a"
+    ATTR_SET@180..182
+      L_CURLY@180..181 "{"
+      R_CURLY@181..182 "}"
+  R_CURLY@182..183 "}"
+  ATTR_SET@183..186
+    L_CURLY@183..184 "{"
+    L_CURLY@184..185 "{"
+    R_CURLY@185..186 "}"
+  R_CURLY@186..187 "}"
+  LAMBDA@187..190
+    PARAM@187..189
+      PAT@187..189
+        L_CURLY@187..188 "{"
+        R_CURLY@188..189 "}"
+    COLON@189..190 ":"
+  R_CURLY@190..191 "}"
+  REF@191..210
+    IDENT@191..210 "KKKKKKKKKKKKKKKKKKK"
+  ERROR@210..211 "%"
+  ERROR@211..212 "\0"
+  ERROR@212..213 "\0"
+  ERROR@213..214 "\0"
+  ERROR@214..215 "\u{14}"
+  ERROR@215..216 "$"
+  LIST@216..241
+    L_BRACK@216..217 "["
+    PLUS@217..218 "+"
+    ERROR@218..219 "^"
+    ERROR@219..220 "'"
+    ERROR@220..221 "$"
+    PATH_INTERPOLATION@221..241
+      PATH_START@221..221 ""
+      PATH_FRAGMENT@221..222 "/"
+      DYNAMIC@222..241
+        DOLLAR_L_CURLY@222..224 "${"
+        REF@224..232
+          IDENT@224..232 "KKKKKKKK"
+        ERROR@232..233 "%"
+        ERROR@233..234 "$"
+        LIST@234..241
+          L_BRACK@234..235 "["
+          ERROR@235..236 "^"
+          ERROR@236..237 "'"
+          ERROR@237..238 "$"
+          PATH_INTERPOLATION@238..241
+            PATH_START@238..238 ""
+            PATH_FRAGMENT@238..239 "/"
+            DYNAMIC@239..241
               DOLLAR_L_CURLY@239..241 "${"

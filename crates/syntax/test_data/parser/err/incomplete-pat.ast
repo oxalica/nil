@@ -1,0 +1,40 @@
+Unexpected token at 6..7
+Unexpected token at 16..17
+SOURCE_FILE@0..25
+  LAMBDA@0..25
+    PARAM@0..21
+      PAT@0..21
+        L_CURLY@0..1 "{"
+        SPACE@1..2 " "
+        PAT_FIELD@2..4
+          NAME@2..3
+            IDENT@2..3 "a"
+          SPACE@3..4 "\n"
+        COMMA@4..5 ","
+        SPACE@5..6 "\n"
+        COMMA@6..7 ","
+        SPACE@7..8 " "
+        PAT_FIELD@8..10
+          NAME@8..9
+            IDENT@8..9 "b"
+          SPACE@9..10 "\n"
+        COMMA@10..11 ","
+        SPACE@11..12 " "
+        PAT_FIELD@12..16
+          NAME@12..13
+            IDENT@12..13 "x"
+          SPACE@13..14 " "
+          QUESTION@14..15 "?"
+          SPACE@15..16 "\n"
+        COMMA@16..17 ","
+        SPACE@17..18 " "
+        PAT_FIELD@18..20
+          NAME@18..19
+            IDENT@18..19 "c"
+          SPACE@19..20 "\n"
+        R_CURLY@20..21 "}"
+    COLON@21..22 ":"
+    SPACE@22..23 " "
+    LITERAL@23..24
+      INT@23..24 "1"
+    SPACE@24..25 "\n"

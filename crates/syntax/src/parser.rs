@@ -153,30 +153,42 @@ impl<'i> Parser<'i> {
     }
 
     /// Consumes a token if the next token matches the expected one, or does nothing if not.
-    fn want(&mut self, expect: SyntaxKind) {
+    /// Return whether the expected token is consumed.
+    fn want(&mut self, expect: SyntaxKind) -> bool {
         if self.peek_non_ws() == Some(expect) {
             self.bump();
+            true
         } else {
             self.error(ErrorKind::MissingToken(expect));
+            false
         }
     }
 
-    /// Consumes tokens until it matches the expected one.
-    fn require(&mut self, expect: SyntaxKind) {
+    /// Expect the termination of an experssion by a followed `guard` token.
+    /// Return whether the expected token is consumed.
+    fn require_expr_end(&mut self, guard: SyntaxKind) -> bool {
+        if matches!(self.peek_non_ws(), Some(k) if k == guard) {
+            self.bump();
+            return true;
+        }
+        self.error(ErrorKind::MissingToken(guard));
+
+        // Try to consume more experssions as recovery.
         loop {
             match self.peek_non_ws() {
-                Some(k) if k == expect => {
+                Some(k) if k == guard => {
                     self.bump();
-                    break;
+                    return true;
                 }
-                Some(_) => {
-                    self.error(ErrorKind::UnexpectedToken);
-                    self.bump();
+                Some(k) if !k.is_separator() => {
+                    let prev = self.tokens.len();
+                    self.expr_function_opt();
+                    // Don't stuck!
+                    if self.tokens.len() == prev {
+                        self.bump();
+                    }
                 }
-                None => {
-                    self.error(ErrorKind::MissingToken(expect));
-                    break;
-                }
+                _ => return false,
             }
         }
     }
@@ -235,10 +247,13 @@ impl<'i> Parser<'i> {
                 self.start_node(IF_THEN_ELSE);
                 self.bump(); // if
                 self.expr_function_opt();
-                self.require(T![then]);
-                self.expr_function_opt();
-                self.require(T![else]);
-                self.expr_function_opt();
+                // If the separator is not found, stop early.
+                if self.require_expr_end(T![then]) {
+                    self.expr_function_opt();
+                    if self.require_expr_end(T![else]) {
+                        self.expr_function_opt();
+                    }
+                }
                 self.finish_node();
             }
             Some(T!['{']) => {
@@ -454,7 +469,7 @@ impl<'i> Parser<'i> {
                 self.start_node(PAREN);
                 self.bump(); // '('
                 self.expr_function_opt();
-                self.require(T![')']);
+                self.require_expr_end(T![')']);
                 self.finish_node();
             }
             Some(T![rec] | T![let]) => {
@@ -491,11 +506,11 @@ impl<'i> Parser<'i> {
                             self.expr_select_opt();
                             continue;
                         }
-                        Some(_) => {
+                        Some(k) if !k.is_separator() => {
                             self.error(ErrorKind::UnexpectedToken);
                             self.bump();
                         }
-                        None => {
+                        _ => {
                             self.error(ErrorKind::MissingToken(T![']']));
                             break;
                         }
@@ -638,7 +653,7 @@ impl<'i> Parser<'i> {
                         self.start_node(PAREN);
                         self.bump(); // '('
                         self.expr_function_opt();
-                        self.require(T![')']);
+                        self.require_expr_end(T![')']);
                         self.finish_node();
                     }
                     // Use lookahead for ending condition, since `;` might not be typed yet.
@@ -652,7 +667,32 @@ impl<'i> Parser<'i> {
                 Some(k) if k.can_start_attr() => {
                     self.start_node(ATTR_PATH_VALUE);
                     self.attrpath_opt();
-                    self.want(T![=]);
+                    // If there is no `=`, we assume this binding is to be typed.
+                    // Stop parsing RHS and try the next binding.
+                    // ```
+                    // {
+                    //   b.|    # Typing...
+                    //   a = 1; # Valid binding follows.
+                    // }
+                    // ```
+                    if self.want(T![=]) {
+                        self.expr_function_opt();
+                    }
+                    self.want(T![;]);
+                    self.finish_node();
+                }
+                // Recover for missing attrpath. This happens when the previous binding is not
+                // terminated by `;`.
+                // ```
+                // {
+                //   a = 1   # => `a = 1 b <missing semicolon>`
+                //   b = 2;  # => `= 2;` <- We are here.
+                // }
+                // ```
+                Some(T![=]) => {
+                    self.error(ErrorKind::MissingAttr);
+                    self.start_node(ATTR_PATH_VALUE);
+                    self.bump(); // =
                     self.expr_function_opt();
                     self.want(T![;]);
                     self.finish_node();
@@ -699,7 +739,7 @@ impl<'i> Parser<'i> {
         self.start_node(DYNAMIC);
         self.bump(); // "${"
         self.expr_function_opt();
-        self.require(T!['}']);
+        self.require_expr_end(T!['}']);
         self.finish_node();
     }
 
@@ -759,6 +799,15 @@ impl SyntaxKind {
                 | T![let]
                 | T!['{']
                 | T!['[']
+        )
+    }
+
+    /// Whether this token is a separator in some syntax.
+    /// We should stop at these tokens during error recovery.
+    fn is_separator(self) -> bool {
+        matches!(
+            self,
+            T![then] | T![else] | T![')'] | T![']'] | T!['}'] | T![=] | T![;] | T![,]
         )
     }
 
