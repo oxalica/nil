@@ -1,5 +1,5 @@
 Missing expression at 16..17
-Missing R_CURLY at 16..17
+Missing "}" at 16..17
 SOURCE_FILE@0..43
   LET_IN@0..43
     KW_LET@0..3 "let"

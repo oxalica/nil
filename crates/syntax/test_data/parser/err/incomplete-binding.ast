@@ -1,10 +1,10 @@
-Missing EQ at 17..18
-Missing SEMICOLON at 17..18
-Missing EQ at 46..47
-Missing SEMICOLON at 46..47
-Missing SEMICOLON at 65..66
+Missing "=" at 17..18
+Missing ";" at 17..18
+Missing "=" at 46..47
+Missing ";" at 46..47
+Missing ";" at 65..66
 Missing attribute at 65..66
-Missing SEMICOLON at 84..85
+Missing ";" at 84..85
 Missing attribute at 84..85
 SOURCE_FILE@0..91
   ATTR_SET@0..90

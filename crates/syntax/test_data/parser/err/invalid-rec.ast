@@ -1,6 +1,6 @@
-Missing L_CURLY at 11..12
-Missing SEMICOLON at 12..12
-Missing KW_IN at 12..12
+Missing "{" at 11..12
+Missing ";" at 12..12
+Missing "in" at 12..12
 Missing expression at 12..12
 SOURCE_FILE@0..12
   LET_IN@0..12

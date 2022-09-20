@@ -1,4 +1,4 @@
-Missing R_CURLY at 8..9
+Missing "}" at 8..9
 SOURCE_FILE@0..17
   LAMBDA@0..17
     PARAM@0..13

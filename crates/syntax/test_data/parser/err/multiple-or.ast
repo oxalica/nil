@@ -1,4 +1,4 @@
-Missing R_PAREN at 6..8
+Missing ")" at 6..8
 Missing expression at 6..8
 Missing list element expression at 17..19
 SOURCE_FILE@0..24

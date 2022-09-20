@@ -1,7 +1,7 @@
-Missing EQ at 4..5
-Missing SEMICOLON at 4..5
+Missing "=" at 4..5
+Missing ";" at 4..5
 Missing expression at 12..13
-Missing SEMICOLON at 12..13
+Missing ";" at 12..13
 SOURCE_FILE@0..14
   APPLY@0..14
     ATTR_SET@0..5

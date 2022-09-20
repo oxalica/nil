@@ -1,6 +1,6 @@
 Missing parameter identifier at 3..4
-Missing R_CURLY at 6..6
-Missing COLON at 6..6
+Missing "}" at 6..6
+Missing ":" at 6..6
 Missing expression at 6..6
 SOURCE_FILE@0..6
   LAMBDA@0..6

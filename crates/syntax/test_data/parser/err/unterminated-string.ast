@@ -1,4 +1,4 @@
-Missing DQUOTE at 5..5
+Missing '"' at 5..5
 SOURCE_FILE@0..5
   STRING@0..5
     DQUOTE@0..1 "\""

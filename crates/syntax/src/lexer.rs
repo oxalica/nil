@@ -376,18 +376,18 @@ mod tests {
         check_lex(
             "foo/bar/${baz}/bux/${qux}/",
             expect![[r#"
-            PATH_START ""
-            PATH_FRAGMENT "foo/bar/"
-            DOLLAR_L_CURLY "${"
-            IDENT "baz"
-            R_CURLY "}"
-            PATH_FRAGMENT "/bux/"
-            DOLLAR_L_CURLY "${"
-            IDENT "qux"
-            R_CURLY "}"
-            PATH_FRAGMENT "/"
-            PATH_END ""
-        "#]],
+                PATH_START ""
+                PATH_FRAGMENT "foo/bar/"
+                DOLLAR_L_CURLY "${"
+                IDENT "baz"
+                R_CURLY "}"
+                PATH_FRAGMENT "/bux/"
+                DOLLAR_L_CURLY "${"
+                IDENT "qux"
+                R_CURLY "}"
+                PATH_FRAGMENT "/"
+                PATH_END ""
+            "#]],
         );
     }
 

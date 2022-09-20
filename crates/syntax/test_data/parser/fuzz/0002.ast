@@ -7,7 +7,7 @@ Multiple root expressions at 19..20
 Missing list element expression at 20..21
 Missing list element expression at 21..22
 Missing list element expression at 22..23
-Missing R_CURLY at 50..51
+Missing "}" at 50..51
 Missing expression at 50..51
 Missing expression at 51..52
 Missing expression at 52..53
@@ -82,8 +82,8 @@ Missing expression at 124..125
 Missing expression at 125..126
 Missing expression at 126..127
 Missing expression at 127..128
-Missing R_BRACK at 129..130
-Missing R_BRACK at 129..130
+Missing "]" at 129..130
+Missing "]" at 129..130
 Multiple root expressions at 129..130
 Missing expression at 129..130
 Multiple root expressions at 130..131
@@ -93,11 +93,11 @@ Missing expression at 131..132
 Multiple root expressions at 132..133
 Missing expression at 132..133
 Multiple root expressions at 133..133
-Missing R_CURLY at 141..142
+Missing "}" at 141..142
 Missing expression at 141..142
 Missing expression at 142..143
-Missing EQ at 146..147
-Missing SEMICOLON at 146..147
+Missing "=" at 146..147
+Missing ";" at 146..147
 Mising binding at 146..147
 Mising binding at 147..148
 Mising binding at 148..149
@@ -124,7 +124,7 @@ Missing expression at 163..164
 Multiple root expressions at 164..165
 Missing expression at 164..165
 Multiple root expressions at 165..166
-Missing R_BRACK at 169..170
+Missing "]" at 169..170
 Multiple root expressions at 169..170
 Missing expression at 169..170
 Multiple root expressions at 170..170
@@ -144,7 +144,7 @@ Missing expression at 176..177
 Multiple root expressions at 177..178
 Missing expression at 177..178
 Multiple root expressions at 178..179
-Missing R_BRACK at 182..183
+Missing "]" at 182..183
 Multiple root expressions at 182..183
 Missing expression at 182..183
 Multiple root expressions at 183..184
@@ -173,16 +173,16 @@ Missing list element expression at 217..218
 Missing list element expression at 218..219
 Missing list element expression at 219..220
 Missing list element expression at 220..221
-Missing R_CURLY at 232..233
+Missing "}" at 232..233
 Missing expression at 232..233
 Missing expression at 233..234
 Missing list element expression at 235..236
 Missing list element expression at 236..237
 Missing list element expression at 237..238
 Missing expression at 241..241
-Missing R_CURLY at 241..241
-Missing R_BRACK at 241..241
-Missing R_BRACK at 241..241
+Missing "}" at 241..241
+Missing "]" at 241..241
+Missing "]" at 241..241
 SOURCE_FILE@0..241
   REF@0..7
     IDENT@0..7 "KKKKKKK"

@@ -1,3 +1,5 @@
+use std::fmt;
+
 macro_rules! def {
     (
         $(
@@ -26,6 +28,37 @@ macro_rules! def {
         impl SyntaxKind {
             $($(const $anchor: Self = Self::$variant;)?)*
         }
+
+        impl fmt::Display for SyntaxKind {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(Self::$variant => f.write_str(to_str!($variant, $($($tt)*)?)),)*
+                }
+            }
+        }
+    };
+}
+
+macro_rules! to_str {
+    // IDENT
+    ($variant:tt, ) => {
+        concat!('"', stringify!($variant), '"')
+    };
+    // Special case.
+    ($variant:tt, '"') => {
+        r#"'"'"#
+    };
+    // This breaks `literal` fragment.
+    ($variant:tt, -) => {
+        r#""-""#
+    };
+    // '['
+    ($variant:tt, $s:literal) => {
+        concat!('"', $s, '"')
+    };
+    // &&
+    ($variant:tt, $($tt:tt)+) => {
+        concat!('"', stringify!($($tt)+), '"')
     };
 }
 

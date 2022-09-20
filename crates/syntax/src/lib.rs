@@ -43,7 +43,7 @@ impl fmt::Display for ErrorKind {
             Self::NestTooDeep => "Nest too deep",
             Self::MultipleRoots => "Multiple root expressions",
             Self::MultipleNoAssoc => "Invalid usage of no-associative operators",
-            Self::MissingToken(tok) => return write!(f, "Missing {:?}", tok),
+            Self::MissingToken(tok) => return write!(f, "Missing {}", tok),
             Self::MissingExpr => "Missing expression",
             Self::MissingElemExpr => "Missing list element expression",
             Self::MissingAttr => "Missing attribute",
