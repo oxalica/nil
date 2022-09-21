@@ -1,10 +1,13 @@
 use crate::{convert, handler, Result, Vfs};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled, VfsPath};
-use lsp_server::{ErrorCode, Message, Notification, Request, RequestId, Response};
+use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
-use lsp_types::{notification as notif, request as req, PublishDiagnosticsParams, Url};
-use serde::Serialize;
+use lsp_types::{
+    notification as notif, request as req, ConfigurationItem, ConfigurationParams,
+    PublishDiagnosticsParams, Url,
+};
+use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::panic::UnwindSafe;
@@ -14,14 +17,22 @@ use std::{fs, panic};
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 const FILTER_FILE_EXTENTION: &str = "nix";
+const CONFIG_KEY: &str = "nil";
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Config {}
+
+type ReqHandler = fn(&mut State, Response);
 
 pub struct State {
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
     opened_files: Arc<RwLock<HashSet<Url>>>,
     workspace_root: Option<PathBuf>,
+    req_queue: ReqQueue<(), ReqHandler>,
     sender: Sender<Message>,
     is_shutdown: bool,
+    config: Config,
 }
 
 impl State {
@@ -34,8 +45,10 @@ impl State {
             vfs: Arc::new(RwLock::new(vfs)),
             opened_files: Default::default(),
             workspace_root,
+            req_queue: ReqQueue::default(),
             sender: responder,
             is_shutdown: false,
+            config: Config::default(),
         }
     }
 
@@ -73,7 +86,11 @@ impl State {
                     }
                     self.dispatch_notification(notif)?;
                 }
-                Message::Response(_) => {}
+                Message::Response(resp) => {
+                    if let Some(callback) = self.req_queue.outgoing.complete(resp.id.clone()) {
+                        callback(self, resp);
+                    }
+                }
             }
         }
 
@@ -139,13 +156,62 @@ impl State {
                 }
                 Ok(())
             })?
+            .on_sync_mut::<notif::DidChangeConfiguration>(|st, _params| {
+                // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
+                // this notification's parameters should be ignored and the actual config queried separately.
+                st.send_request::<req::WorkspaceConfiguration>(
+                    ConfigurationParams {
+                        items: vec![ConfigurationItem {
+                            scope_uri: None,
+                            section: Some(CONFIG_KEY.into()),
+                        }],
+                    },
+                    |st, resp| {
+                        let ret = match resp.error {
+                            None => Ok(resp
+                                .result
+                                .and_then(|mut v| Some(v.get_mut(0)?.take()))
+                                .unwrap_or_default()),
+                            Some(err) => Err(format!(
+                                "LSP error {}: {}, data: {:?}",
+                                err.code, err.message, err.data
+                            )),
+                        };
+                        match ret {
+                            Ok(v) => {
+                                tracing::info!("Updating config: {:?}", v);
+                                st.update_config(v);
+                            }
+                            Err(err) => tracing::error!("Failed to update config: {}", err),
+                        }
+                    },
+                );
+                Ok(())
+            })?
             .finish()
+    }
+
+    fn send_request<R: req::Request>(
+        &mut self,
+        params: R::Params,
+        callback: fn(&mut Self, Response),
+    ) {
+        let req = self
+            .req_queue
+            .outgoing
+            .register(R::METHOD.into(), params, callback);
+        self.sender.send(req.into()).unwrap();
     }
 
     fn send_notification<N: notif::Notification>(&self, params: N::Params) {
         self.sender
             .send(Notification::new(N::METHOD.into(), params).into())
             .unwrap();
+    }
+
+    fn update_config(&mut self, _config: serde_json::Value) {
+        // No-op.
+        let _ = &mut self.config;
     }
 
     fn snapshot(&self) -> StateSnapshot {
@@ -272,7 +338,11 @@ impl<'s> NotificationDispatcher<'s> {
     }
 
     fn finish(self) -> Result<()> {
-        // TODO: We are not done yet.
+        if let Some(notif) = self.1 {
+            if !notif.method.starts_with("$/") {
+                tracing::error!("Unhandled notification: {:?}", notif);
+            }
+        }
         Ok(())
     }
 }

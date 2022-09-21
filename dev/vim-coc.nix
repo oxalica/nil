@@ -65,6 +65,9 @@ let
       command = "nil";
       filetypes = [ "nix" ];
       rootPatterns =  [ "flake.nix" ];
+      settings.nil = {
+        testSetting = 42;
+      };
     };
     semanticTokens.filetypes = [ "nix" ];
   };
