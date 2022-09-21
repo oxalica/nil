@@ -33,8 +33,8 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] Identifiers in parameters and bindings, from `let`, rec and non-rec attrsets.
   - [x] Static string literal bindings.
   - [x] Merged path-value binding names.
-  - [ ] Names introduced by `inherit`.
-  - [ ] Names used by `inherit`.
+  - [x] Names introduced by `inherit`.
+  - [x] Names used by `inherit`.
   - [ ] Conflict detection.
   - [x] Rename to string literals.
 - [x] Semantic highlighting. `textDocument/semanticTokens/{range,full}`

@@ -23,28 +23,80 @@ pub(crate) fn rename(
 ) -> RenameResult<WorkspaceEdit> {
     let (_, name) = find_name(db, fpos).ok_or_else(|| "No references found".to_owned())?;
 
-    let is_new_name_ident = is_valid_ident(new_name);
-    let new_attr = match is_new_name_ident {
-        true => new_name.into(),
-        false => escape_name_to_string(new_name),
-    };
+    let (is_new_name_ident, new_attr) = name_to_attr(new_name);
 
     let file_id = fpos.file_id;
+    let src = db.file_content(file_id);
     let parse = db.parse(file_id);
+    let module = db.module(fpos.file_id);
     let source_map = db.source_map(file_id);
+
+    let (is_old_name_ident, old_attr) = name_to_attr(&module[name].text);
 
     let mut edits = Vec::new();
 
     // Rename definitions.
     for ptr in source_map.nodes_for_name(name) {
-        let node = ptr.to_node(&parse.syntax_node());
-        if matches!(node.parent(), Some(p) if p.kind() == SyntaxKind::INHERIT) {
-            return Err("Renaming `inherit`ed variables is not supported yet".into());
-        }
+        let attr_node = ptr.to_node(&parse.syntax_node());
+
+        // Simple case for non-inherited names.
+        let i = match attr_node.parent().and_then(ast::Inherit::cast) {
+            None => {
+                edits.push(TextEdit {
+                    delete: attr_node.text_range(),
+                    insert: new_attr.clone(),
+                });
+                continue;
+            }
+            Some(i) => i,
+        };
+
+        // Here we are renaming the *definition* of an inherited name.
+        // `inherit old;` => `new = old;`
+        //
+        // Note that renaming `rec { inherit old; }` => `rec { new = old; }`
+        // would never collide with another field `old`, since `inherit`ed names are unique.
+        // TODO: Check if `new` collides with other fields.
+
+        // First remove the old binding.
         edits.push(TextEdit {
-            delete: node.text_range(),
-            insert: new_attr.clone(),
+            // Delete the whole Inherit if it is the only Attr.
+            delete: if i.attrs().count() == 1 {
+                i.syntax().text_range()
+            // Otherwise, delete only the Attr itself.
+            } else {
+                attr_node.text_range()
+            },
+            insert: "".into(),
         });
+
+        // Then construct a new binding.
+        match i.from_expr() {
+            None => {
+                if !is_old_name_ident {
+                    return Err("Cannot rename from a string literal while it is inherited".into());
+                }
+                // `new = old;`.
+                edits.push(TextEdit {
+                    delete: TextRange::empty(i.syntax().text_range().end()),
+                    insert: format!("{} = {};", new_attr, old_attr).into(),
+                });
+            }
+            Some(from_expr) => {
+                // `new = (from).old;`
+                edits.push(TextEdit {
+                    delete: TextRange::empty(i.syntax().text_range().end()),
+                    insert: format!(
+                        "{} = {}.{};",
+                        new_attr,
+                        // This is already parenthesized.
+                        &src[from_expr.syntax().text_range()],
+                        old_attr,
+                    )
+                    .into(),
+                });
+            }
+        }
     }
 
     // Rename usages.
@@ -57,23 +109,56 @@ pub(crate) fn rename(
         let ptr = source_map
             .node_for_expr(expr)
             .expect("Must be a valid Expr::Reference");
-        let node = ptr.to_node(&parse.syntax_node());
-        if matches!(node.parent(), Some(p) if p.kind() == SyntaxKind::INHERIT) {
-            return Err("Renaming variables being `inherit`ed is not supported yet".into());
-        }
+        let ref_node = ptr.to_node(&parse.syntax_node());
+
+        // Simple case for non-inherited names.
+        let i = match ref_node.parent().and_then(ast::Inherit::cast) {
+            None => {
+                edits.push(TextEdit {
+                    delete: ptr.text_range(),
+                    insert: new_attr.clone(),
+                });
+                continue;
+            }
+            Some(i) => i,
+        };
+
+        // Here we are renaming the *reference* of an inherited name.
+        // `inherit old;` => `old = new;`
+        // TODO: Check if `new` collides with another names.
+        assert!(
+            i.from_expr().is_none(),
+            "Expr::Ref can only be from Inherit without from_expr"
+        );
+
+        // First remove the old binding.
         edits.push(TextEdit {
-            delete: ptr.text_range(),
-            insert: new_attr.clone(),
+            // Delete the whole Inherit if it is the only Attr.
+            delete: if i.attrs().count() == 1 {
+                i.syntax().text_range()
+            // Otherwise, delete only the Attr itself.
+            } else {
+                ref_node.text_range()
+            },
+            insert: "".into(),
+        });
+
+        // Then construct a new binding.
+        edits.push(TextEdit {
+            delete: TextRange::empty(i.syntax().text_range().end()),
+            insert: format!("{} = {};", old_attr, new_attr).into(),
         });
     }
 
     edits.sort_by_key(|edit| edit.delete.start());
-    assert!(
-        edits
-            .windows(2)
-            .all(|w| w[0].delete.end() <= w[1].delete.start()),
-        "Should not overlap"
-    );
+
+    // Sanity check.
+    if edits
+        .windows(2)
+        .any(|w| w[0].delete.end() > w[1].delete.start())
+    {
+        return Err("Change would overlap".into());
+    }
 
     Ok(WorkspaceEdit {
         content_edits: [(file_id, edits)].into_iter().collect(),
@@ -144,8 +229,16 @@ fn is_valid_ident(name: &str) -> bool {
         && !KEYWORDS.contains(&bytes)
 }
 
-fn escape_name_to_string(name: &str) -> SmolStr {
-    ("\"".to_owned() + &name.replace('\\', "\\\\").replace('"', "\\\"") + "\"").into()
+/// Return whether this name is a valid identifier, and the attribute form of it, escaped by need.
+fn name_to_attr(name: &str) -> (bool, SmolStr) {
+    if is_valid_ident(name) {
+        (true, name.into())
+    } else {
+        (
+            false,
+            ("\"".to_owned() + &name.replace('\\', "\\\\").replace('"', "\\\"") + "\"").into(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -371,6 +464,74 @@ mod tests {
             "rec { $0a = a; }",
             "1",
             expect!["Cannot rename to a string literal while it is referenced"],
+        );
+    }
+
+    #[test]
+    fn rename_inherit_simple_definition() {
+        check(
+            r#"let a = 1; in { inherit $0a; }"#,
+            "b",
+            expect!["let a = 1; in { b = a; }"],
+        );
+        check(
+            r#"let a = 1; in { inherit $0a x; }"#,
+            "b",
+            expect!["let a = 1; in { inherit  x;b = a; }"],
+        );
+        check(
+            r#"let a = 1; in { inherit $0a; }"#,
+            "1",
+            expect![[r#"let a = 1; in { "1" = a; }"#]],
+        );
+        check(
+            r#"let "1" = 1; in { inherit $0"1"; }"#,
+            "b",
+            expect!["Cannot rename from a string literal while it is inherited"],
+        );
+    }
+
+    #[test]
+    fn rename_inherit_from_definition() {
+        check(r#"{ inherit (1) $0a; }"#, "b", expect!["{ b = (1).a; }"]);
+        check(
+            r#"{ inherit (1) $0a x; }"#,
+            "b",
+            expect!["{ inherit (1)  x;b = (1).a; }"],
+        );
+        check(
+            r#"{ inherit (1) $0a; }"#,
+            "1",
+            expect![[r#"{ "1" = (1).a; }"#]],
+        );
+        check(
+            r#"{ inherit (1) $0"1"; }"#,
+            "b",
+            expect![[r#"{ b = (1)."1"; }"#]],
+        );
+    }
+
+    #[test]
+    fn rename_inherit_simple_reference() {
+        check(
+            r#"let $0a = 1; in { inherit a; }"#,
+            "b",
+            expect!["let b = 1; in { a = b; }"],
+        );
+        check(
+            r#"let $0a = 1; in { inherit a x; }"#,
+            "b",
+            expect!["let b = 1; in { inherit  x;a = b; }"],
+        );
+        check(
+            r#"let $0a = 1; in { inherit a; }"#,
+            "1",
+            expect!["Cannot rename to a string literal while it is referenced"],
+        );
+        check(
+            r#"let $0"1" = 1; in { inherit "1"; }"#,
+            "b",
+            expect![[r#"let b = 1; in { "1" = b; }"#]],
         );
     }
 }
