@@ -1,54 +1,12 @@
-use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
-    CompletionOptions, CompletionParams, CompletionResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Location, OneOf, PrepareRenameResponse, ReferenceParams, RenameOptions,
-    RenameParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
-    SemanticTokens, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities,
-    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, WorkDoneProgressOptions, WorkspaceEdit,
+    CompletionParams, CompletionResponse, GotoDefinitionParams, GotoDefinitionResponse, Location,
+    PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
+    SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, TextDocumentPositionParams, WorkspaceEdit,
 };
 use text_size::TextRange;
-
-pub(crate) fn server_capabilities() -> ServerCapabilities {
-    ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Options(
-            TextDocumentSyncOptions {
-                open_close: Some(true),
-                change: Some(TextDocumentSyncKind::INCREMENTAL),
-                will_save: None,
-                will_save_wait_until: None,
-                save: None,
-            },
-        )),
-        definition_provider: Some(OneOf::Left(true)),
-        completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![".".into()]),
-            ..Default::default()
-        }),
-        references_provider: Some(OneOf::Left(true)),
-        selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
-        rename_provider: Some(OneOf::Right(RenameOptions {
-            prepare_provider: Some(true),
-            work_done_progress_options: WorkDoneProgressOptions::default(),
-        })),
-        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
-            SemanticTokensOptions {
-                work_done_progress_options: WorkDoneProgressOptions::default(),
-                legend: SemanticTokensLegend {
-                    token_types: SEMANTIC_TOKEN_TYPES.to_vec(),
-                    token_modifiers: SEMANTIC_TOKEN_MODIFIERS.to_vec(),
-                },
-                range: Some(true),
-                full: Some(SemanticTokensFullOptions::Delta { delta: Some(false) }),
-            },
-        )),
-        ..Default::default()
-    }
-}
 
 pub(crate) fn goto_definition(
     snap: StateSnapshot,
