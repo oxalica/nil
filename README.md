@@ -16,6 +16,7 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
   - [x] With expression.
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
+    - With documentations.
   - [x] Local bindings and rec-attrset fields.
   - [x] Keywords.
   - [ ] Attrset fields.
@@ -43,6 +44,9 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
     `vim` would consume 100% CPU and is slow to respond when editing `all-packages.nix`.
     Though our LSP server's CPU usage is quite low.
     Other LSP clients are not tested.
+- [x] Hover text. `textDocument/hover`.
+  - [x] Show kind of names.
+  - [x] Documentation for builtin names.
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
 
