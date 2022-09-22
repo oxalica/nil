@@ -63,9 +63,8 @@ pub(crate) fn to_diagnostics(
     for diag in diags {
         let primary_diag = lsp::Diagnostic {
             severity: match diag.severity() {
-                Severity::Error => Some(DiagnosticSeverity::ERROR),
+                Severity::Error | Severity::IncompleteSyntax => Some(DiagnosticSeverity::ERROR),
                 Severity::Warning => Some(DiagnosticSeverity::WARNING),
-                Severity::IncompleteSyntax => continue,
             },
             range: to_range(&line_map, diag.range),
             code: None,
