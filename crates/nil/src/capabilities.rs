@@ -1,9 +1,10 @@
 use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use lsp_types::{
-    CompletionOptions, OneOf, RenameOptions, SelectionRangeProviderCapability,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
+    CompletionOptions, HoverProviderCapability, OneOf, RenameOptions,
+    SelectionRangeProviderCapability, SemanticTokensFullOptions, SemanticTokensLegend,
+    SemanticTokensOptions, SemanticTokensServerCapabilities, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    WorkDoneProgressOptions,
 };
 
 pub(crate) fn server_capabilities() -> ServerCapabilities {
@@ -39,6 +40,7 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
                 full: Some(SemanticTokensFullOptions::Delta { delta: Some(false) }),
             },
         )),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
         ..Default::default()
     }
 }

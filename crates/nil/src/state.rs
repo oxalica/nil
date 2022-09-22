@@ -121,6 +121,7 @@ impl State {
             .on::<req::Rename>(handler::rename)
             .on::<req::SemanticTokensFullRequest>(handler::semantic_token_full)
             .on::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
+            .on::<req::HoverRequest>(handler::hover)
             .finish();
     }
 

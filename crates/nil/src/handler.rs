@@ -1,10 +1,10 @@
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
-    CompletionParams, CompletionResponse, GotoDefinitionParams, GotoDefinitionResponse, Location,
-    PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
-    SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, TextDocumentPositionParams, WorkspaceEdit,
+    CompletionParams, CompletionResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+    HoverParams, Location, PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange,
+    SelectionRangeParams, SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, TextDocumentPositionParams, WorkspaceEdit,
 };
 use text_size::TextRange;
 
@@ -144,4 +144,11 @@ pub(crate) fn semantic_token_range(
         result_id: None,
         data: toks,
     })))
+}
+
+pub(crate) fn hover(snap: StateSnapshot, params: HoverParams) -> Result<Option<Hover>> {
+    let (line_map, fpos) =
+        convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
+    let ret = snap.analysis.hover(fpos)?;
+    Ok(ret.map(|hover| convert::to_hover(&line_map, hover)))
 }

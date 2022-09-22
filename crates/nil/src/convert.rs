@@ -1,16 +1,15 @@
-use std::sync::Arc;
-
 use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
-    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange, Severity,
-    TextEdit, WorkspaceEdit,
+    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange,
+    HoverResult, Severity, TextEdit, WorkspaceEdit,
 };
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Documentation,
-    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range, SemanticToken,
-    TextDocumentIdentifier, TextDocumentPositionParams,
+    Hover, Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range,
+    SemanticToken, TextDocumentIdentifier, TextDocumentPositionParams,
 };
+use std::sync::Arc;
 use text_size::{TextRange, TextSize};
 
 pub(crate) fn from_file(vfs: &Vfs, doc: &TextDocumentIdentifier) -> Result<FileId> {
@@ -267,4 +266,14 @@ pub(crate) fn to_semantic_tokens(line_map: &LineMap, hls: &[HlRange]) -> Vec<Sem
     }
 
     toks
+}
+
+pub(crate) fn to_hover(line_map: &LineMap, hover: HoverResult) -> Hover {
+    Hover {
+        range: Some(to_range(line_map, hover.range)),
+        contents: lsp::HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: hover.markup,
+        }),
+    }
 }

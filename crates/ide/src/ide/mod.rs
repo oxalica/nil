@@ -2,6 +2,7 @@ mod completion;
 mod diagnostics;
 mod expand_selection;
 mod goto_definition;
+mod hover;
 mod references;
 mod rename;
 mod syntax_highlighting;
@@ -15,6 +16,7 @@ use smol_str::SmolStr;
 use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
+pub use hover::HoverResult;
 pub use syntax_highlighting::{HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,5 +130,9 @@ impl Analysis {
         new_name: &str,
     ) -> Cancellable<RenameResult<WorkspaceEdit>> {
         self.with_db(|db| rename::rename(db, fpos, new_name))
+    }
+
+    pub fn hover(&self, fpos: FilePos) -> Cancellable<Option<HoverResult>> {
+        self.with_db(|db| hover::hover(db, fpos))
     }
 }
