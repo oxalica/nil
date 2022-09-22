@@ -43,7 +43,6 @@
             version = "unstable-${date}";
             src = self;
             cargoLock.lockFile = self + "/Cargo.lock";
-            buildAndTestSubdir = "crates/nil";
 
             nativeBuildInputs = [ pkgs.nix.out ];
 
