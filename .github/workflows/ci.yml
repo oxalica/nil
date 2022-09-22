@@ -61,7 +61,7 @@ jobs:
       - name: Test
         run: cargo test --all -- --include-ignored
 
-  nix:
+  nix-flake:
     name: Nix packaging (flake)
     strategy:
       matrix:
@@ -77,7 +77,7 @@ jobs:
       - name: Flake build
         run: nix build --no-update-lock-file --show-trace --verbose --print-build-logs
 
-  nix:
+  nix-legacy:
     name: Nix packaging (legacy)
     strategy:
       matrix:
