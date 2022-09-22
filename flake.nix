@@ -45,6 +45,8 @@
             cargoLock.lockFile = self + "/Cargo.lock";
             buildAndTestSubdir = "crates/nil";
 
+            nativeBuildInputs = [ pkgs.nix.out ];
+
             CFG_DATE = date;
             CFG_REV = rev;
           };
@@ -55,7 +57,7 @@
             # Override the stable rustfmt.
             rust-nightly_2022-08-01.availableComponents.rustfmt
             rust
-            nix # For generation of builtins.
+            nix.out # For generation of builtins.
             gdb
             jq
             (import ./dev/neovim-lsp.nix { inherit pkgs; })

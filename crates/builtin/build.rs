@@ -8,10 +8,19 @@ fn main() {
     // Disable rebuild when source files changed.
     println!("cargo:rerun-if-changed=build.rs");
 
-    let builtin_names: Vec<String> = Command::new("nix-instantiate")
-        .args(["--eval", "--json", "--expr", "builtins.attrNames builtins"])
+    let builtin_names: Vec<String> = Command::new("nix")
+        .args([
+            "eval",
+            "--experimental-features",
+            "nix-command",
+            "--store",
+            "dummy://",
+            "--json",
+            "--expr",
+            "builtins.attrNames builtins",
+        ])
         .json()
-        .expect("Failed to get builtins");
+        .expect("Failed to get builtins. Is `nix` accessible?");
 
     // Probe each builtin names to filter all global names. Prim-ops are not included.
     // Here we run them in parallel. There are hundreds of names to test.
@@ -20,8 +29,16 @@ fn main() {
         builtin_names
             .iter()
             .map(|name| {
-                Command::new("nix-instantiate")
-                    .args(["--parse", "--expr", name])
+                Command::new("nix")
+                    .args([
+                        "eval",
+                        "--experimental-features",
+                        "nix-command",
+                        "--store",
+                        "dummy://",
+                        "--expr",
+                        name,
+                    ])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
