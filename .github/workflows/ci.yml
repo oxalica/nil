@@ -62,7 +62,7 @@ jobs:
         run: cargo test --all -- --include-ignored
 
   nix:
-    name: Nix packaging
+    name: Nix packaging (flake)
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -76,3 +76,19 @@ jobs:
         run: nix flake check --no-update-lock-file --show-trace --verbose
       - name: Flake build
         run: nix build --no-update-lock-file --show-trace --verbose --print-build-logs
+
+  nix:
+    name: Nix packaging (legacy)
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Nix
+        uses: cachix/install-nix-action@v17
+        with:
+          nix_path: nixpkgs=channel:nixpkgs-unstable
+      - name: Nix build
+        run: nix-build
