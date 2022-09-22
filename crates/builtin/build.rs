@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::{env, fs};
@@ -34,6 +35,14 @@ fn main() {
             .collect()
     };
 
+    // Use a secret subcommand `__dump-builtins` to dump Nix builtins with documentations.
+    // It is introduced since Nix 2.4 in
+    // https://github.com/NixOS/nix/commit/0f314f3c2594e80322c675b70a61dcfda11bf423#diff-20a8b5b2a231db80eab27840bd32ac0214aa0c4e9e923e649d3d741c3da77b48R187
+    let builtins_dump: DumpBuiltins = Command::new("nix")
+        .arg("__dump-builtins")
+        .json()
+        .expect("Failed to dump builtins");
+
     let mut phf_gen = phf_codegen::Map::<&'static str>::new();
     for (name, is_global) in builtin_names.iter().zip(&global_names) {
         let name = &**name;
@@ -42,12 +51,15 @@ fn main() {
             "true" | "false" | "null" => "Const",
             _ => "Function",
         };
-        phf_gen.entry(
-            name,
-            &format!(
-                "crate::Builtin {{ kind: crate::BuiltinKind::{kind}, is_global: {is_global} }}"
-            ),
-        );
+        let summary = builtins_dump
+            .get(name)
+            .map(|b @ DumpBuiltin { args, arity, .. }| {
+                assert_eq!(args.len(), *arity, "Arity mismatch: {b:?}");
+                let args = args.iter().flat_map(|arg| [" ", arg]).collect::<String>();
+                format!("builtins.{name}{args}")
+            });
+        let doc = builtins_dump.get(name).map(|b| &b.doc);
+        phf_gen.entry(name, &format!("crate::Builtin {{ kind: crate::BuiltinKind::{kind}, is_global: {is_global}, summary: {summary:?}, doc: {doc:?} }}"));
     }
 
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("generated.expr");
@@ -66,4 +78,14 @@ impl CommandExt for Command {
         }
         Ok(serde_json::from_slice(&output.stdout)?)
     }
+}
+
+// Keep names sorted.
+type DumpBuiltins = BTreeMap<String, DumpBuiltin>;
+
+#[derive(Debug, Deserialize)]
+struct DumpBuiltin {
+    args: Vec<String>,
+    arity: usize,
+    doc: String,
 }

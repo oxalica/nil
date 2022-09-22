@@ -32,6 +32,10 @@ pub struct CompletionItem {
     pub replace: SmolStr,
     /// What item (struct, function, etc) are we completing.
     pub kind: CompletionItemKind,
+    /// A brief summary.
+    pub brief: Option<String>,
+    /// The detailed documentation.
+    pub doc: Option<String>,
 }
 
 /// The type of the completion item.
@@ -159,6 +163,8 @@ fn complete_expr(
                 .kind
                 .try_into()
                 .expect("NonRecAttrset names are not definitions"),
+            brief: None,
+            doc: None,
         })
         .for_each(&mut feed);
 
@@ -171,6 +177,8 @@ fn complete_expr(
             source_range,
             replace: name.into(),
             kind: b.kind.into(),
+            brief: b.summary.map(|s| s.to_owned()),
+            doc: b.doc.map(|s| s.to_owned()),
         })
         .for_each(&mut feed);
 
@@ -212,6 +220,8 @@ fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
         source_range,
         replace: kw.into(),
         kind: CompletionItemKind::Keyword,
+        brief: None,
+        doc: None,
     }
 }
 

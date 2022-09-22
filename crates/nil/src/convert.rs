@@ -5,11 +5,11 @@ use ide::{
     CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange, Severity,
     TextEdit, WorkspaceEdit,
 };
-use lsp::SemanticToken;
 use lsp_server::ErrorCode;
 use lsp_types::{
-    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Location,
-    Position, PrepareRenameResponse, Range, TextDocumentIdentifier, TextDocumentPositionParams,
+    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Documentation,
+    Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range, SemanticToken,
+    TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use text_size::{TextRange, TextSize};
 
@@ -147,8 +147,24 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
             range: to_range(line_map, item.source_range),
             new_text: item.replace.into(),
         })),
+        detail: item.brief,
+        documentation: item.doc.map(|doc| {
+            Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: doc,
+            })
+        }),
+
         // TODO
-        ..Default::default()
+        deprecated: None,
+        preselect: None,
+        sort_text: None,
+        filter_text: None,
+        additional_text_edits: None,
+        command: None,
+        commit_characters: None,
+        data: None,
+        tags: None,
     }
 }
 
