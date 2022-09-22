@@ -1,8 +1,8 @@
 //! This is actually so-called "semantic highlighting".
 //! Ref: <https://github.com/rust-lang/rust-analyzer/blob/a670ff888437f4b6a3d24cc2996e9f969a87cbae/crates/ide/src/syntax_highlighting/tags.rs>
-use crate::builtin::BUILTINS;
 use crate::def::{AstPtr, Expr, NameKind, ResolveResult};
-use crate::{BuiltinKind, DefDatabase, FileId};
+use crate::{DefDatabase, FileId};
+use builtin::{BuiltinKind, ALL_BUILTINS};
 use rowan::{NodeOrToken, TextRange, WalkEvent};
 use syntax::{SyntaxKind, SyntaxToken, T};
 
@@ -114,7 +114,9 @@ pub(crate) fn highlight(
                         None => HlTag::UnresolvedRef,
                         Some(ResolveResult::Definition(def)) => HlTag::NameRef(module[*def].kind),
                         Some(ResolveResult::WithExprs(_)) => HlTag::NameRef(NameKind::PlainAttrset),
-                        Some(ResolveResult::Builtin(name)) => HlTag::Builtin(BUILTINS[*name].kind),
+                        Some(ResolveResult::Builtin(name)) => {
+                            HlTag::Builtin(ALL_BUILTINS[*name].kind)
+                        }
                     }
                 }
                 Some(node) if node.kind() == SyntaxKind::NAME => {

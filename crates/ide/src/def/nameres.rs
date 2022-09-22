@@ -1,5 +1,6 @@
 use super::{BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameId};
-use crate::{builtin, Diagnostic, DiagnosticKind, FileId};
+use crate::{Diagnostic, DiagnosticKind, FileId};
+use builtin::ALL_BUILTINS;
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
 use std::collections::HashMap;
@@ -51,9 +52,11 @@ impl ModuleScopes {
         {
             return Some(ResolveResult::Definition(*name));
         }
-        // 2. Builtin names.
-        if let Some(name) = builtin::BUILTINS.get_key(name) {
-            return Some(ResolveResult::Builtin(name));
+        // 2. Global builtin names.
+        if let Some((name, b)) = ALL_BUILTINS.get_entry(name) {
+            if b.is_global {
+                return Some(ResolveResult::Builtin(name));
+            }
         }
         // 3. "with" exprs.
         let withs = self

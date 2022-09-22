@@ -1,6 +1,6 @@
-use crate::builtin::BuiltinKind;
 use crate::def::{AstPtr, NameKind};
-use crate::{builtin, DefDatabase, FileId, FilePos};
+use crate::{DefDatabase, FileId, FilePos};
+use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
@@ -163,14 +163,13 @@ fn complete_expr(
         .for_each(&mut feed);
 
     // Global builtins.
-    let show_hidden_builtins = prefix.starts_with("__");
-    builtin::BUILTINS
-        .values()
-        .filter(|b| !b.name.starts_with("__") || show_hidden_builtins)
-        .map(|b| CompletionItem {
-            label: b.name.into(),
+    ALL_BUILTINS
+        .entries()
+        .filter(|(_, b)| b.is_global)
+        .map(|(name, b)| CompletionItem {
+            label: name.into(),
             source_range,
-            replace: b.name.into(),
+            replace: name.into(),
             kind: b.kind.into(),
         })
         .for_each(&mut feed);
@@ -306,8 +305,10 @@ mod tests {
         check("t$0", "true", expect!["(BuiltinConst) true"]);
         check("b$0", "builtins", expect!["(BuiltinAttrset) builtins"]);
 
-        check_no("al$0", "__all");
-        check("__al$0", "__all", expect!["(BuiltinFunction) __all"]);
+        // No prim-ops.
+        check_no("__al$0", "__all");
+        // No non-global builtins.
+        check_no("attrN$0", "attrNames");
     }
 
     #[test]

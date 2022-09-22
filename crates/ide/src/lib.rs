@@ -1,5 +1,4 @@
 mod base;
-mod builtin;
 mod def;
 mod diagnostic;
 mod ide;
