@@ -86,6 +86,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        # flake-compat doesn't support shallow repo.
+        with:
+          fetch-depth: 0
       - name: Install Nix
         uses: cachix/install-nix-action@v17
         with:
