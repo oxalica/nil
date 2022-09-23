@@ -2,7 +2,7 @@
 pub struct Builtin {
     pub kind: BuiltinKind,
     pub is_global: bool,
-    pub summary: Option<&'static str>,
+    pub summary: &'static str,
     pub doc: Option<&'static str>,
 }
 
@@ -27,7 +27,7 @@ mod tests {
             Builtin {
                 kind: BuiltinKind::Const,
                 is_global: true,
-                summary: None,
+                summary: "`builtins.true`",
                 doc: None,
             },
         );
@@ -37,7 +37,7 @@ mod tests {
             Builtin {
                 kind: BuiltinKind::Function,
                 is_global: false,
-                summary: Some("builtins.attrNames set"),
+                summary: "`builtins.attrNames set`",
                 doc: Some(
                     "\
 Return the names of the attributes in the set *set* in an

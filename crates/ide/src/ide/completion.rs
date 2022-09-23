@@ -177,7 +177,7 @@ fn complete_expr(
             source_range,
             replace: name.into(),
             kind: b.kind.into(),
-            brief: b.summary.map(|s| s.to_owned()),
+            brief: Some(b.summary.into()),
             doc: b.doc.map(|s| s.to_owned()),
         })
         .for_each(&mut feed);

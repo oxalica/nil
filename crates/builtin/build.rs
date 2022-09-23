@@ -68,13 +68,14 @@ fn main() {
             "true" | "false" | "null" => "Const",
             _ => "Function",
         };
-        let summary = builtins_dump
+        let args = builtins_dump
             .get(name)
             .map(|b @ DumpBuiltin { args, arity, .. }| {
                 assert_eq!(args.len(), *arity, "Arity mismatch: {b:?}");
-                let args = args.iter().flat_map(|arg| [" ", arg]).collect::<String>();
-                format!("builtins.{name}{args}")
-            });
+                args.iter().flat_map(|arg| [" ", arg]).collect::<String>()
+            })
+            .unwrap_or_default();
+        let summary = format!("`builtins.{name}{args}`");
         let doc = builtins_dump.get(name).map(|b| &b.doc);
         phf_gen.entry(name, &format!("crate::Builtin {{ kind: crate::BuiltinKind::{kind}, is_global: {is_global}, summary: {summary:?}, doc: {doc:?} }}"));
     }

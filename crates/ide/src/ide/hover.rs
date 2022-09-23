@@ -42,14 +42,11 @@ pub(crate) fn hover(
             None => {}
             Some(ResolveResult::Builtin(name)) => {
                 let b = &ALL_BUILTINS[*name];
-                let mut markup = String::new();
-                match b.summary {
-                    None => writeln!(markup, "`builtins.{name}`").unwrap(),
-                    Some(summary) => writeln!(markup, "`{summary}`").unwrap(),
-                }
-                if let Some(doc) = b.doc {
-                    writeln!(markup, "\n{doc}").unwrap();
-                }
+                let markup = format!(
+                    "{}\n\n{}",
+                    b.summary,
+                    b.doc.unwrap_or("(No documentation from Nix)"),
+                );
                 return Some(HoverResult { range, markup });
             }
             Some(ResolveResult::WithExprs(withs)) => {
@@ -166,7 +163,15 @@ mod tests {
 
     #[test]
     fn builtin() {
-        check("$0true", "true", expect!["`builtins.true`"]);
+        check(
+            "$0true",
+            "true",
+            expect![[r#"
+                `builtins.true`
+
+                (No documentation from Nix)
+            "#]],
+        );
         check(
             "$0map",
             "map",
