@@ -59,7 +59,7 @@ We are officially supported by `nvim-lspconfig`, see [upstream docs](https://git
 
 See also [the example config for testing](dev/neovim-lsp.nix).
 
-### Vim/Neovim via [`coc.nvim`]
+### Vim/Neovim with [`coc.nvim`]
 
 [`coc.nvim`]: https://github.com/neoclide/coc.nvim
 
@@ -79,7 +79,7 @@ Merge this setting into your `coc-settings.json`, which can be opened by `:CocCo
 
 See also [the example config for testing](dev/vim-coc.nix).
 
-### Emacs [`eglot`]
+### Emacs with [`eglot`]
 
 [`eglot`]: https://github.com/joaotavora/eglot
 
@@ -95,14 +95,17 @@ Add the following elisp code to your configuration. (using `use-package`)
   (nix-mode . eglot-ensure))
 ```
 
-### For vscode `Nix IDE` user
+### Vscode/Vscodium with [Nix IDE]
 
-Modify the extension's settings in your `settings.json`
+[Nix IDE]: https://github.com/nix-community/vscode-nix-ide
+
+Modify the extension's settings in your `settings.json`.
 
 ```jsonc
 {
   // ...
-  "nix.serverPath": "nil"
+  "nix.enableLanguageServer": true, // Enable LSP.
+  "nix.serverPath": "nil" // The path to the LSP server executable.
 }
 ```
 
