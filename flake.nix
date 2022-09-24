@@ -13,6 +13,8 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         inherit (builtins) substring;
+        inherit (nixpkgs) lib;
+
         pkgs = nixpkgs.legacyPackages.${system};
         rustPkgs = rust-overlay.packages.${system};
 
@@ -59,11 +61,13 @@
             nix.out # For generation of builtins.
             gdb
             jq
+            pre-commit
             (import ./dev/neovim-lsp.nix { inherit pkgs; })
             (import ./dev/vim-coc.nix { inherit pkgs; })
+          ] ++ lib.optionals (lib.meta.availableOn stdenv.hostPlatform vscodium) [
             (import ./dev/vscodium.nix { inherit pkgs; })
-            pre-commit
           ];
+
           RUST_BACKTRACE = "short";
           NIXPKGS = nixpkgs;
 
