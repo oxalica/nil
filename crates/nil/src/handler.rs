@@ -1,11 +1,11 @@
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
-    CompletionParams, CompletionResponse, Diagnostic, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverParams, Location, PrepareRenameResponse, ReferenceParams, RenameParams,
-    SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
-    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
-    TextDocumentPositionParams, Url, WorkspaceEdit,
+    CompletionParams, CompletionResponse, Diagnostic, DocumentSymbolParams, DocumentSymbolResponse,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location,
+    PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
+    SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, TextDocumentPositionParams, Url, WorkspaceEdit,
 };
 use text_size::TextRange;
 
@@ -162,4 +162,15 @@ pub(crate) fn hover(snap: StateSnapshot, params: HoverParams) -> Result<Option<H
         convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
     let ret = snap.analysis.hover(fpos)?;
     Ok(ret.map(|hover| convert::to_hover(&line_map, hover)))
+}
+
+pub(crate) fn document_symbol(
+    snap: StateSnapshot,
+    params: DocumentSymbolParams,
+) -> Result<Option<DocumentSymbolResponse>> {
+    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let line_map = snap.vfs().line_map_for_file(file);
+    let syms = snap.analysis.symbol_hierarchy(file)?;
+    let syms = convert::to_document_symbols(&line_map, syms);
+    Ok(Some(DocumentSymbolResponse::Nested(syms)))
 }

@@ -58,5 +58,6 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Hover text. `textDocument/hover`.
   - [x] Show kind of names.
   - [x] Documentation for builtin names.
+- [x] File symbols with hierarchy (aka. outline). `textDocument/documentSymbol`
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.

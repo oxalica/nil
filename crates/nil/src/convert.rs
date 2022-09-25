@@ -1,8 +1,9 @@
 use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
     CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange,
-    HoverResult, Severity, TextEdit, WorkspaceEdit,
+    HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
+use lsp::{DocumentSymbol, SymbolKind};
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Documentation,
@@ -274,5 +275,31 @@ pub(crate) fn to_hover(line_map: &LineMap, hover: HoverResult) -> Hover {
             kind: MarkupKind::Markdown,
             value: hover.markup,
         }),
+    }
+}
+
+pub(crate) fn to_document_symbols(
+    line_map: &LineMap,
+    syms: Vec<SymbolTree>,
+) -> Vec<DocumentSymbol> {
+    syms.into_iter()
+        .map(|sym| to_document_symbol(line_map, sym))
+        .collect()
+}
+
+fn to_document_symbol(line_map: &LineMap, sym: SymbolTree) -> DocumentSymbol {
+    #[allow(deprecated)]
+    DocumentSymbol {
+        name: sym.name.into(),
+        detail: None,
+        kind: match sym.kind {
+            NameKind::PlainAttrset | NameKind::RecAttrset => SymbolKind::FIELD,
+            NameKind::LetIn | NameKind::Param | NameKind::PatField => SymbolKind::VARIABLE,
+        },
+        tags: None,
+        deprecated: None,
+        range: to_range(line_map, sym.full_range),
+        selection_range: to_range(line_map, sym.focus_range),
+        children: Some(to_document_symbols(line_map, sym.children)),
     }
 }

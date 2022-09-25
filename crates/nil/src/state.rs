@@ -123,6 +123,7 @@ impl State {
             .on::<req::SemanticTokensFullRequest>(handler::semantic_token_full)
             .on::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
             .on::<req::HoverRequest>(handler::hover)
+            .on::<req::DocumentSymbolRequest>(handler::document_symbol)
             .finish();
     }
 

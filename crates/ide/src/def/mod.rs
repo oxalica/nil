@@ -123,6 +123,10 @@ impl ops::Index<NameId> for Module {
 }
 
 impl Module {
+    pub fn entry_expr(&self) -> ExprId {
+        self.entry_expr
+    }
+
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
@@ -208,7 +212,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+    pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match self {
             Self::Missing | Self::Reference(_) | Self::Literal(_) => {}
             Self::Lambda(_, pat, body) => {
@@ -307,7 +311,7 @@ pub enum BindingValue {
 }
 
 impl Bindings {
-    pub(crate) fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
+    pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         for (_, value) in self.statics.iter() {
             match value {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => f(*e),
@@ -324,7 +328,7 @@ impl Bindings {
         }
     }
 
-    pub(crate) fn walk_child_defs(&self, mut f: impl FnMut(NameId, BindingValue)) {
+    pub fn walk_child_defs(&self, mut f: impl FnMut(NameId, BindingValue)) {
         for &(name, value) in self.statics.iter() {
             f(name, value);
         }

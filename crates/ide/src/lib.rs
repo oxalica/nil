@@ -9,7 +9,7 @@ mod tests;
 
 pub use self::ide::{
     Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, HlKeyword, HlOperator,
-    HlPunct, HlRange, HlTag, HoverResult, NavigationTarget, RootDatabase,
+    HlPunct, HlRange, HlTag, HoverResult, NavigationTarget, RenameResult, RootDatabase, SymbolTree,
 };
 pub use base::{
     Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,

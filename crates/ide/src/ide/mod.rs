@@ -5,6 +5,7 @@ mod goto_definition;
 mod hover;
 mod references;
 mod rename;
+mod symbol_hierarchy;
 mod syntax_highlighting;
 
 use crate::base::SourceDatabaseStorage;
@@ -17,6 +18,8 @@ use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
 pub use hover::HoverResult;
+pub use rename::RenameResult;
+pub use symbol_hierarchy::SymbolTree;
 pub use syntax_highlighting::{HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +31,6 @@ pub struct NavigationTarget {
 
 pub use salsa::Cancelled;
 
-use self::rename::RenameResult;
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
@@ -134,5 +136,9 @@ impl Analysis {
 
     pub fn hover(&self, fpos: FilePos) -> Cancellable<Option<HoverResult>> {
         self.with_db(|db| hover::hover(db, fpos))
+    }
+
+    pub fn symbol_hierarchy(&self, file: FileId) -> Cancellable<Vec<SymbolTree>> {
+        self.with_db(|db| symbol_hierarchy::symbol_hierarchy(db, file))
     }
 }
