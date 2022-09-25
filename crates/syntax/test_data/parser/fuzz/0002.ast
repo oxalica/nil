@@ -190,13 +190,18 @@ SOURCE_FILE@0..241
     BANG@7..8 "!"
     REF@8..17
       IDENT@8..17 "KKKKKKKKK"
-  ERROR@17..18 "%"
-  ERROR@18..19 "$"
+  ERROR@17..18
+    ERROR@17..18 "%"
+  ERROR@18..19
+    ERROR@18..19 "$"
   LIST@19..129
     L_BRACK@19..20 "["
-    ERROR@20..21 "^"
-    ERROR@21..22 "'"
-    ERROR@22..23 "$"
+    ERROR@20..21
+      ERROR@20..21 "^"
+    ERROR@21..22
+      ERROR@21..22 "'"
+    ERROR@22..23
+      ERROR@22..23 "$"
     PATH_INTERPOLATION@23..129
       PATH_START@23..23 ""
       PATH_FRAGMENT@23..24 "/"
@@ -204,88 +209,168 @@ SOURCE_FILE@0..241
         DOLLAR_L_CURLY@24..26 "${"
         REF@26..50
           IDENT@26..50 "KKKKKKKKKKKKKKKcKKkKKKKK"
-        ERROR@50..51 "\u{11}"
-        ERROR@51..52 "\u{11}"
-        ERROR@52..53 "\u{11}"
-        ERROR@53..54 "\u{11}"
-        ERROR@54..55 "\u{11}"
-        ERROR@55..56 "\u{11}"
-        ERROR@56..57 "\u{11}"
-        ERROR@57..58 "\u{11}"
-        ERROR@58..59 "\u{11}"
-        ERROR@59..60 "\u{11}"
-        ERROR@60..61 "\u{11}"
-        ERROR@61..62 "\u{11}"
-        ERROR@62..63 "\u{11}"
-        ERROR@63..64 "\u{11}"
-        ERROR@64..65 "\u{11}"
-        ERROR@65..66 "\u{11}"
-        ERROR@66..67 "\u{11}"
-        ERROR@67..68 "\u{11}"
-        ERROR@68..69 "\u{11}"
-        ERROR@69..70 "\u{11}"
-        ERROR@70..71 "\u{11}"
-        ERROR@71..72 "\u{11}"
-        ERROR@72..73 "\u{11}"
-        ERROR@73..74 "\u{11}"
-        ERROR@74..75 "\u{11}"
-        ERROR@75..76 "\u{11}"
-        ERROR@76..77 "\u{11}"
-        ERROR@77..78 "\u{11}"
-        ERROR@78..79 "\u{11}"
-        ERROR@79..80 "\u{11}"
-        ERROR@80..81 "\u{11}"
-        ERROR@81..82 "\u{11}"
-        ERROR@82..83 "\u{11}"
-        ERROR@83..84 "\u{11}"
-        ERROR@84..85 "\u{11}"
-        ERROR@85..86 "\u{11}"
-        ERROR@86..87 "\u{11}"
-        ERROR@87..88 "\u{11}"
-        ERROR@88..89 "\u{11}"
-        ERROR@89..90 "\u{11}"
-        ERROR@90..91 "\u{11}"
-        ERROR@91..92 "\u{11}"
-        ERROR@92..93 "\u{11}"
-        ERROR@93..94 "\u{11}"
-        ERROR@94..95 "\u{11}"
-        ERROR@95..96 "\u{11}"
-        ERROR@96..97 "\u{11}"
-        ERROR@97..98 "\u{11}"
-        ERROR@98..99 "\u{11}"
-        ERROR@99..100 "\u{11}"
-        ERROR@100..101 "\u{11}"
-        ERROR@101..102 "\u{11}"
-        ERROR@102..103 "\u{11}"
-        ERROR@103..104 "\u{11}"
-        ERROR@104..105 "\u{11}"
-        ERROR@105..106 "\u{11}"
-        ERROR@106..107 "\u{11}"
-        ERROR@107..108 "\u{11}"
-        ERROR@108..109 "\u{11}"
-        ERROR@109..110 "\u{11}"
-        ERROR@110..111 "\u{11}"
-        ERROR@111..112 "\u{11}"
-        ERROR@112..113 "\u{11}"
-        ERROR@113..114 "\u{11}"
-        ERROR@114..115 "\u{11}"
-        ERROR@115..116 "\u{11}"
-        ERROR@116..117 "\u{11}"
-        ERROR@117..118 "\u{11}"
-        REF@118..122
-          IDENT@118..122 "KKKK"
-        ERROR@122..123 "%"
-        ERROR@123..124 "\0"
-        ERROR@124..125 "\0"
-        ERROR@125..126 "\0"
-        ERROR@126..127 "\u{14}"
-        ERROR@127..128 "$"
-        LIST@128..129
-          L_BRACK@128..129 "["
-  R_PAREN@129..130 ")"
-  ERROR@130..131 "^"
-  ERROR@131..132 "'"
-  ERROR@132..133 "$"
+        ERROR@50..51
+          ERROR@50..51 "\u{11}"
+        ERROR@51..52
+          ERROR@51..52 "\u{11}"
+        ERROR@52..53
+          ERROR@52..53 "\u{11}"
+        ERROR@53..54
+          ERROR@53..54 "\u{11}"
+        ERROR@54..55
+          ERROR@54..55 "\u{11}"
+        ERROR@55..56
+          ERROR@55..56 "\u{11}"
+        ERROR@56..57
+          ERROR@56..57 "\u{11}"
+        ERROR@57..58
+          ERROR@57..58 "\u{11}"
+        ERROR@58..59
+          ERROR@58..59 "\u{11}"
+        ERROR@59..60
+          ERROR@59..60 "\u{11}"
+        ERROR@60..61
+          ERROR@60..61 "\u{11}"
+        ERROR@61..62
+          ERROR@61..62 "\u{11}"
+        ERROR@62..63
+          ERROR@62..63 "\u{11}"
+        ERROR@63..64
+          ERROR@63..64 "\u{11}"
+        ERROR@64..65
+          ERROR@64..65 "\u{11}"
+        ERROR@65..66
+          ERROR@65..66 "\u{11}"
+        ERROR@66..67
+          ERROR@66..67 "\u{11}"
+        ERROR@67..68
+          ERROR@67..68 "\u{11}"
+        ERROR@68..69
+          ERROR@68..69 "\u{11}"
+        ERROR@69..70
+          ERROR@69..70 "\u{11}"
+        ERROR@70..71
+          ERROR@70..71 "\u{11}"
+        ERROR@71..72
+          ERROR@71..72 "\u{11}"
+        ERROR@72..73
+          ERROR@72..73 "\u{11}"
+        ERROR@73..74
+          ERROR@73..74 "\u{11}"
+        ERROR@74..75
+          ERROR@74..75 "\u{11}"
+        ERROR@75..76
+          ERROR@75..76 "\u{11}"
+        ERROR@76..77
+          ERROR@76..77 "\u{11}"
+        ERROR@77..78
+          ERROR@77..78 "\u{11}"
+        ERROR@78..79
+          ERROR@78..79 "\u{11}"
+        ERROR@79..80
+          ERROR@79..80 "\u{11}"
+        ERROR@80..81
+          ERROR@80..81 "\u{11}"
+        ERROR@81..82
+          ERROR@81..82 "\u{11}"
+        ERROR@82..83
+          ERROR@82..83 "\u{11}"
+        ERROR@83..84
+          ERROR@83..84 "\u{11}"
+        ERROR@84..85
+          ERROR@84..85 "\u{11}"
+        ERROR@85..86
+          ERROR@85..86 "\u{11}"
+        ERROR@86..87
+          ERROR@86..87 "\u{11}"
+        ERROR@87..88
+          ERROR@87..88 "\u{11}"
+        ERROR@88..89
+          ERROR@88..89 "\u{11}"
+        ERROR@89..90
+          ERROR@89..90 "\u{11}"
+        ERROR@90..91
+          ERROR@90..91 "\u{11}"
+        ERROR@91..92
+          ERROR@91..92 "\u{11}"
+        ERROR@92..93
+          ERROR@92..93 "\u{11}"
+        ERROR@93..94
+          ERROR@93..94 "\u{11}"
+        ERROR@94..95
+          ERROR@94..95 "\u{11}"
+        ERROR@95..96
+          ERROR@95..96 "\u{11}"
+        ERROR@96..97
+          ERROR@96..97 "\u{11}"
+        ERROR@97..98
+          ERROR@97..98 "\u{11}"
+        ERROR@98..99
+          ERROR@98..99 "\u{11}"
+        ERROR@99..100
+          ERROR@99..100 "\u{11}"
+        ERROR@100..101
+          ERROR@100..101 "\u{11}"
+        ERROR@101..102
+          ERROR@101..102 "\u{11}"
+        ERROR@102..103
+          ERROR@102..103 "\u{11}"
+        ERROR@103..104
+          ERROR@103..104 "\u{11}"
+        ERROR@104..105
+          ERROR@104..105 "\u{11}"
+        ERROR@105..106
+          ERROR@105..106 "\u{11}"
+        ERROR@106..107
+          ERROR@106..107 "\u{11}"
+        ERROR@107..108
+          ERROR@107..108 "\u{11}"
+        ERROR@108..109
+          ERROR@108..109 "\u{11}"
+        ERROR@109..110
+          ERROR@109..110 "\u{11}"
+        ERROR@110..111
+          ERROR@110..111 "\u{11}"
+        ERROR@111..112
+          ERROR@111..112 "\u{11}"
+        ERROR@112..113
+          ERROR@112..113 "\u{11}"
+        ERROR@113..114
+          ERROR@113..114 "\u{11}"
+        ERROR@114..115
+          ERROR@114..115 "\u{11}"
+        ERROR@115..116
+          ERROR@115..116 "\u{11}"
+        ERROR@116..117
+          ERROR@116..117 "\u{11}"
+        ERROR@117..118
+          ERROR@117..118 "\u{11}"
+        ERROR@118..122
+          REF@118..122
+            IDENT@118..122 "KKKK"
+        ERROR@122..123
+          ERROR@122..123 "%"
+        ERROR@123..124
+          ERROR@123..124 "\0"
+        ERROR@124..125
+          ERROR@124..125 "\0"
+        ERROR@125..126
+          ERROR@125..126 "\0"
+        ERROR@126..127
+          ERROR@126..127 "\u{14}"
+        ERROR@127..128
+          ERROR@127..128 "$"
+        ERROR@128..129
+          LIST@128..129
+            L_BRACK@128..129 "["
+  ERROR@129..130
+    R_PAREN@129..130 ")"
+  ERROR@130..131
+    ERROR@130..131 "^"
+  ERROR@131..132
+    ERROR@131..132 "'"
+  ERROR@132..133
+    ERROR@132..133 "$"
   PATH_INTERPOLATION@133..157
     PATH_START@133..133 ""
     PATH_FRAGMENT@133..134 "/"
@@ -293,33 +378,53 @@ SOURCE_FILE@0..241
       DOLLAR_L_CURLY@134..136 "${"
       REF@136..141
         IDENT@136..141 "KKKKK"
-      ERROR@141..142 "\u{6}"
-      ERROR@142..143 "\u{6}"
-      ATTR_SET@143..156
-        L_CURLY@143..144 "{"
-        ATTR_PATH_VALUE@144..146
-          ATTR_PATH@144..146
-            NAME@144..146
-              IDENT@144..146 "YY"
-        L_CURLY@146..147 "{"
-        ERROR@147..148 "'"
-        ERROR@148..149 "\0"
-        ERROR@149..150 "\0"
-        ERROR@150..151 "\0"
-        ERROR@151..152 "\0"
-        ERROR@152..153 "\0"
-        ERROR@153..154 "\0"
-        ERROR@154..155 "\0"
-        R_CURLY@155..156 "}"
+      ERROR@141..142
+        ERROR@141..142 "\u{6}"
+      ERROR@142..143
+        ERROR@142..143 "\u{6}"
+      ERROR@143..156
+        ATTR_SET@143..156
+          L_CURLY@143..144 "{"
+          ATTR_PATH_VALUE@144..146
+            ATTR_PATH@144..146
+              NAME@144..146
+                IDENT@144..146 "YY"
+          ERROR@146..147
+            L_CURLY@146..147 "{"
+          ERROR@147..148
+            ERROR@147..148 "'"
+          ERROR@148..149
+            ERROR@148..149 "\0"
+          ERROR@149..150
+            ERROR@149..150 "\0"
+          ERROR@150..151
+            ERROR@150..151 "\0"
+          ERROR@151..152
+            ERROR@151..152 "\0"
+          ERROR@152..153
+            ERROR@152..153 "\0"
+          ERROR@153..154
+            ERROR@153..154 "\0"
+          ERROR@154..155
+            ERROR@154..155 "\0"
+          R_CURLY@155..156 "}"
       R_CURLY@156..157 "}"
-  ERROR@157..158 "\u{1}"
-  ERROR@158..159 "\0"
-  ERROR@159..160 "|"
-  ERROR@160..161 "\0"
-  ERROR@161..162 "\0"
-  ERROR@162..163 "\0"
-  ERROR@163..164 "\0"
-  ERROR@164..165 "\0"
+  ERROR@157..158
+    ERROR@157..158 "\u{1}"
+  ERROR@158..159
+    ERROR@158..159 "\0"
+  ERROR@159..160
+    ERROR@159..160 "|"
+  ERROR@160..161
+    ERROR@160..161 "\0"
+  ERROR@161..162
+    ERROR@161..162 "\0"
+  ERROR@162..163
+    ERROR@162..163 "\0"
+  ERROR@163..164
+    ERROR@163..164 "\0"
+  ERROR@164..165
+    ERROR@164..165 "\0"
   LIST@165..169
     L_BRACK@165..166 "["
     REF@166..167
@@ -327,20 +432,28 @@ SOURCE_FILE@0..241
     ATTR_SET@167..169
       L_CURLY@167..168 "{"
       R_CURLY@168..169 "}"
-  R_CURLY@169..170 "}"
-  PATH_END@170..170 ""
+  ERROR@169..170
+    R_CURLY@169..170 "}"
+  ERROR@170..170
+    PATH_END@170..170 ""
   LAMBDA@170..173
     PARAM@170..172
       PAT@170..172
         L_CURLY@170..171 "{"
         R_CURLY@171..172 "}"
     COLON@172..173 ":"
-  R_CURLY@173..174 "}"
-  PATH_END@174..174 ""
-  ERROR@174..175 "\0"
-  ERROR@175..176 "\0"
-  ERROR@176..177 "\0"
-  R_PAREN@177..178 ")"
+  ERROR@173..174
+    R_CURLY@173..174 "}"
+  ERROR@174..174
+    PATH_END@174..174 ""
+  ERROR@174..175
+    ERROR@174..175 "\0"
+  ERROR@175..176
+    ERROR@175..176 "\0"
+  ERROR@176..177
+    ERROR@176..177 "\0"
+  ERROR@177..178
+    R_PAREN@177..178 ")"
   LIST@178..182
     L_BRACK@178..179 "["
     REF@179..180
@@ -348,33 +461,47 @@ SOURCE_FILE@0..241
     ATTR_SET@180..182
       L_CURLY@180..181 "{"
       R_CURLY@181..182 "}"
-  R_CURLY@182..183 "}"
+  ERROR@182..183
+    R_CURLY@182..183 "}"
   ATTR_SET@183..186
     L_CURLY@183..184 "{"
-    L_CURLY@184..185 "{"
+    ERROR@184..185
+      L_CURLY@184..185 "{"
     R_CURLY@185..186 "}"
-  R_CURLY@186..187 "}"
+  ERROR@186..187
+    R_CURLY@186..187 "}"
   LAMBDA@187..190
     PARAM@187..189
       PAT@187..189
         L_CURLY@187..188 "{"
         R_CURLY@188..189 "}"
     COLON@189..190 ":"
-  R_CURLY@190..191 "}"
+  ERROR@190..191
+    R_CURLY@190..191 "}"
   REF@191..210
     IDENT@191..210 "KKKKKKKKKKKKKKKKKKK"
-  ERROR@210..211 "%"
-  ERROR@211..212 "\0"
-  ERROR@212..213 "\0"
-  ERROR@213..214 "\0"
-  ERROR@214..215 "\u{14}"
-  ERROR@215..216 "$"
+  ERROR@210..211
+    ERROR@210..211 "%"
+  ERROR@211..212
+    ERROR@211..212 "\0"
+  ERROR@212..213
+    ERROR@212..213 "\0"
+  ERROR@213..214
+    ERROR@213..214 "\0"
+  ERROR@214..215
+    ERROR@214..215 "\u{14}"
+  ERROR@215..216
+    ERROR@215..216 "$"
   LIST@216..241
     L_BRACK@216..217 "["
-    PLUS@217..218 "+"
-    ERROR@218..219 "^"
-    ERROR@219..220 "'"
-    ERROR@220..221 "$"
+    ERROR@217..218
+      PLUS@217..218 "+"
+    ERROR@218..219
+      ERROR@218..219 "^"
+    ERROR@219..220
+      ERROR@219..220 "'"
+    ERROR@220..221
+      ERROR@220..221 "$"
     PATH_INTERPOLATION@221..241
       PATH_START@221..221 ""
       PATH_FRAGMENT@221..222 "/"
@@ -382,15 +509,21 @@ SOURCE_FILE@0..241
         DOLLAR_L_CURLY@222..224 "${"
         REF@224..232
           IDENT@224..232 "KKKKKKKK"
-        ERROR@232..233 "%"
-        ERROR@233..234 "$"
-        LIST@234..241
-          L_BRACK@234..235 "["
-          ERROR@235..236 "^"
-          ERROR@236..237 "'"
-          ERROR@237..238 "$"
-          PATH_INTERPOLATION@238..241
-            PATH_START@238..238 ""
-            PATH_FRAGMENT@238..239 "/"
-            DYNAMIC@239..241
-              DOLLAR_L_CURLY@239..241 "${"
+        ERROR@232..233
+          ERROR@232..233 "%"
+        ERROR@233..234
+          ERROR@233..234 "$"
+        ERROR@234..241
+          LIST@234..241
+            L_BRACK@234..235 "["
+            ERROR@235..236
+              ERROR@235..236 "^"
+            ERROR@236..237
+              ERROR@236..237 "'"
+            ERROR@237..238
+              ERROR@237..238 "$"
+            PATH_INTERPOLATION@238..241
+              PATH_START@238..238 ""
+              PATH_FRAGMENT@238..239 "/"
+              DYNAMIC@239..241
+                DOLLAR_L_CURLY@239..241 "${"

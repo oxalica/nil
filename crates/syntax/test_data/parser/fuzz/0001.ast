@@ -11,6 +11,7 @@ SOURCE_FILE@0..6
           NAME@1..2
             IDENT@1..2 "Y"
         COMMA@2..3 ","
-        L_CURLY@3..4 "{"
+        ERROR@3..4
+          L_CURLY@3..4 "{"
         COMMA@4..5 ","
         SPACE@5..6 "\n"

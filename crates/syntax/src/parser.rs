@@ -68,7 +68,7 @@ impl<'i> Parser<'i> {
             self.expr_function_opt();
             // Don't stuck.
             if self.tokens.len() == prev {
-                self.bump();
+                self.bump_error();
             }
         }
         self.finish_node();
@@ -114,6 +114,13 @@ impl<'i> Parser<'i> {
     fn bump_with_kind(&mut self, kind: SyntaxKind) {
         let (_, range) = self.tokens.pop().unwrap();
         self.builder.token(kind.into(), &self.src[range]);
+    }
+
+    /// Consume the next token and wrap it in an ERROR node.
+    fn bump_error(&mut self) {
+        self.start_node(ERROR);
+        self.bump();
+        self.finish_node();
     }
 
     /// Peek the next token, including whitespaces.
@@ -181,12 +188,14 @@ impl<'i> Parser<'i> {
                     return true;
                 }
                 Some(k) if !k.is_separator() => {
+                    self.start_node(ERROR);
                     let prev = self.tokens.len();
                     self.expr_function_opt();
                     // Don't stuck!
                     if self.tokens.len() == prev {
                         self.bump();
                     }
+                    self.finish_node();
                 }
                 _ => return false,
             }
@@ -239,7 +248,7 @@ impl<'i> Parser<'i> {
                 if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt()
                 } else {
-                    self.bump();
+                    self.bump_error();
                     self.error(ErrorKind::MissingToken(T!['{']));
                 }
             }
@@ -320,7 +329,7 @@ impl<'i> Parser<'i> {
                     self.bump(); // IDENT
                     self.finish_node();
                     if self.peek_non_ws() == Some(T![@]) {
-                        self.bump();
+                        self.bump(); // @
                         if self.peek_non_ws() == Some(T!['{']) {
                             self.pat();
                         } else {
@@ -509,7 +518,7 @@ impl<'i> Parser<'i> {
                         }
                         Some(k) if !k.is_separator() => {
                             self.error(ErrorKind::MissingElemExpr);
-                            self.bump();
+                            self.bump_error();
                         }
                         _ => {
                             self.error(ErrorKind::MissingToken(T![']']));
@@ -609,7 +618,7 @@ impl<'i> Parser<'i> {
                 }
                 Some(k) => {
                     self.error(ErrorKind::MissingParamIdent);
-                    self.bump();
+                    self.bump_error();
                     // Don't double error.
                     if k == T![,] {
                         continue;
@@ -641,7 +650,7 @@ impl<'i> Parser<'i> {
                     break;
                 }
                 Some(k) if k == guard => {
-                    self.bump();
+                    self.bump(); // guard
                     break;
                 }
                 Some(T![inherit]) => {
@@ -699,7 +708,7 @@ impl<'i> Parser<'i> {
                 // This can happen for some extra tokens (eg. unfinished exprs) in AttrSet or LetIn.
                 Some(_) => {
                     self.error(ErrorKind::MissingBinding);
-                    self.bump();
+                    self.bump_error();
                 }
             }
         }

@@ -13,5 +13,6 @@ SOURCE_FILE@0..12
         SPACE@5..6 " "
       EQ@6..7 "="
       SPACE@7..8 " "
-      KW_REC@8..11 "rec"
+      ERROR@8..11
+        KW_REC@8..11 "rec"
       SPACE@11..12 "\n"
