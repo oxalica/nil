@@ -22,6 +22,14 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Warnings of unnecessary syntax.
   - [x] Warnings of unused bindings, `with` and `rec`.
   - [ ] Client pulled diagnostics.
+  - [x] Custom filter
+    - You can disable some diagnostic messages via LSP setting `diagnostics.ignored`,
+      which accepts an array of ignored diagnostic code strings,
+      eg. `["unused_binding","unused_with"]`.
+      The code of diagnostics is usually shows in parentheses together with the message.
+
+      See documentations of your editor about how to set LSP settings.
+
 - [x] Expand selection. `textDocument/selectionRange`
 - [x] Renaming. `textDocument/renamme`, `textDocument/prepareRename`
   - [x] Identifiers in parameters and bindings, from `let`, rec and non-rec attrsets.

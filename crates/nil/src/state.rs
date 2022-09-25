@@ -4,8 +4,8 @@ use ide::{Analysis, AnalysisHost, Cancelled, VfsPath};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{
-    notification as notif, request as req, ConfigurationItem, ConfigurationParams,
-    PublishDiagnosticsParams, Url,
+    notification as notif, request as req, ConfigurationItem, ConfigurationParams, MessageType,
+    PublishDiagnosticsParams, ShowMessageParams, Url,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -20,7 +20,9 @@ const FILTER_FILE_EXTENTION: &str = "nix";
 const CONFIG_KEY: &str = "nil";
 
 #[derive(Debug, Default, Deserialize)]
-pub struct Config {}
+pub struct Config {
+    diagnostics_ignored: HashSet<String>,
+}
 
 type ReqHandler = fn(&mut State, Response);
 
@@ -180,7 +182,7 @@ impl State {
                         };
                         match ret {
                             Ok(v) => {
-                                tracing::info!("Updating config: {:?}", v);
+                                tracing::debug!("Updating config: {:?}", v);
                                 st.update_config(v);
                             }
                             Err(err) => tracing::error!("Failed to update config: {}", err),
@@ -210,9 +212,26 @@ impl State {
             .unwrap();
     }
 
-    fn update_config(&mut self, _config: serde_json::Value) {
-        // No-op.
-        let _ = &mut self.config;
+    fn show_message(&self, typ: MessageType, msg: impl Into<String>) {
+        self.send_notification::<notif::ShowMessage>(ShowMessageParams {
+            typ,
+            message: msg.into(),
+        });
+    }
+
+    fn update_config(&mut self, mut v: serde_json::Value) {
+        if let Some(v) = v.pointer_mut("/diagnostics/ignored") {
+            match serde_json::from_value(v.take()) {
+                Ok(v) => self.config.diagnostics_ignored = v,
+                Err(e) => {
+                    self.show_message(
+                        MessageType::ERROR,
+                        format!("Invalid value of setting `diagnostics.ignored`: {e}"),
+                    );
+                }
+            }
+        }
+        tracing::debug!("Updated config: {:?}", self.config);
     }
 
     fn snapshot(&self) -> StateSnapshot {
@@ -251,6 +270,7 @@ impl State {
             let diagnostics = has_text
                 .then(|| {
                     let mut diags = snap.diagnostics(file).ok()?;
+                    diags.retain(|diag| !self.config.diagnostics_ignored.contains(diag.code()));
                     diags.truncate(MAX_DIAGNOSTICS_CNT);
                     Some(convert::to_diagnostics(&vfs, file, &diags))
                 })

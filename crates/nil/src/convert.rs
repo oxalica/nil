@@ -6,8 +6,8 @@ use ide::{
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Documentation,
-    Hover, Location, MarkupContent, MarkupKind, Position, PrepareRenameResponse, Range,
-    SemanticToken, TextDocumentIdentifier, TextDocumentPositionParams,
+    Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse,
+    Range, SemanticToken, TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
@@ -67,7 +67,7 @@ pub(crate) fn to_diagnostics(
                 Severity::Warning => Some(DiagnosticSeverity::WARNING),
             },
             range: to_range(&line_map, diag.range),
-            code: None,
+            code: Some(NumberOrString::String(diag.code().into())),
             code_description: None,
             source: None,
             message: diag.message(),

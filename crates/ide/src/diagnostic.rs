@@ -54,9 +54,28 @@ impl Diagnostic {
         self
     }
 
+    pub fn code(&self) -> &'static str {
+        match self.kind {
+            DiagnosticKind::SyntaxError(_) => "syntax_error",
+            DiagnosticKind::InvalidDynamic => "invalid_dynamic",
+            DiagnosticKind::DuplicatedKey => "duplicated_key",
+            DiagnosticKind::EmptyInherit => "empty_inherit",
+            DiagnosticKind::EmptyLetIn => "empty_let_in",
+            DiagnosticKind::LetAttrset => "let_attrset",
+            DiagnosticKind::UriLiteral => "uri_literal",
+            DiagnosticKind::MergePlainRecAttrset => "merge_plain_rec_attrset",
+            DiagnosticKind::MergeRecAttrset => "merge_rec_attrset",
+            DiagnosticKind::UndefinedName => "undefined_name",
+            DiagnosticKind::UnusedBinding => "unused_binding",
+            DiagnosticKind::UnusedWith => "unused_with",
+            DiagnosticKind::UnusedRec => "unused_rec",
+        }
+    }
+
     pub fn severity(&self) -> Severity {
         match self.kind {
-            DiagnosticKind::InvalidDynamic
+            DiagnosticKind::SyntaxError(_)
+            | DiagnosticKind::InvalidDynamic
             | DiagnosticKind::DuplicatedKey
             | DiagnosticKind::UndefinedName => Severity::Error,
             DiagnosticKind::EmptyInherit
@@ -68,19 +87,6 @@ impl Diagnostic {
             | DiagnosticKind::UnusedBinding
             | DiagnosticKind::UnusedWith
             | DiagnosticKind::UnusedRec => Severity::Warning,
-            DiagnosticKind::SyntaxError(kind) => match kind {
-                SynErrorKind::MultipleRoots
-                | SynErrorKind::PathTrailingSlash
-                | SynErrorKind::PathDuplicatedSlashes
-                | SynErrorKind::MultipleNoAssoc => Severity::Error,
-                SynErrorKind::ExpectToken(_)
-                | SynErrorKind::ExpectExpr
-                | SynErrorKind::ExpectElemExpr
-                | SynErrorKind::ExpectAttr
-                | SynErrorKind::ExpectIdent
-                | SynErrorKind::ExpectBinding
-                | SynErrorKind::NestTooDeep => Severity::IncompleteSyntax,
-            },
         }
     }
 
