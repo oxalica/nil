@@ -27,12 +27,12 @@ pub enum ErrorKind {
     NestTooDeep,
     MultipleRoots,
     MultipleNoAssoc,
-    MissingToken(SyntaxKind),
-    MissingExpr,
-    MissingElemExpr,
-    MissingAttr,
-    MissingParamIdent,
-    MissingBinding,
+    ExpectToken(SyntaxKind),
+    ExpectExpr,
+    ExpectElemExpr,
+    ExpectAttr,
+    ExpectIdent,
+    ExpectBinding,
     PathTrailingSlash,
     PathDuplicatedSlashes,
 }
@@ -41,16 +41,18 @@ impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NestTooDeep => "Nest too deep",
-            Self::MultipleRoots => "Multiple root expressions",
-            Self::MultipleNoAssoc => "Invalid usage of no-associative operators",
-            Self::MissingToken(tok) => return write!(f, "Missing {}", tok),
-            Self::MissingExpr => "Missing expression",
-            Self::MissingElemExpr => "Missing list element expression",
-            Self::MissingAttr => "Missing attribute",
-            Self::MissingParamIdent => "Missing parameter identifier",
-            Self::MissingBinding => "Mising binding",
-            Self::PathTrailingSlash => "Path has trailing slash",
-            Self::PathDuplicatedSlashes => "Path has duplicated slashes",
+            Self::MultipleRoots => "Multiple top-level expressions are not allowed",
+            Self::MultipleNoAssoc => "No-associative operators cannot be chained",
+            Self::ExpectToken(tok) => return write!(f, "Expecting {}", tok),
+            Self::ExpectExpr => "Expecting an expression",
+            Self::ExpectElemExpr => "Expecting a list element expression. Forget parentheses?",
+            Self::ExpectAttr => {
+                r#"Expecting an attribute like `name`, `"name"` or `${expression}`"#
+            }
+            Self::ExpectIdent => "Expecting an identifier like `name`",
+            Self::ExpectBinding => "Expecting a binding like `path = value;` or `inherit attr;`",
+            Self::PathTrailingSlash => "Path with trailing slash is not allowed",
+            Self::PathDuplicatedSlashes => "Path with duplicated slashes is not allowed",
         }
         .fmt(f)
     }

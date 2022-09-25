@@ -27,7 +27,7 @@ fn run_test(dir: &Path, ok: bool) {
         let ast = parse_file(&src);
         let mut got = String::new();
         for err in ast.errors() {
-            writeln!(got, "{}", err).unwrap();
+            writeln!(got, "{:?}: {:?}", err.range, err.kind).unwrap();
         }
         write!(got, "{:#?}", ast.syntax_node()).unwrap();
 

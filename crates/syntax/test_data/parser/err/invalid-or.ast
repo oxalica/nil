@@ -1,6 +1,6 @@
-Missing list element expression at 2..4
-Missing expression at 9..11
-Missing expression at 14..16
+2..4: ExpectElemExpr
+9..11: ExpectExpr
+14..16: ExpectExpr
 SOURCE_FILE@0..21
   BINARY_OP@0..21
     BINARY_OP@0..12

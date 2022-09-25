@@ -1,11 +1,11 @@
-Missing "=" at 17..18
-Missing ";" at 17..18
-Missing "=" at 46..47
-Missing ";" at 46..47
-Missing ";" at 65..66
-Missing attribute at 65..66
-Missing ";" at 84..85
-Missing attribute at 84..85
+17..18: ExpectToken(EQ)
+17..18: ExpectToken(SEMICOLON)
+46..47: ExpectToken(EQ)
+46..47: ExpectToken(SEMICOLON)
+65..66: ExpectToken(SEMICOLON)
+65..66: ExpectAttr
+84..85: ExpectToken(SEMICOLON)
+84..85: ExpectAttr
 SOURCE_FILE@0..91
   ATTR_SET@0..90
     L_CURLY@0..1 "{"

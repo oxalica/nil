@@ -1,7 +1,7 @@
-Missing parameter identifier at 3..4
-Missing "}" at 6..6
-Missing ":" at 6..6
-Missing expression at 6..6
+3..4: ExpectIdent
+6..6: ExpectToken(R_CURLY)
+6..6: ExpectToken(COLON)
+6..6: ExpectExpr
 SOURCE_FILE@0..6
   LAMBDA@0..6
     PARAM@0..6

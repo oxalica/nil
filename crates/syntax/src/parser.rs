@@ -166,7 +166,7 @@ impl<'i> Parser<'i> {
             self.bump();
             true
         } else {
-            self.error(ErrorKind::MissingToken(expect));
+            self.error(ErrorKind::ExpectToken(expect));
             false
         }
     }
@@ -178,7 +178,7 @@ impl<'i> Parser<'i> {
             self.bump();
             return true;
         }
-        self.error(ErrorKind::MissingToken(guard));
+        self.error(ErrorKind::ExpectToken(guard));
 
         // Try to consume more experssions as recovery.
         loop {
@@ -250,7 +250,7 @@ impl<'i> Parser<'i> {
                     self.expr_operator_opt()
                 } else {
                     self.bump_error();
-                    self.error(ErrorKind::MissingToken(T!['{']));
+                    self.error(ErrorKind::ExpectToken(T!['{']));
                 }
             }
             Some(T![if]) => {
@@ -334,7 +334,7 @@ impl<'i> Parser<'i> {
                         if self.peek_non_ws() == Some(T!['{']) {
                             self.pat();
                         } else {
-                            self.error(ErrorKind::MissingToken(T!['{']));
+                            self.error(ErrorKind::ExpectToken(T!['{']));
                         }
                     }
                     self.finish_node();
@@ -364,7 +364,7 @@ impl<'i> Parser<'i> {
         // Always consume whitespace first, even though not `allow_prefix`.
         let tok = match self.peek_non_ws() {
             None => {
-                self.error(ErrorKind::MissingExpr);
+                self.error(ErrorKind::ExpectExpr);
                 return;
             }
             Some(tok) => tok,
@@ -494,7 +494,7 @@ impl<'i> Parser<'i> {
                     self.finish_node();
                 // Otherwise, simply give up.
                 } else {
-                    self.error(ErrorKind::MissingToken(T!['{']));
+                    self.error(ErrorKind::ExpectToken(T!['{']));
                 }
             }
             Some(T!['{']) => {
@@ -518,11 +518,11 @@ impl<'i> Parser<'i> {
                             continue;
                         }
                         Some(k) if !k.is_separator() => {
-                            self.error(ErrorKind::MissingElemExpr);
+                            self.error(ErrorKind::ExpectElemExpr);
                             self.bump_error();
                         }
                         _ => {
-                            self.error(ErrorKind::MissingToken(T![']']));
+                            self.error(ErrorKind::ExpectToken(T![']']));
                             break;
                         }
                     }
@@ -530,7 +530,7 @@ impl<'i> Parser<'i> {
                 self.finish_node();
             }
             _ => {
-                self.error(ErrorKind::MissingExpr);
+                self.error(ErrorKind::ExpectExpr);
             }
         }
     }
@@ -614,11 +614,11 @@ impl<'i> Parser<'i> {
                     if self.peek_non_ws() == Some(T!['}']) {
                         break;
                     }
-                    self.error(ErrorKind::MissingToken(T!['}']));
+                    self.error(ErrorKind::ExpectToken(T!['}']));
                     // Continue parsing parameters as recovery.
                 }
                 Some(k) => {
-                    self.error(ErrorKind::MissingParamIdent);
+                    self.error(ErrorKind::ExpectIdent);
                     self.bump_error();
                     // Don't double error.
                     if k == T![,] {
@@ -633,7 +633,7 @@ impl<'i> Parser<'i> {
                 // Separator.
                 Some(T![,]) => self.bump(), // ,
                 // Consume nothing here, as the previous match must consume something.
-                _ => self.error(ErrorKind::MissingToken(T![,])),
+                _ => self.error(ErrorKind::ExpectToken(T![,])),
             }
         }
 
@@ -647,7 +647,7 @@ impl<'i> Parser<'i> {
         loop {
             match self.peek_non_ws() {
                 None => {
-                    self.error(ErrorKind::MissingToken(guard));
+                    self.error(ErrorKind::ExpectToken(guard));
                     break;
                 }
                 Some(k) if k == guard => {
@@ -698,7 +698,7 @@ impl<'i> Parser<'i> {
                 // }
                 // ```
                 Some(T![=]) => {
-                    self.error(ErrorKind::MissingAttr);
+                    self.error(ErrorKind::ExpectAttr);
                     self.start_node(ATTR_PATH_VALUE);
                     self.bump(); // =
                     self.expr_function_opt();
@@ -708,7 +708,7 @@ impl<'i> Parser<'i> {
                 // Consume tokens if it cannot start an AttrPath and is not the guard.
                 // This can happen for some extra tokens (eg. unfinished exprs) in AttrSet or LetIn.
                 Some(k) => {
-                    self.error(ErrorKind::MissingBinding);
+                    self.error(ErrorKind::ExpectBinding);
                     self.start_node(ERROR);
                     // Special case for newbies placing expressions directly inside an Attrset.
                     if k.can_start_expr() {
@@ -744,7 +744,7 @@ impl<'i> Parser<'i> {
             }
             Some(T!["${"]) => self.dynamic(),
             Some(T!['"']) => self.string(STRING),
-            _ => self.error(ErrorKind::MissingAttr),
+            _ => self.error(ErrorKind::ExpectAttr),
         }
     }
 
@@ -767,7 +767,7 @@ impl<'i> Parser<'i> {
             // No skipping whitespace.
             match self.peek() {
                 None => {
-                    self.error(ErrorKind::MissingToken(if node == STRING {
+                    self.error(ErrorKind::ExpectToken(if node == STRING {
                         T!['"']
                     } else {
                         T!["''"]

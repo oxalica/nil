@@ -1,5 +1,5 @@
-Mising binding at 13..16
-Mising binding at 49..50
+13..16: ExpectBinding
+49..50: ExpectBinding
 SOURCE_FILE@0..53
   ATTR_SET@0..52
     L_CURLY@0..1 "{"

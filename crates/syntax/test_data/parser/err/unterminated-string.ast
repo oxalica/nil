@@ -1,4 +1,4 @@
-Missing '"' at 5..5
+5..5: ExpectToken(DQUOTE)
 SOURCE_FILE@0..5
   STRING@0..5
     DQUOTE@0..1 "\""

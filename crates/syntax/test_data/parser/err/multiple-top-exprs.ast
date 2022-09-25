@@ -1,4 +1,4 @@
-Multiple root expressions at 12..18
+12..18: MultipleRoots
 SOURCE_FILE@0..24
   ASSERT@0..12
     KW_ASSERT@0..6 "assert"

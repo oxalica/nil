@@ -1,7 +1,7 @@
-Missing "]" at 23..24
-Missing ";" at 23..24
-Missing attribute at 23..24
-Missing "]" at 36..37
+23..24: ExpectToken(R_BRACK)
+23..24: ExpectToken(SEMICOLON)
+23..24: ExpectAttr
+36..37: ExpectToken(R_BRACK)
 SOURCE_FILE@0..49
   ATTR_SET@0..48
     L_CURLY@0..1 "{"

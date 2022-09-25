@@ -1,4 +1,4 @@
-Missing "}" at 8..9
+8..9: ExpectToken(R_CURLY)
 SOURCE_FILE@0..17
   LAMBDA@0..17
     PARAM@0..13

@@ -1,6 +1,6 @@
-Missing ")" at 6..8
-Missing expression at 6..8
-Missing list element expression at 17..19
+6..8: ExpectToken(R_PAREN)
+6..8: ExpectExpr
+17..19: ExpectElemExpr
 SOURCE_FILE@0..24
   APPLY@0..24
     PAREN@0..9

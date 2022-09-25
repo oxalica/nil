@@ -1,5 +1,5 @@
-Path has duplicated slashes at 7..8
-Path has duplicated slashes at 20..21
+7..8: PathDuplicatedSlashes
+20..21: PathDuplicatedSlashes
 SOURCE_FILE@0..25
   LIST@0..24
     L_BRACK@0..1 "["

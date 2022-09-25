@@ -1,7 +1,7 @@
-Missing "{" at 11..12
-Missing ";" at 12..12
-Missing "in" at 12..12
-Missing expression at 12..12
+11..12: ExpectToken(L_CURLY)
+12..12: ExpectToken(SEMICOLON)
+12..12: ExpectToken(KW_IN)
+12..12: ExpectExpr
 SOURCE_FILE@0..12
   LET_IN@0..12
     KW_LET@0..3 "let"

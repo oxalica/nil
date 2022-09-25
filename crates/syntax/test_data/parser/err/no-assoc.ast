@@ -1,5 +1,5 @@
-Invalid usage of no-associative operators at 26..27
-Invalid usage of no-associative operators at 41..43
+26..27: MultipleNoAssoc
+41..43: MultipleNoAssoc
 SOURCE_FILE@0..49
   LIST@0..48
     L_BRACK@0..1 "["

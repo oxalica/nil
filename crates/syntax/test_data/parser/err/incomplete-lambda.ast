@@ -1,5 +1,5 @@
-Missing "," at 5..8
-Missing "{" at 20..21
+5..8: ExpectToken(COMMA)
+20..21: ExpectToken(L_CURLY)
 SOURCE_FILE@0..25
   APPLY@0..25
     PAREN@0..14

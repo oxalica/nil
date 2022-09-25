@@ -1,5 +1,5 @@
-Missing parameter identifier at 6..7
-Missing expression at 16..17
+6..7: ExpectIdent
+16..17: ExpectExpr
 SOURCE_FILE@0..25
   LAMBDA@0..25
     PARAM@0..21

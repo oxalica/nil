@@ -740,7 +740,7 @@ mod tests {
         check_lower(
             "a:b",
             expect![[r#"
-                0..3: URL literal is confusing and deprecated. Use strings instead
+                0..3: UriLiteral
 
                 0: Literal(String("a:b"))
             "#]],
@@ -936,7 +936,7 @@ mod tests {
         check_lower(
             "foo:bar",
             expect![[r#"
-                0..7: URL literal is confusing and deprecated. Use strings instead
+                0..7: UriLiteral
 
                 0: Literal(String("foo:bar"))
             "#]],
@@ -992,8 +992,8 @@ mod tests {
         check_lower(
             r#"{ inherit; inherit a "b" ${("c")}; inherit (d); inherit (e) f g; }"#,
             expect![[r#"
-                2..10: Nothing inherited
-                35..47: Nothing inherited
+                2..10: EmptyInherit
+                35..47: EmptyInherit
 
                 0: Reference("a")
                 1: Reference("b")
@@ -1077,7 +1077,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a = { c = 2; }; }",
             expect![[r#"
-                22..23: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
+                22..23: MergeRecAttrset
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1094,7 +1094,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a.c = 2; }",
             expect![[r#"
-                22..23: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
+                22..23: MergeRecAttrset
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1111,7 +1111,7 @@ mod tests {
         check_lower(
             "{ a = { b = 1; }; a = rec { c = 2; }; }",
             expect![[r#"
-                18..19: Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored
+                18..19: MergePlainRecAttrset
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1128,7 +1128,7 @@ mod tests {
         check_lower(
             "{ a.b = 1; a = rec { c = 2; }; }",
             expect![[r#"
-                11..12: Merging non-rec-attrset with rec-attrset, the latter `rec` is implicitly ignored
+                11..12: MergePlainRecAttrset
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1145,7 +1145,7 @@ mod tests {
         check_lower(
             "{ a = rec { b = 1; }; a = rec { c = 2; }; }",
             expect![[r#"
-                22..23: Merging rec-attrset with other attrsets or attrpath. Merged values can unexpectedly reference each other remotely as in a single `rec { ... }`
+                22..23: MergeRecAttrset
 
                 0: Literal(Int(1))
                 1: Literal(Int(2))
@@ -1164,8 +1164,8 @@ mod tests {
         check_lower(
             "rec { a = 1; a = 2; }",
             expect![[r#"
-                13..14: Duplicated name definition
-                  6..7: Previously defined here
+                13..14: DuplicatedKey
+                    6..7: Previously defined here
 
                 0: Literal(Int(1))
                 1: RecAttrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
@@ -1213,7 +1213,7 @@ mod tests {
         check_lower(
             "{ a.b = let { c.d = 1; }; }",
             expect![[r#"
-                8..24: `let { ... }` is deprecated. Use `let ... in ...` instead
+                8..24: LetAttrset
 
                 0: Literal(Int(1))
                 1: Attrset(Bindings { statics: [(Idx::<Name>(3), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
@@ -1253,7 +1253,7 @@ mod tests {
         check_lower(
             "let in 1",
             expect![[r#"
-                0..6: Empty let-in
+                0..6: EmptyLetIn
 
                 0: Literal(Int(1))
                 1: LetIn(Bindings { statics: [], inherit_froms: [], dynamics: [] }, Idx::<Expr>(0))
@@ -1282,20 +1282,20 @@ mod tests {
         check_error(
             "let ${a} = 1; in 1",
             expect![[r#"
-                4..8: Invalid location of dynamic attribute
-                0..16: Empty let-in
+                4..8: InvalidDynamic
+                0..16: EmptyLetIn
             "#]],
         );
         check_error(
             "{ inherit ${a}; }",
             expect![[r#"
-                10..14: Invalid location of dynamic attribute
+                10..14: InvalidDynamic
             "#]],
         );
         check_error(
             "{ inherit (a) ${a}; }",
             expect![[r#"
-                14..18: Invalid location of dynamic attribute
+                14..18: InvalidDynamic
             "#]],
         );
     }
@@ -1306,40 +1306,40 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                9..10: Duplicated name definition
-                  2..3: Previously defined here
+                9..10: DuplicatedKey
+                    2..3: Previously defined here
             "#]],
         );
         // Set and value.
         check_error(
             "{ a.b = 1; a = 2; }",
             expect![[r#"
-                11..12: Duplicated name definition
-                  2..3: Previously defined here
+                11..12: DuplicatedKey
+                    2..3: Previously defined here
             "#]],
         );
         // Value and set.
         check_error(
             "{ a = 1; a.b = 2; }",
             expect![[r#"
-                9..10: Duplicated name definition
-                  2..3: Previously defined here
+                9..10: DuplicatedKey
+                    2..3: Previously defined here
             "#]],
         );
         // Inherit and value.
         check_error(
             "{ inherit a; a = 1; }",
             expect![[r#"
-                13..14: Duplicated name definition
-                  10..11: Previously defined here
+                13..14: DuplicatedKey
+                    10..11: Previously defined here
             "#]],
         );
         // Inherit-from and value.
         check_error(
             "{ inherit (1) a; a = 1; }",
             expect![[r#"
-                17..18: Duplicated name definition
-                  14..15: Previously defined here
+                17..18: DuplicatedKey
+                    14..15: Previously defined here
             "#]],
         );
     }
@@ -1349,10 +1349,10 @@ mod tests {
         check_error(
             "{ a = 1; a = 2; a = 3; }",
             expect![[r#"
-                9..10: Duplicated name definition
-                  2..3: Previously defined here
-                16..17: Duplicated name definition
-                  2..3: Previously defined here
+                9..10: DuplicatedKey
+                    2..3: Previously defined here
+                16..17: DuplicatedKey
+                    2..3: Previously defined here
             "#]],
         );
     }

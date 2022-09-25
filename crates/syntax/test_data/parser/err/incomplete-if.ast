@@ -1,10 +1,10 @@
-Missing expression at 10..11
-Missing "then" at 10..11
-Missing "then" at 22..23
-Missing expression at 39..40
-Missing "else" at 39..40
-Missing "else" at 58..59
-Missing expression at 82..83
+10..11: ExpectExpr
+10..11: ExpectToken(KW_THEN)
+22..23: ExpectToken(KW_THEN)
+39..40: ExpectExpr
+39..40: ExpectToken(KW_ELSE)
+58..59: ExpectToken(KW_ELSE)
+82..83: ExpectExpr
 SOURCE_FILE@0..95
   ATTR_SET@0..94
     L_CURLY@0..1 "{"

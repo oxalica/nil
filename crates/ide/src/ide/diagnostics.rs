@@ -34,7 +34,7 @@ mod tests {
             .iter()
             .map(|d| d.debug_display().to_string())
             .collect::<Vec<_>>()
-            .join("");
+            .join("\n");
         if got.contains('\n') {
             got.push('\n');
         }
@@ -43,10 +43,7 @@ mod tests {
 
     #[test]
     fn syntax_error() {
-        check(
-            "1 == 2 == 3",
-            expect!["7..9: Invalid usage of no-associative operators"],
-        );
+        check("1 == 2 == 3", expect!["7..9: SyntaxError(MultipleNoAssoc)"]);
     }
 
     #[test]
@@ -54,22 +51,26 @@ mod tests {
         check(
             "{ a = 1; a = 2; }",
             expect![[r#"
-                9..10: Duplicated name definition
-                  2..3: Previously defined here
+                9..10: DuplicatedKey
+                    2..3: Previously defined here
             "#]],
         );
     }
 
     #[test]
     fn name_resolution() {
-        check("a", expect!["0..1: Undefined name"]);
+        check("a", expect!["0..1: UndefinedName"]);
     }
 
     #[test]
     fn liveness() {
         check(
             "let a = a; b = 1; in with 1; b + rec { }",
-            expect!["4..5: Unused binding21..28: Unused `with`33..36: Unused `rec`"],
+            expect![[r#"
+                4..5: UnusedBinding
+                21..28: UnusedWith
+                33..36: UnusedRec
+            "#]],
         );
     }
 }

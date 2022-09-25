@@ -1,173 +1,173 @@
-Multiple root expressions at 7..8
-Multiple root expressions at 17..18
-Missing expression at 17..18
-Multiple root expressions at 18..19
-Missing expression at 18..19
-Multiple root expressions at 19..20
-Missing list element expression at 20..21
-Missing list element expression at 21..22
-Missing list element expression at 22..23
-Missing "}" at 50..51
-Missing expression at 50..51
-Missing expression at 51..52
-Missing expression at 52..53
-Missing expression at 53..54
-Missing expression at 54..55
-Missing expression at 55..56
-Missing expression at 56..57
-Missing expression at 57..58
-Missing expression at 58..59
-Missing expression at 59..60
-Missing expression at 60..61
-Missing expression at 61..62
-Missing expression at 62..63
-Missing expression at 63..64
-Missing expression at 64..65
-Missing expression at 65..66
-Missing expression at 66..67
-Missing expression at 67..68
-Missing expression at 68..69
-Missing expression at 69..70
-Missing expression at 70..71
-Missing expression at 71..72
-Missing expression at 72..73
-Missing expression at 73..74
-Missing expression at 74..75
-Missing expression at 75..76
-Missing expression at 76..77
-Missing expression at 77..78
-Missing expression at 78..79
-Missing expression at 79..80
-Missing expression at 80..81
-Missing expression at 81..82
-Missing expression at 82..83
-Missing expression at 83..84
-Missing expression at 84..85
-Missing expression at 85..86
-Missing expression at 86..87
-Missing expression at 87..88
-Missing expression at 88..89
-Missing expression at 89..90
-Missing expression at 90..91
-Missing expression at 91..92
-Missing expression at 92..93
-Missing expression at 93..94
-Missing expression at 94..95
-Missing expression at 95..96
-Missing expression at 96..97
-Missing expression at 97..98
-Missing expression at 98..99
-Missing expression at 99..100
-Missing expression at 100..101
-Missing expression at 101..102
-Missing expression at 102..103
-Missing expression at 103..104
-Missing expression at 104..105
-Missing expression at 105..106
-Missing expression at 106..107
-Missing expression at 107..108
-Missing expression at 108..109
-Missing expression at 109..110
-Missing expression at 110..111
-Missing expression at 111..112
-Missing expression at 112..113
-Missing expression at 113..114
-Missing expression at 114..115
-Missing expression at 115..116
-Missing expression at 116..117
-Missing expression at 117..118
-Missing expression at 122..123
-Missing expression at 123..124
-Missing expression at 124..125
-Missing expression at 125..126
-Missing expression at 126..127
-Missing expression at 127..128
-Missing "]" at 129..130
-Missing "]" at 129..130
-Multiple root expressions at 129..130
-Missing expression at 129..130
-Multiple root expressions at 130..131
-Missing expression at 130..131
-Multiple root expressions at 131..132
-Missing expression at 131..132
-Multiple root expressions at 132..133
-Missing expression at 132..133
-Multiple root expressions at 133..133
-Missing "}" at 141..142
-Missing expression at 141..142
-Missing expression at 142..143
-Missing "=" at 146..147
-Missing ";" at 146..147
-Mising binding at 146..147
-Mising binding at 147..148
-Mising binding at 148..149
-Mising binding at 149..150
-Mising binding at 150..151
-Mising binding at 151..152
-Mising binding at 152..153
-Mising binding at 153..154
-Mising binding at 154..155
-Missing expression at 157..158
-Missing expression at 158..159
-Missing expression at 159..160
-Missing expression at 160..161
-Missing expression at 161..162
-Missing expression at 162..163
-Missing expression at 163..164
-Missing expression at 164..165
-Missing "]" at 169..170
-Multiple root expressions at 172..173
-Missing expression at 172..173
-Multiple root expressions at 173..174
-Missing expression at 173..174
-Multiple root expressions at 174..174
-Missing expression at 174..174
-Multiple root expressions at 174..175
-Missing expression at 174..175
-Multiple root expressions at 175..176
-Missing expression at 175..176
-Multiple root expressions at 176..177
-Missing expression at 176..177
-Multiple root expressions at 177..178
-Missing expression at 177..178
-Multiple root expressions at 178..179
-Missing "]" at 182..183
-Multiple root expressions at 182..183
-Missing expression at 182..183
-Multiple root expressions at 183..184
-Mising binding at 184..185
-Multiple root expressions at 189..190
-Missing expression at 189..190
-Multiple root expressions at 190..191
-Missing expression at 190..191
-Multiple root expressions at 191..210
-Multiple root expressions at 210..211
-Missing expression at 210..211
-Multiple root expressions at 211..212
-Missing expression at 211..212
-Multiple root expressions at 212..213
-Missing expression at 212..213
-Multiple root expressions at 213..214
-Missing expression at 213..214
-Multiple root expressions at 214..215
-Missing expression at 214..215
-Multiple root expressions at 215..216
-Missing expression at 215..216
-Multiple root expressions at 216..217
-Missing list element expression at 217..218
-Missing list element expression at 218..219
-Missing list element expression at 219..220
-Missing list element expression at 220..221
-Missing "}" at 232..233
-Missing expression at 232..233
-Missing expression at 233..234
-Missing list element expression at 235..236
-Missing list element expression at 236..237
-Missing list element expression at 237..238
-Missing expression at 241..241
-Missing "}" at 241..241
-Missing "]" at 241..241
-Missing "]" at 241..241
+7..8: MultipleRoots
+17..18: MultipleRoots
+17..18: ExpectExpr
+18..19: MultipleRoots
+18..19: ExpectExpr
+19..20: MultipleRoots
+20..21: ExpectElemExpr
+21..22: ExpectElemExpr
+22..23: ExpectElemExpr
+50..51: ExpectToken(R_CURLY)
+50..51: ExpectExpr
+51..52: ExpectExpr
+52..53: ExpectExpr
+53..54: ExpectExpr
+54..55: ExpectExpr
+55..56: ExpectExpr
+56..57: ExpectExpr
+57..58: ExpectExpr
+58..59: ExpectExpr
+59..60: ExpectExpr
+60..61: ExpectExpr
+61..62: ExpectExpr
+62..63: ExpectExpr
+63..64: ExpectExpr
+64..65: ExpectExpr
+65..66: ExpectExpr
+66..67: ExpectExpr
+67..68: ExpectExpr
+68..69: ExpectExpr
+69..70: ExpectExpr
+70..71: ExpectExpr
+71..72: ExpectExpr
+72..73: ExpectExpr
+73..74: ExpectExpr
+74..75: ExpectExpr
+75..76: ExpectExpr
+76..77: ExpectExpr
+77..78: ExpectExpr
+78..79: ExpectExpr
+79..80: ExpectExpr
+80..81: ExpectExpr
+81..82: ExpectExpr
+82..83: ExpectExpr
+83..84: ExpectExpr
+84..85: ExpectExpr
+85..86: ExpectExpr
+86..87: ExpectExpr
+87..88: ExpectExpr
+88..89: ExpectExpr
+89..90: ExpectExpr
+90..91: ExpectExpr
+91..92: ExpectExpr
+92..93: ExpectExpr
+93..94: ExpectExpr
+94..95: ExpectExpr
+95..96: ExpectExpr
+96..97: ExpectExpr
+97..98: ExpectExpr
+98..99: ExpectExpr
+99..100: ExpectExpr
+100..101: ExpectExpr
+101..102: ExpectExpr
+102..103: ExpectExpr
+103..104: ExpectExpr
+104..105: ExpectExpr
+105..106: ExpectExpr
+106..107: ExpectExpr
+107..108: ExpectExpr
+108..109: ExpectExpr
+109..110: ExpectExpr
+110..111: ExpectExpr
+111..112: ExpectExpr
+112..113: ExpectExpr
+113..114: ExpectExpr
+114..115: ExpectExpr
+115..116: ExpectExpr
+116..117: ExpectExpr
+117..118: ExpectExpr
+122..123: ExpectExpr
+123..124: ExpectExpr
+124..125: ExpectExpr
+125..126: ExpectExpr
+126..127: ExpectExpr
+127..128: ExpectExpr
+129..130: ExpectToken(R_BRACK)
+129..130: ExpectToken(R_BRACK)
+129..130: MultipleRoots
+129..130: ExpectExpr
+130..131: MultipleRoots
+130..131: ExpectExpr
+131..132: MultipleRoots
+131..132: ExpectExpr
+132..133: MultipleRoots
+132..133: ExpectExpr
+133..133: MultipleRoots
+141..142: ExpectToken(R_CURLY)
+141..142: ExpectExpr
+142..143: ExpectExpr
+146..147: ExpectToken(EQ)
+146..147: ExpectToken(SEMICOLON)
+146..147: ExpectBinding
+147..148: ExpectBinding
+148..149: ExpectBinding
+149..150: ExpectBinding
+150..151: ExpectBinding
+151..152: ExpectBinding
+152..153: ExpectBinding
+153..154: ExpectBinding
+154..155: ExpectBinding
+157..158: ExpectExpr
+158..159: ExpectExpr
+159..160: ExpectExpr
+160..161: ExpectExpr
+161..162: ExpectExpr
+162..163: ExpectExpr
+163..164: ExpectExpr
+164..165: ExpectExpr
+169..170: ExpectToken(R_BRACK)
+172..173: MultipleRoots
+172..173: ExpectExpr
+173..174: MultipleRoots
+173..174: ExpectExpr
+174..174: MultipleRoots
+174..174: ExpectExpr
+174..175: MultipleRoots
+174..175: ExpectExpr
+175..176: MultipleRoots
+175..176: ExpectExpr
+176..177: MultipleRoots
+176..177: ExpectExpr
+177..178: MultipleRoots
+177..178: ExpectExpr
+178..179: MultipleRoots
+182..183: ExpectToken(R_BRACK)
+182..183: MultipleRoots
+182..183: ExpectExpr
+183..184: MultipleRoots
+184..185: ExpectBinding
+189..190: MultipleRoots
+189..190: ExpectExpr
+190..191: MultipleRoots
+190..191: ExpectExpr
+191..210: MultipleRoots
+210..211: MultipleRoots
+210..211: ExpectExpr
+211..212: MultipleRoots
+211..212: ExpectExpr
+212..213: MultipleRoots
+212..213: ExpectExpr
+213..214: MultipleRoots
+213..214: ExpectExpr
+214..215: MultipleRoots
+214..215: ExpectExpr
+215..216: MultipleRoots
+215..216: ExpectExpr
+216..217: MultipleRoots
+217..218: ExpectElemExpr
+218..219: ExpectElemExpr
+219..220: ExpectElemExpr
+220..221: ExpectElemExpr
+232..233: ExpectToken(R_CURLY)
+232..233: ExpectExpr
+233..234: ExpectExpr
+235..236: ExpectElemExpr
+236..237: ExpectElemExpr
+237..238: ExpectElemExpr
+241..241: ExpectExpr
+241..241: ExpectToken(R_CURLY)
+241..241: ExpectToken(R_BRACK)
+241..241: ExpectToken(R_BRACK)
 SOURCE_FILE@0..241
   REF@0..7
     IDENT@0..7 "KKKKKKK"

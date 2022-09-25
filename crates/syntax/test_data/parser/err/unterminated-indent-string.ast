@@ -1,4 +1,4 @@
-Missing "''" at 6..6
+6..6: ExpectToken(QUOTE2)
 SOURCE_FILE@0..6
   INDENT_STRING@0..6
     QUOTE2@0..2 "''"

@@ -73,12 +73,12 @@ impl Diagnostic {
                 | SynErrorKind::PathTrailingSlash
                 | SynErrorKind::PathDuplicatedSlashes
                 | SynErrorKind::MultipleNoAssoc => Severity::Error,
-                SynErrorKind::MissingToken(_)
-                | SynErrorKind::MissingExpr
-                | SynErrorKind::MissingElemExpr
-                | SynErrorKind::MissingAttr
-                | SynErrorKind::MissingParamIdent
-                | SynErrorKind::MissingBinding
+                SynErrorKind::ExpectToken(_)
+                | SynErrorKind::ExpectExpr
+                | SynErrorKind::ExpectElemExpr
+                | SynErrorKind::ExpectAttr
+                | SynErrorKind::ExpectIdent
+                | SynErrorKind::ExpectBinding
                 | SynErrorKind::NestTooDeep => Severity::IncompleteSyntax,
             },
         }
@@ -135,11 +135,11 @@ impl Diagnostic {
         struct Wrapper<'a>(&'a Diagnostic);
         impl fmt::Display for Wrapper<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{:?}: {}", self.0.range, self.0.message(),)?;
+                write!(f, "{:?}: {:?}", self.0.range, self.0.kind)?;
                 for (frange, msg) in &self.0.notes {
                     // Currently all related information is in the same file.
                     // Ignore the FileId here.
-                    write!(f, "\n  {:?}: {}", frange.range, msg)?;
+                    write!(f, "\n    {:?}: {}", frange.range, msg)?;
                 }
                 Ok(())
             }
