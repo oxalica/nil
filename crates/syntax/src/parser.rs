@@ -216,6 +216,7 @@ impl<'i> Parser<'i> {
             return;
         }
 
+        // This should match SyntaxKind::can_start_expr.
         match self.peek_non_ws() {
             Some(T![assert]) => {
                 self.start_node(ASSERT);
@@ -704,11 +705,18 @@ impl<'i> Parser<'i> {
                     self.want(T![;]);
                     self.finish_node();
                 }
-                // Consume one token if it cannot start an AttrPath and is not the guard.
+                // Consume tokens if it cannot start an AttrPath and is not the guard.
                 // This can happen for some extra tokens (eg. unfinished exprs) in AttrSet or LetIn.
-                Some(_) => {
+                Some(k) => {
                     self.error(ErrorKind::MissingBinding);
-                    self.bump_error();
+                    self.start_node(ERROR);
+                    // Special case for newbies placing expressions directly inside an Attrset.
+                    if k.can_start_expr() {
+                        self.expr_function_opt();
+                    } else {
+                        self.bump();
+                    }
+                    self.finish_node()
                 }
             }
         }
@@ -807,6 +815,15 @@ impl SyntaxKind {
                 | T!['{']
                 | T!['[']
         )
+    }
+
+    /// Check if a token can start an expression. Only used for error recovery.
+    fn can_start_expr(self) -> bool {
+        // Should match Parser::expr_function_opt
+        // Checked in can_start_atom_expr: T![let] | T![rec] | T!['{'] | IDENT
+        self.can_start_atom_expr()
+            || self.prefix_bp().is_some()
+            || matches!(self, T![assert] | T![with] | T![if])
     }
 
     /// Whether this token is a separator in some syntax.

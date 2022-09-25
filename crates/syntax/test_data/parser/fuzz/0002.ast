@@ -107,30 +107,17 @@ Mising binding at 151..152
 Mising binding at 152..153
 Mising binding at 153..154
 Mising binding at 154..155
-Multiple root expressions at 157..158
 Missing expression at 157..158
-Multiple root expressions at 158..159
 Missing expression at 158..159
-Multiple root expressions at 159..160
 Missing expression at 159..160
-Multiple root expressions at 160..161
 Missing expression at 160..161
-Multiple root expressions at 161..162
 Missing expression at 161..162
-Multiple root expressions at 162..163
 Missing expression at 162..163
-Multiple root expressions at 163..164
 Missing expression at 163..164
-Multiple root expressions at 164..165
 Missing expression at 164..165
-Multiple root expressions at 165..166
 Missing "]" at 169..170
-Multiple root expressions at 169..170
-Missing expression at 169..170
-Multiple root expressions at 170..170
-Missing expression at 170..170
-Multiple root expressions at 170..171
-Missing expression at 173..174
+Multiple root expressions at 172..173
+Missing expression at 172..173
 Multiple root expressions at 173..174
 Missing expression at 173..174
 Multiple root expressions at 174..174
@@ -149,10 +136,8 @@ Multiple root expressions at 182..183
 Missing expression at 182..183
 Multiple root expressions at 183..184
 Mising binding at 184..185
-Multiple root expressions at 186..187
-Missing expression at 186..187
-Multiple root expressions at 187..188
-Missing expression at 190..191
+Multiple root expressions at 189..190
+Missing expression at 189..190
 Multiple root expressions at 190..191
 Missing expression at 190..191
 Multiple root expressions at 191..210
@@ -371,76 +356,76 @@ SOURCE_FILE@0..241
     ERROR@131..132 "'"
   ERROR@132..133
     ERROR@132..133 "$"
-  PATH_INTERPOLATION@133..157
-    PATH_START@133..133 ""
-    PATH_FRAGMENT@133..134 "/"
-    DYNAMIC@134..157
-      DOLLAR_L_CURLY@134..136 "${"
-      REF@136..141
-        IDENT@136..141 "KKKKK"
-      ERROR@141..142
-        ERROR@141..142 "\u{6}"
-      ERROR@142..143
-        ERROR@142..143 "\u{6}"
-      ERROR@143..156
-        ATTR_SET@143..156
-          L_CURLY@143..144 "{"
-          ATTR_PATH_VALUE@144..146
-            ATTR_PATH@144..146
-              NAME@144..146
-                IDENT@144..146 "YY"
-          ERROR@146..147
-            L_CURLY@146..147 "{"
-          ERROR@147..148
-            ERROR@147..148 "'"
-          ERROR@148..149
-            ERROR@148..149 "\0"
-          ERROR@149..150
-            ERROR@149..150 "\0"
-          ERROR@150..151
-            ERROR@150..151 "\0"
-          ERROR@151..152
-            ERROR@151..152 "\0"
-          ERROR@152..153
-            ERROR@152..153 "\0"
-          ERROR@153..154
-            ERROR@153..154 "\0"
-          ERROR@154..155
-            ERROR@154..155 "\0"
-          R_CURLY@155..156 "}"
-      R_CURLY@156..157 "}"
-  ERROR@157..158
-    ERROR@157..158 "\u{1}"
-  ERROR@158..159
-    ERROR@158..159 "\0"
-  ERROR@159..160
-    ERROR@159..160 "|"
-  ERROR@160..161
-    ERROR@160..161 "\0"
-  ERROR@161..162
-    ERROR@161..162 "\0"
-  ERROR@162..163
-    ERROR@162..163 "\0"
-  ERROR@163..164
-    ERROR@163..164 "\0"
-  ERROR@164..165
-    ERROR@164..165 "\0"
-  LIST@165..169
-    L_BRACK@165..166 "["
-    REF@166..167
-      IDENT@166..167 "a"
-    ATTR_SET@167..169
-      L_CURLY@167..168 "{"
-      R_CURLY@168..169 "}"
-  ERROR@169..170
-    R_CURLY@169..170 "}"
-  ERROR@170..170
-    PATH_END@170..170 ""
-  LAMBDA@170..173
-    PARAM@170..172
-      PAT@170..172
-        L_CURLY@170..171 "{"
-        R_CURLY@171..172 "}"
+  APPLY@133..172
+    PATH_INTERPOLATION@133..170
+      PATH_START@133..133 ""
+      PATH_FRAGMENT@133..134 "/"
+      DYNAMIC@134..170
+        DOLLAR_L_CURLY@134..136 "${"
+        REF@136..141
+          IDENT@136..141 "KKKKK"
+        ERROR@141..142
+          ERROR@141..142 "\u{6}"
+        ERROR@142..143
+          ERROR@142..143 "\u{6}"
+        ERROR@143..157
+          ATTR_SET@143..157
+            L_CURLY@143..144 "{"
+            ATTR_PATH_VALUE@144..146
+              ATTR_PATH@144..146
+                NAME@144..146
+                  IDENT@144..146 "YY"
+            ERROR@146..156
+              ATTR_SET@146..156
+                L_CURLY@146..147 "{"
+                ERROR@147..148
+                  ERROR@147..148 "'"
+                ERROR@148..149
+                  ERROR@148..149 "\0"
+                ERROR@149..150
+                  ERROR@149..150 "\0"
+                ERROR@150..151
+                  ERROR@150..151 "\0"
+                ERROR@151..152
+                  ERROR@151..152 "\0"
+                ERROR@152..153
+                  ERROR@152..153 "\0"
+                ERROR@153..154
+                  ERROR@153..154 "\0"
+                ERROR@154..155
+                  ERROR@154..155 "\0"
+                R_CURLY@155..156 "}"
+            R_CURLY@156..157 "}"
+        ERROR@157..158
+          ERROR@157..158 "\u{1}"
+        ERROR@158..159
+          ERROR@158..159 "\0"
+        ERROR@159..160
+          ERROR@159..160 "|"
+        ERROR@160..161
+          ERROR@160..161 "\0"
+        ERROR@161..162
+          ERROR@161..162 "\0"
+        ERROR@162..163
+          ERROR@162..163 "\0"
+        ERROR@163..164
+          ERROR@163..164 "\0"
+        ERROR@164..165
+          ERROR@164..165 "\0"
+        ERROR@165..169
+          LIST@165..169
+            L_BRACK@165..166 "["
+            REF@166..167
+              IDENT@166..167 "a"
+            ATTR_SET@167..169
+              L_CURLY@167..168 "{"
+              R_CURLY@168..169 "}"
+        R_CURLY@169..170 "}"
+      PATH_END@170..170 ""
+    ATTR_SET@170..172
+      L_CURLY@170..171 "{"
+      R_CURLY@171..172 "}"
+  ERROR@172..173
     COLON@172..173 ":"
   ERROR@173..174
     R_CURLY@173..174 "}"
@@ -463,18 +448,18 @@ SOURCE_FILE@0..241
       R_CURLY@181..182 "}"
   ERROR@182..183
     R_CURLY@182..183 "}"
-  ATTR_SET@183..186
-    L_CURLY@183..184 "{"
-    ERROR@184..185
-      L_CURLY@184..185 "{"
-    R_CURLY@185..186 "}"
-  ERROR@186..187
-    R_CURLY@186..187 "}"
-  LAMBDA@187..190
-    PARAM@187..189
-      PAT@187..189
-        L_CURLY@187..188 "{"
-        R_CURLY@188..189 "}"
+  APPLY@183..189
+    ATTR_SET@183..187
+      L_CURLY@183..184 "{"
+      ERROR@184..186
+        ATTR_SET@184..186
+          L_CURLY@184..185 "{"
+          R_CURLY@185..186 "}"
+      R_CURLY@186..187 "}"
+    ATTR_SET@187..189
+      L_CURLY@187..188 "{"
+      R_CURLY@188..189 "}"
+  ERROR@189..190
     COLON@189..190 ":"
   ERROR@190..191
     R_CURLY@190..191 "}"
