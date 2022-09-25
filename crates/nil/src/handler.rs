@@ -1,12 +1,23 @@
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
-    CompletionParams, CompletionResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover,
-    HoverParams, Location, PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange,
-    SelectionRangeParams, SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams,
-    SemanticTokensRangeResult, SemanticTokensResult, TextDocumentPositionParams, WorkspaceEdit,
+    CompletionParams, CompletionResponse, Diagnostic, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverParams, Location, PrepareRenameResponse, ReferenceParams, RenameParams,
+    SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
+    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
+    TextDocumentPositionParams, Url, WorkspaceEdit,
 };
 use text_size::TextRange;
+
+const MAX_DIAGNOSTICS_CNT: usize = 128;
+
+pub(crate) fn diagnostics(snap: StateSnapshot, uri: &Url) -> Result<Vec<Diagnostic>> {
+    let file = snap.vfs().file_for_uri(uri)?;
+    let mut diags = snap.analysis.diagnostics(file)?;
+    diags.retain(|diag| !snap.config.diagnostics_ignored.contains(diag.code()));
+    diags.truncate(MAX_DIAGNOSTICS_CNT);
+    Ok(convert::to_diagnostics(&snap.vfs(), file, &diags))
+}
 
 pub(crate) fn goto_definition(
     snap: StateSnapshot,

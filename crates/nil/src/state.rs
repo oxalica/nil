@@ -15,13 +15,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic};
 
-const MAX_DIAGNOSTICS_CNT: usize = 128;
 const FILTER_FILE_EXTENTION: &str = "nix";
 const CONFIG_KEY: &str = "nil";
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    diagnostics_ignored: HashSet<String>,
+    pub(crate) diagnostics_ignored: HashSet<String>,
 }
 
 type ReqHandler = fn(&mut State, Response);
@@ -34,7 +33,7 @@ pub struct State {
     req_queue: ReqQueue<(), ReqHandler>,
     sender: Sender<Message>,
     is_shutdown: bool,
-    config: Config,
+    config: Arc<Config>,
 }
 
 impl State {
@@ -50,7 +49,7 @@ impl State {
             req_queue: ReqQueue::default(),
             sender: responder,
             is_shutdown: false,
-            config: Config::default(),
+            config: Arc::new(Config::default()),
         }
     }
 
@@ -220,9 +219,14 @@ impl State {
     }
 
     fn update_config(&mut self, mut v: serde_json::Value) {
+        let mut updated_diagnostics = false;
+        let mut config = Config::clone(&self.config);
         if let Some(v) = v.pointer_mut("/diagnostics/ignored") {
             match serde_json::from_value(v.take()) {
-                Ok(v) => self.config.diagnostics_ignored = v,
+                Ok(v) => {
+                    config.diagnostics_ignored = v;
+                    updated_diagnostics = true;
+                }
                 Err(e) => {
                     self.show_message(
                         MessageType::ERROR,
@@ -231,13 +235,31 @@ impl State {
                 }
             }
         }
+        self.config = Arc::new(config);
         tracing::debug!("Updated config: {:?}", self.config);
+
+        // Refresh all diagnostics since the filter may be changed.
+        if updated_diagnostics {
+            for uri in &*self.opened_files.read().unwrap() {
+                tracing::debug!("Recalculate diagnostics of {uri}");
+
+                let snap = self.snapshot();
+                // TODO: Error is ignored.
+                let diagnostics = handler::diagnostics(snap, uri).unwrap_or_default();
+                self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri: uri.clone(),
+                    diagnostics,
+                    version: None,
+                });
+            }
+        }
     }
 
     fn snapshot(&self) -> StateSnapshot {
         StateSnapshot {
             analysis: self.host.snapshot(),
             vfs: Arc::clone(&self.vfs),
+            config: Arc::clone(&self.config),
         }
     }
 
@@ -248,34 +270,31 @@ impl State {
     }
 
     fn apply_vfs_change(&mut self) {
-        let mut vfs = self.vfs.write().unwrap();
-        let change = vfs.take_change();
-        let file_changes = change
-            .file_changes
-            .iter()
-            .map(|(file, text)| (*file, !text.is_empty()))
-            .collect::<Vec<_>>();
-        tracing::debug!("Change: {:?}", change);
-        self.host.apply_change(change);
+        let file_changes = {
+            let mut vfs = self.vfs.write().unwrap();
+            let change = vfs.take_change();
+            let file_changes = change
+                .file_changes
+                .iter()
+                .map(|(file, text)| (vfs.uri_for_file(*file), !text.is_empty()))
+                .collect::<Vec<_>>();
+            tracing::debug!("Change: {:?}", change);
+            self.host.apply_change(change);
+            file_changes
+        };
 
-        let snap = self.host.snapshot();
         let opened_files = self.opened_files.read().unwrap();
-        for (file, has_text) in file_changes {
-            let uri = vfs.uri_for_file(file);
+        for (uri, has_text) in file_changes {
             if !opened_files.contains(&uri) {
                 continue;
             }
 
             // TODO: Error is ignored.
             let diagnostics = has_text
-                .then(|| {
-                    let mut diags = snap.diagnostics(file).ok()?;
-                    diags.retain(|diag| !self.config.diagnostics_ignored.contains(diag.code()));
-                    diags.truncate(MAX_DIAGNOSTICS_CNT);
-                    Some(convert::to_diagnostics(&vfs, file, &diags))
-                })
+                .then(|| handler::diagnostics(self.snapshot(), &uri).ok())
                 .flatten()
                 .unwrap_or_default();
+
             self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
                 uri,
                 diagnostics,
@@ -422,6 +441,7 @@ fn result_to_response(id: RequestId, ret: Result<impl Serialize>) -> Result<Resp
 pub struct StateSnapshot {
     pub(crate) analysis: Analysis,
     vfs: Arc<RwLock<Vfs>>,
+    pub(crate) config: Arc<Config>,
 }
 
 impl StateSnapshot {
