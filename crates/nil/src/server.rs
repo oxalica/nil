@@ -24,20 +24,25 @@ pub struct Config {
     pub(crate) formatting_command: Option<Vec<String>>,
 }
 
-type ReqHandler = fn(&mut State, Response);
+type ReqHandler = fn(&mut Server, Response);
 
-pub struct State {
+pub struct Server {
+    // States.
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
-    opened_files: Arc<RwLock<HashSet<Url>>>,
-    workspace_root: Option<PathBuf>,
+    opened_files: HashSet<Url>,
+    config: Arc<Config>,
+    is_shutdown: bool,
+
+    // Request & response.
     req_queue: ReqQueue<(), ReqHandler>,
     sender: Sender<Message>,
-    is_shutdown: bool,
-    config: Arc<Config>,
+
+    // Immutable settings.
+    workspace_root: Option<PathBuf>,
 }
 
-impl State {
+impl Server {
     pub fn new(responder: Sender<Message>, workspace_root: Option<PathBuf>) -> Self {
         // Vfs root must be absolute.
         let workspace_root = workspace_root.and_then(|root| root.canonicalize().ok());
@@ -46,11 +51,13 @@ impl State {
             host: Default::default(),
             vfs: Arc::new(RwLock::new(vfs)),
             opened_files: Default::default(),
-            workspace_root,
+            config: Arc::new(Config::default()),
+            is_shutdown: false,
+
             req_queue: ReqQueue::default(),
             sender: responder,
-            is_shutdown: false,
-            config: Arc::new(Config::default()),
+
+            workspace_root,
         }
     }
 
@@ -133,16 +140,13 @@ impl State {
         NotificationDispatcher(self, Some(notif))
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
                 let uri = &params.text_document.uri;
-                st.opened_files.write().unwrap().insert(uri.clone());
+                st.opened_files.insert(uri.clone());
                 st.set_vfs_file_content(uri, params.text_document.text)?;
                 Ok(())
             })?
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
                 // N.B. Don't clear text here.
-                st.opened_files
-                    .write()
-                    .unwrap()
-                    .remove(&params.text_document.uri);
+                st.opened_files.remove(&params.text_document.uri);
                 Ok(())
             })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
@@ -262,7 +266,7 @@ impl State {
 
         // Refresh all diagnostics since the filter may be changed.
         if updated_diagnostics {
-            for uri in &*self.opened_files.read().unwrap() {
+            for uri in &self.opened_files {
                 tracing::debug!("Recalculate diagnostics of {uri}");
 
                 let snap = self.snapshot();
@@ -305,9 +309,8 @@ impl State {
             file_changes
         };
 
-        let opened_files = self.opened_files.read().unwrap();
         for (uri, has_text) in file_changes {
-            if !opened_files.contains(&uri) {
+            if !self.opened_files.contains(&uri) {
                 continue;
             }
 
@@ -327,12 +330,12 @@ impl State {
 }
 
 #[must_use = "RequestDispatcher::finish not called"]
-struct RequestDispatcher<'s>(&'s mut State, Option<Request>);
+struct RequestDispatcher<'s>(&'s mut Server, Option<Request>);
 
 impl<'s> RequestDispatcher<'s> {
     fn on_sync_mut<R: req::Request>(
         mut self,
-        f: fn(&mut State, R::Params) -> Result<R::Result>,
+        f: fn(&mut Server, R::Params) -> Result<R::Result>,
     ) -> Self {
         if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
             let req = self.1.take().unwrap();
@@ -384,12 +387,12 @@ impl<'s> RequestDispatcher<'s> {
 }
 
 #[must_use = "NotificationDispatcher::finish not called"]
-struct NotificationDispatcher<'s>(&'s mut State, Option<Notification>);
+struct NotificationDispatcher<'s>(&'s mut Server, Option<Notification>);
 
 impl<'s> NotificationDispatcher<'s> {
     fn on_sync_mut<N: notif::Notification>(
         mut self,
-        f: fn(&mut State, N::Params) -> Result<()>,
+        f: fn(&mut Server, N::Params) -> Result<()>,
     ) -> Result<Self> {
         if matches!(&self.1, Some(notif) if notif.method == N::METHOD) {
             let params =

@@ -2,7 +2,7 @@ mod capabilities;
 mod convert;
 mod handler;
 mod semantic_tokens;
-mod state;
+mod server;
 mod vfs;
 
 use lsp_server::{Connection, ErrorCode};
@@ -10,7 +10,7 @@ use lsp_types::InitializeParams;
 use std::path::PathBuf;
 use std::{env, fmt};
 
-pub(crate) use state::{State, StateSnapshot};
+pub(crate) use server::{Server, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
 
 #[derive(Debug)]
@@ -46,7 +46,7 @@ pub fn main_loop(conn: Connection) -> Result<()> {
         env::current_dir().ok()
     })();
 
-    let mut state = State::new(conn.sender.clone(), workspace_path);
+    let mut state = Server::new(conn.sender.clone(), workspace_path);
     state.run(conn.receiver)?;
 
     tracing::info!("Leaving main loop");
