@@ -21,6 +21,7 @@ const CONFIG_KEY: &str = "nil";
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
     pub(crate) diagnostics_ignored: HashSet<String>,
+    pub(crate) formatting_command: Option<Vec<String>>,
 }
 
 type ReqHandler = fn(&mut State, Response);
@@ -124,6 +125,7 @@ impl State {
             .on::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
             .on::<req::HoverRequest>(handler::hover)
             .on::<req::DocumentSymbolRequest>(handler::document_symbol)
+            .on::<req::Formatting>(handler::formatting)
             .finish();
     }
 
@@ -222,6 +224,7 @@ impl State {
     fn update_config(&mut self, mut v: serde_json::Value) {
         let mut updated_diagnostics = false;
         let mut config = Config::clone(&self.config);
+        let mut errors = Vec::new();
         if let Some(v) = v.pointer_mut("/diagnostics/ignored") {
             match serde_json::from_value(v.take()) {
                 Ok(v) => {
@@ -229,15 +232,33 @@ impl State {
                     updated_diagnostics = true;
                 }
                 Err(e) => {
-                    self.show_message(
-                        MessageType::ERROR,
-                        format!("Invalid value of setting `diagnostics.ignored`: {e}"),
-                    );
+                    errors.push(format!("Invalid value of `diagnostics.ignored`: {e}"));
                 }
             }
         }
+        if let Some(v) = v.pointer_mut("/formatting/command") {
+            match serde_json::from_value::<Option<Vec<String>>>(v.take()) {
+                Ok(Some(v)) if v.is_empty() => {
+                    errors.push("`formatting.command` must not be an empty list".into());
+                }
+                Ok(v) => {
+                    config.formatting_command = v;
+                }
+                Err(e) => {
+                    errors.push(format!("Invalid value of `formatting.command`: {e}"));
+                }
+            }
+        }
+        tracing::debug!("Updated config, errors: {errors:?}, config: {config:?}");
         self.config = Arc::new(config);
-        tracing::debug!("Updated config: {:?}", self.config);
+
+        if !errors.is_empty() {
+            let msg = ["Failed to apply some settings:"]
+                .into_iter()
+                .chain(errors.iter().flat_map(|s| ["\n- ", s]))
+                .collect::<String>();
+            self.show_message(MessageType::ERROR, msg);
+        }
 
         // Refresh all diagnostics since the filter may be changed.
         if updated_diagnostics {

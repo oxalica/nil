@@ -61,12 +61,14 @@ let
   '';
 
   cocSetting = {
+    "coc.preferences.formatOnSaveFiletypes" = [ "nix" ];
     languageserver.nix = {
       command = "nil";
       filetypes = [ "nix" ];
       rootPatterns =  [ "flake.nix" ];
       settings.nil = {
         testSetting = 42;
+        formatting.command = [ "nixpkgs-fmt" ];
       };
     };
     semanticTokens.filetypes = [ "nix" ];

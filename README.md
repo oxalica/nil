@@ -10,7 +10,7 @@ Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and 
 
 See [release notes][releases] for change log between tagged unstable versions.
 
-See [`doc/features.md`](doc/features.md) for an incomplete list of notable features currently
+See [`docs/features.md`](docs/features.md) for an incomplete list of notable features currently
 implemented or planned.
 
 [releases]: https://github.com/oxalica/nil/releases

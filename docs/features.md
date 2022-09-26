@@ -46,18 +46,41 @@ This incomplete list tracks noteble features currently implemented or planned.
 
     [`coc.nvim`] doesn't enable semantic highlighting by default.
     You need to manually enable it in settings.
-    ```json
+    ```jsonc
+    // coc-settings.json
     {
       "semanticTokens": { "filetypes": ["nix"] }
     }
     ```
 
-    [`coc.nvim`]: https://github.com/neoclide/coc.nvim
-
-
 - [x] Hover text. `textDocument/hover`.
   - [x] Show kind of names.
   - [x] Documentation for builtin names.
 - [x] File symbols with hierarchy (aka. outline). `textDocument/documentSymbol`
+
+- [x] File formatting.
+  - [x] Whole file formatting.
+  - [ ] Range formatting.
+  - [ ] On-type formatting.
+  - [x] External formatter.
+    - Currently, an external formatter must be configured via LSP setting
+      `formatting.command` to enable this functionality.
+      It accepts `null` for disabled, or an non-empty array for the formatting command,
+      eg. `["nixpkgs-fmt"]` for [nixpkgs-fmt].
+      The command must read Nix code from stdin and print the formatted code to stdout.
+
+      [nixpkgs-fmt]: https://github.com/nix-community/nixpkgs-fmt
+
+      You might need to set other editor settings to enable format-on-save.
+      Like, for [`coc.nvim`],
+      ```jsonc
+      // coc-settings.json
+      {
+        "coc.preferences.formatOnSaveFiletypes": ["nix"]
+      }
+      ```
+
 - [ ] Cross-file analysis.
 - [ ] Multi-threaded.
+
+[`coc.nvim`]: https://github.com/neoclide/coc.nvim

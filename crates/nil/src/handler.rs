@@ -1,12 +1,15 @@
 use crate::{convert, Result, StateSnapshot};
 use ide::FileRange;
 use lsp_types::{
-    CompletionParams, CompletionResponse, Diagnostic, DocumentSymbolParams, DocumentSymbolResponse,
-    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, Location,
-    PrepareRenameResponse, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
-    SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, TextDocumentPositionParams, Url, WorkspaceEdit,
+    CompletionParams, CompletionResponse, Diagnostic, DocumentFormattingParams,
+    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverParams, Location, Position, PrepareRenameResponse, Range, ReferenceParams,
+    RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
+    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
+    TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
+use std::process;
+use std::sync::Arc;
 use text_size::TextRange;
 
 const MAX_DIAGNOSTICS_CNT: usize = 128;
@@ -173,4 +176,71 @@ pub(crate) fn document_symbol(
     let syms = snap.analysis.symbol_hierarchy(file)?;
     let syms = convert::to_document_symbols(&line_map, syms);
     Ok(Some(DocumentSymbolResponse::Nested(syms)))
+}
+
+// FIXME: This is sync now.
+pub(crate) fn formatting(
+    snap: StateSnapshot,
+    params: DocumentFormattingParams,
+) -> Result<Option<Vec<TextEdit>>> {
+    fn run_with_stdin(
+        cmd: &[String],
+        stdin_data: impl AsRef<[u8]> + Send + 'static,
+    ) -> Result<String> {
+        let mut child = process::Command::new(&cmd[0])
+            .args(&cmd[1..])
+            .stdin(process::Stdio::piped())
+            .stdout(process::Stdio::piped())
+            .stderr(process::Stdio::piped())
+            .spawn()?;
+        let mut stdin = child.stdin.take().unwrap();
+        std::thread::spawn(move || {
+            let _ = std::io::copy(&mut stdin_data.as_ref(), &mut stdin);
+        });
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            return Err(format!(
+                "Process exited with {}.\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
+        }
+        let stdout = String::from_utf8(output.stdout)?;
+        Ok(stdout)
+    }
+
+    let cmd = match &snap.config.formatting_command {
+        Some(cmd) => cmd,
+        None => return Ok(None),
+    };
+
+    let (file_content, line_map) = {
+        let vfs = snap.vfs();
+        let file = convert::from_file(&vfs, &params.text_document)?;
+        (vfs.content_for_file(file), vfs.line_map_for_file(file))
+    };
+
+    let new_content = run_with_stdin(cmd, <Arc<[u8]>>::from(file_content.clone()))
+        .map_err(|err| format!("Failed to run formatter: {err}"))?;
+
+    if new_content == *file_content {
+        return Ok(None);
+    }
+
+    // Replace the whole file.
+    let last_line = line_map.last_line();
+    Ok(Some(vec![TextEdit {
+        range: Range {
+            start: Position {
+                line: 0,
+                character: 0,
+            },
+            end: Position {
+                line: last_line,
+                character: line_map.end_col_for_line(last_line),
+            },
+        },
+        new_text: new_content,
+    }]))
 }

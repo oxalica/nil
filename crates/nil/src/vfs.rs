@@ -141,8 +141,12 @@ impl Vfs {
         change
     }
 
-    pub fn line_map_for_file(&self, file_id: FileId) -> Arc<LineMap> {
-        self.files[file_id.0 as usize].1.clone()
+    pub fn content_for_file(&self, file: FileId) -> Arc<str> {
+        self.files[file.0 as usize].0.clone()
+    }
+
+    pub fn line_map_for_file(&self, file: FileId) -> Arc<LineMap> {
+        self.files[file.0 as usize].1.clone()
     }
 }
 
