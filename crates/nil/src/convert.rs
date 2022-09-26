@@ -217,12 +217,8 @@ pub(crate) fn to_text_edit(line_map: &LineMap, edit: TextEdit) -> lsp::TextEdit 
 }
 
 pub(crate) fn to_semantic_tokens(line_map: &LineMap, hls: &[HlRange]) -> Vec<SemanticToken> {
-    // We must now exceed the last line.
-    let line_count = line_map.line_count();
-    if line_count == 0 {
-        return Vec::new();
-    }
-    let last_line = line_count - 1;
+    // We must not exceed the last line.
+    let last_line = line_map.last_line();
 
     let mut toks = Vec::with_capacity(hls.len());
     let (mut prev_line, mut prev_start) = (0, 0);

@@ -148,6 +148,10 @@ impl Vfs {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct LineMap {
+    /// Invariant:
+    /// - Have at least two elements.
+    /// - The first must be 0.
+    /// - The last must be the length of original text.
     line_starts: Vec<u32>,
     char_diffs: HashMap<u32, Vec<(u32, CodeUnitsDiff)>>,
 }
@@ -211,8 +215,8 @@ impl LineMap {
         Some((text, this))
     }
 
-    pub fn line_count(&self) -> u32 {
-        self.line_starts.len() as u32 - 1
+    pub fn last_line(&self) -> u32 {
+        self.line_starts.len() as u32 - 2
     }
 
     pub fn pos_for_line_col(&self, line: u32, mut col: u32) -> TextSize {
@@ -325,15 +329,15 @@ mod tests {
     }
 
     #[test]
-    fn line_count() {
+    fn last_line() {
         let (_, map) = LineMap::normalize("".into()).unwrap();
-        assert_eq!(map.line_count(), 1);
+        assert_eq!(map.last_line(), 0);
         let (_, map) = LineMap::normalize("\n".into()).unwrap();
-        assert_eq!(map.line_count(), 2);
+        assert_eq!(map.last_line(), 1);
         let (_, map) = LineMap::normalize("foo\nbar".into()).unwrap();
-        assert_eq!(map.line_count(), 2);
+        assert_eq!(map.last_line(), 1);
         let (_, map) = LineMap::normalize("foo\nbar\n".into()).unwrap();
-        assert_eq!(map.line_count(), 3);
+        assert_eq!(map.last_line(), 2);
     }
 
     #[test]
