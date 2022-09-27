@@ -45,6 +45,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         channel: [stable, beta]
+        include:
+          - os: ubuntu-latest
+            channel: "1.62.0"
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

@@ -22,8 +22,15 @@ and are regularly updated.
 
 [nixpkgs]: https://github.com/NixOS/nixpkgs
 
+Note: This package requires a relatively new version of Rust to compile.
+You need at least `nixpkgs-unstable` to build it.
+
 - If you use `nix-env`, run `nix-env -iA nixpkgs.nil`
 - If you use `nix profile`, run `nix profile install nixpkgs#nil`
+- If you want to compile it from source.
+  1. Install stable Rust toolchain >= 1.62
+  1. Install `nix` >= 2.4 and make the binary `nix` available from your `PATH`.
+  1. Build and install via `cargo install --git https://github.com/oxalica/nil nil`
 
 ## Flake
 
