@@ -81,6 +81,7 @@ This incomplete list tracks noteble features currently implemented or planned.
       ```
 
 - [ ] Cross-file analysis.
-- [ ] Multi-threaded.
+- [x] Multi-threaded.
+  - [x] Request cancellation. `$/cancelRequest`
 
 [`coc.nvim`]: https://github.com/neoclide/coc.nvim
