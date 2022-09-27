@@ -4,8 +4,8 @@ use ide::{Analysis, AnalysisHost, Cancelled, VfsPath};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{
-    notification as notif, request as req, ConfigurationItem, ConfigurationParams, MessageType,
-    NumberOrString, PublishDiagnosticsParams, ShowMessageParams, Url,
+    notification as notif, request as req, ConfigurationItem, ConfigurationParams, Diagnostic,
+    MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams, Url,
 };
 use serde::Deserialize;
 use std::cell::Cell;
@@ -30,6 +30,7 @@ type Task = Box<dyn FnOnce() -> Event + Send>;
 
 enum Event {
     Response(Response),
+    Diagnostics(Url, Vec<Diagnostic>),
 }
 
 pub struct Server {
@@ -44,6 +45,7 @@ pub struct Server {
     req_queue: ReqQueue<(), ReqHandler>,
     lsp_tx: Sender<Message>,
     task_tx: Sender<Task>,
+    event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
 
     // Immutable settings.
@@ -79,6 +81,7 @@ impl Server {
             req_queue: ReqQueue::default(),
             lsp_tx,
             task_tx,
+            event_tx,
             event_rx,
 
             workspace_root,
@@ -137,14 +140,25 @@ impl Server {
                     }
                 }
                 recv(self.event_rx) -> event => {
-                    match event.map_err(|_| "Worker panicked")? {
-                        Event::Response(resp) => {
-                            if let Some(()) = self.req_queue.incoming.complete(resp.id.clone()) {
-                                self.lsp_tx.send(resp.into())?;
-                            }
-                        }
-                    }
+                    self.dispatch_event(event.map_err(|_| "Worker panicked")?);
                 }
+            }
+        }
+    }
+
+    fn dispatch_event(&mut self, event: Event) {
+        match event {
+            Event::Response(resp) => {
+                if let Some(()) = self.req_queue.incoming.complete(resp.id.clone()) {
+                    self.lsp_tx.send(resp.into()).unwrap();
+                }
+            }
+            Event::Diagnostics(uri, diagnostics) => {
+                self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri,
+                    diagnostics,
+                    version: None,
+                });
             }
         }
     }
@@ -321,17 +335,22 @@ impl Server {
         if updated_diagnostics {
             for uri in &self.opened_files {
                 tracing::debug!("Recalculate diagnostics of {uri}");
-
-                let snap = self.snapshot();
-                // TODO: Error is ignored.
-                let diagnostics = handler::diagnostics(snap, uri).unwrap_or_default();
-                self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                    uri: uri.clone(),
-                    diagnostics,
-                    version: None,
-                });
+                self.update_diagnostics(uri.clone());
             }
         }
+    }
+
+    fn update_diagnostics(&self, uri: Url) {
+        let snap = self.snapshot();
+        let task = move || {
+            let diags = with_catch_unwind("diagnostics", || handler::diagnostics(snap, &uri))
+                .unwrap_or_else(|err| {
+                    tracing::error!("Failed to calculate diagnostics: {err}");
+                    Vec::new()
+                });
+            Event::Diagnostics(uri, diags)
+        };
+        self.task_tx.send(Box::new(task)).unwrap();
     }
 
     fn snapshot(&self) -> StateSnapshot {
@@ -366,18 +385,13 @@ impl Server {
             if !self.opened_files.contains(&uri) {
                 continue;
             }
-
-            // TODO: Error is ignored.
-            let diagnostics = has_text
-                .then(|| handler::diagnostics(self.snapshot(), &uri).ok())
-                .flatten()
-                .unwrap_or_default();
-
-            self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                uri,
-                diagnostics,
-                version: None,
-            });
+            if has_text {
+                self.update_diagnostics(uri);
+            } else {
+                self.event_tx
+                    .send(Event::Diagnostics(uri, Vec::new()))
+                    .unwrap();
+            }
         }
     }
 }
@@ -495,7 +509,7 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
             if loc.is_empty() {
                 loc = "unknown".into();
             }
-            let msg = format!("Request handler of {} panicked at {}: {}", ctx, loc, reason);
+            let msg = format!("In {}, panicked at {}: {}", ctx, loc, reason);
             Err(msg.into())
         }
     }
