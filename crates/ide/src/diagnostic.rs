@@ -17,6 +17,7 @@ pub enum DiagnosticKind {
     // Lowering.
     InvalidDynamic,
     DuplicatedKey,
+    DuplicatedParam,
     EmptyInherit,
     EmptyLetIn,
     LetAttrset,
@@ -59,6 +60,7 @@ impl Diagnostic {
             DiagnosticKind::SyntaxError(_) => "syntax_error",
             DiagnosticKind::InvalidDynamic => "invalid_dynamic",
             DiagnosticKind::DuplicatedKey => "duplicated_key",
+            DiagnosticKind::DuplicatedParam => "duplicated_param",
             DiagnosticKind::EmptyInherit => "empty_inherit",
             DiagnosticKind::EmptyLetIn => "empty_let_in",
             DiagnosticKind::LetAttrset => "let_attrset",
@@ -77,6 +79,7 @@ impl Diagnostic {
             DiagnosticKind::SyntaxError(_)
             | DiagnosticKind::InvalidDynamic
             | DiagnosticKind::DuplicatedKey
+            | DiagnosticKind::DuplicatedParam
             | DiagnosticKind::UndefinedName => Severity::Error,
             DiagnosticKind::EmptyInherit
             | DiagnosticKind::EmptyLetIn
@@ -96,6 +99,7 @@ impl Diagnostic {
 
             DiagnosticKind::InvalidDynamic => "Invalid location of dynamic attribute",
             DiagnosticKind::DuplicatedKey => "Duplicated name definition",
+            DiagnosticKind::DuplicatedParam => "Duplicated parameter",
             DiagnosticKind::EmptyInherit => "Nothing inherited",
             DiagnosticKind::EmptyLetIn => "Empty let-in",
             DiagnosticKind::LetAttrset => {

@@ -8,6 +8,7 @@ use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
+use std::collections::HashMap;
 use std::str;
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
 use syntax::Parse;
@@ -62,14 +63,6 @@ impl LowerCtx<'_> {
         self.module.diagnostics.push(diag);
     }
 
-    fn lower_name(&mut self, node: ast::Name, kind: NameKind) -> NameId {
-        let name = node
-            .token()
-            .map_or_else(Default::default, |tok| tok.text().into());
-        let ptr = AstPtr::new(node.syntax());
-        self.alloc_name(name, kind, ptr)
-    }
-
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
         if let Some(expr) = expr {
             return self.lower_expr(expr);
@@ -97,27 +90,7 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::Apply(func, arg), ptr)
             }
             ast::Expr::Paren(e) => self.lower_expr_opt(e.expr()),
-            ast::Expr::Lambda(e) => {
-                let (param, pat) = e.param().map_or((None, None), |param| {
-                    let name = param.name().map(|n| self.lower_name(n, NameKind::Param));
-                    let pat = param.pat().map(|pat| {
-                        let fields = pat
-                            .fields()
-                            .map(|field| {
-                                let field_name =
-                                    field.name().map(|n| self.lower_name(n, NameKind::PatField));
-                                let default_expr = field.default_expr().map(|e| self.lower_expr(e));
-                                (field_name, default_expr)
-                            })
-                            .collect();
-                        let ellipsis = pat.ellipsis_token().is_some();
-                        Pat { fields, ellipsis }
-                    });
-                    (name, pat)
-                });
-                let body = self.lower_expr_opt(e.body());
-                self.alloc_expr(Expr::Lambda(param, pat, body), ptr)
-            }
+            ast::Expr::Lambda(e) => self.lower_lambda(e, ptr),
             ast::Expr::Assert(e) => {
                 let cond = self.lower_expr_opt(e.condition());
                 let body = self.lower_expr_opt(e.body());
@@ -207,6 +180,51 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::PathInterpolation(parts), ptr)
             }
         }
+    }
+
+    fn lower_lambda(&mut self, lam: ast::Lambda, ptr: AstPtr) -> ExprId {
+        let mut param_locs = HashMap::new();
+        let mut lower_name = |this: &mut Self, node: ast::Name, kind: NameKind| -> NameId {
+            let ptr = AstPtr::new(node.syntax());
+            let text = match node.token() {
+                None => "".into(),
+                Some(tok) => {
+                    let text: SmolStr = tok.text().into();
+                    if let Some(prev_loc) = param_locs.insert(text.clone(), ptr.text_range()) {
+                        this.diagnostic(
+                            Diagnostic::new(ptr.text_range(), DiagnosticKind::DuplicatedParam)
+                                .with_note(
+                                    FileRange::new(this.file_id, prev_loc),
+                                    "Previously defined here",
+                                ),
+                        );
+                    }
+                    text
+                }
+            };
+            this.alloc_name(text, kind, ptr)
+        };
+
+        let (param, pat) = lam.param().map_or((None, None), |param| {
+            let name = param.name().map(|n| lower_name(self, n, NameKind::Param));
+            let pat = param.pat().map(|pat| {
+                let fields = pat
+                    .fields()
+                    .map(|field| {
+                        let field_name = field
+                            .name()
+                            .map(|n| lower_name(self, n, NameKind::PatField));
+                        let default_expr = field.default_expr().map(|e| self.lower_expr(e));
+                        (field_name, default_expr)
+                    })
+                    .collect();
+                let ellipsis = pat.ellipsis_token().is_some();
+                Pat { fields, ellipsis }
+            });
+            (name, pat)
+        });
+        let body = self.lower_expr_opt(lam.body());
+        self.alloc_expr(Expr::Lambda(param, pat, body), ptr)
     }
 
     fn lower_literal(&mut self, lit: ast::Literal) -> Option<Literal> {
@@ -1353,6 +1371,31 @@ mod tests {
                     2..3: Previously defined here
                 16..17: DuplicatedKey
                     2..3: Previously defined here
+            "#]],
+        );
+    }
+
+    #[test]
+    fn lambda_duplicated_param() {
+        check_error(
+            "{ a, a }: 1",
+            expect![[r#"
+                5..6: DuplicatedParam
+                    2..3: Previously defined here
+            "#]],
+        );
+        check_error(
+            "{ a }@a: 1",
+            expect![[r#"
+                2..3: DuplicatedParam
+                    6..7: Previously defined here
+            "#]],
+        );
+        check_error(
+            "a@{ a }: 1",
+            expect![[r#"
+                4..5: DuplicatedParam
+                    0..1: Previously defined here
             "#]],
         );
     }
