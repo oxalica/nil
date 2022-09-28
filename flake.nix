@@ -71,8 +71,9 @@
               jq
               pre-commit
               nixpkgs-fmt
-              (import ./dev/neovim-lsp.nix { inherit pkgs; })
+              (import ./dev/nvim-lsp.nix { inherit pkgs; })
               (import ./dev/vim-coc.nix { inherit pkgs; })
+              (import ./dev/vim-lsp.nix { inherit pkgs; })
             ] ++ lib.optionals (lib.meta.availableOn stdenv.hostPlatform vscodium) [
               (import ./dev/vscodium.nix { inherit pkgs; })
             ];

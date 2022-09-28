@@ -86,6 +86,23 @@ Merge this setting into your `coc-settings.json`, which can be opened by `:CocCo
 
 See also [the example config for testing](dev/vim-coc.nix).
 
+### Vim with [`vim-lsp`]
+
+[`vim-lsp`]: https://github.com/prabirshrestha/vim-lsp
+
+Add the following code to your `vimrc` to register the LSP server.
+Thanks @mitchmindtree
+
+```vim
+if executable('nil')
+  autocmd User lsp_setup call lsp#register_server({
+    \ 'name': 'nil',
+    \ 'cmd': {server_info->['nil']},
+    \ 'whitelist': ['nix'],
+    \ })
+endif
+```
+
 ### Emacs with [`eglot`]
 
 [`eglot`]: https://github.com/joaotavora/eglot
