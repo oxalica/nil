@@ -4,8 +4,9 @@ let
   customRC = ''
     source ${./vimrc.vim}
 
-    " Dunno why, but ftdetect seems not working.
-    au BufRead,BufNewFile *.nix setf nix
+    let $COC_NO_PLUGINS = 1
+
+    autocmd BufRead,BufNewFile *.nix setf nix
 
     let g:coc_node_path = '${pkgs.nodejs}/bin/node'
     let g:coc_config_home = '${cocConfigHome}'
