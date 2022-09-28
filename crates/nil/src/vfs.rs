@@ -2,16 +2,16 @@ use crate::Result;
 use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use lsp_types::Url;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, mem};
 use text_size::{TextRange, TextSize};
 
+/// Vfs stores file contents with line mapping, and a mapping between
+/// filesystem paths and `FileId`s.
+/// The query system is built on `FileId`'s.
 pub struct Vfs {
     // FIXME: Currently this list is append-only.
     files: Vec<(Arc<str>, Arc<LineMap>)>,
-    /// The root directory, which must be absolute.
-    local_root: PathBuf,
     local_file_set: FileSet,
     root_changed: bool,
     change: Change,
@@ -21,17 +21,16 @@ impl fmt::Debug for Vfs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Vfs")
             .field("file_cnt", &self.files.len())
-            .field("local_root", &self.local_root)
+            .field("root_changed", &self.root_changed)
+            .field("change", &self.change)
             .finish_non_exhaustive()
     }
 }
 
 impl Vfs {
-    pub fn new(local_root: PathBuf) -> Self {
-        assert!(local_root.is_absolute());
+    pub fn new() -> Self {
         Self {
             files: Vec::new(),
-            local_root,
             local_file_set: FileSet::default(),
             root_changed: false,
             change: Change::default(),
@@ -42,10 +41,7 @@ impl Vfs {
         let path = uri
             .to_file_path()
             .map_err(|_| format!("Non-file URI: {}", uri))?;
-        let relative_path = path
-            .strip_prefix(&self.local_root)
-            .map_err(|_| format!("URI outside workspace: {}", uri))?;
-        Ok(VfsPath::from_path(relative_path).expect("URI is UTF-8"))
+        Ok(VfsPath::from_path(&path).expect("URI is UTF-8"))
     }
 
     pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {
@@ -118,10 +114,8 @@ impl Vfs {
     }
 
     pub fn uri_for_file(&self, file: FileId) -> Url {
-        let vpath = self.local_file_set.path_for_file(file).as_str();
-        assert!(!vpath.is_empty(), "Root is a directory");
-        let path = self.local_root.join(vpath.strip_prefix('/').unwrap());
-        Url::from_file_path(path).expect("Root is absolute")
+        let vpath = self.local_file_set.path_for_file(file);
+        Url::from_file_path(vpath.as_str()).expect("VfsPath is absolute")
     }
 
     pub fn take_change(&mut self) -> Change {

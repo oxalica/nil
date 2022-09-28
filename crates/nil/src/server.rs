@@ -1,21 +1,20 @@
 use crate::{convert, handler, Result, Vfs};
 use crossbeam_channel::{Receiver, Sender};
-use ide::{Analysis, AnalysisHost, Cancelled, VfsPath};
+use ide::{Analysis, AnalysisHost, Cancelled};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{
     notification as notif, request as req, ConfigurationItem, ConfigurationParams, Diagnostic,
-    MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams, Url,
+    InitializeParams, MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams,
+    Url,
 };
 use serde::Deserialize;
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::panic::UnwindSafe;
-use std::path::PathBuf;
 use std::sync::{Arc, Once, RwLock};
-use std::{fs, panic, thread};
+use std::{panic, thread};
 
-const FILTER_FILE_EXTENTION: &str = "nix";
 const CONFIG_KEY: &str = "nil";
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -47,17 +46,10 @@ pub struct Server {
     task_tx: Sender<Task>,
     event_tx: Sender<Event>,
     event_rx: Receiver<Event>,
-
-    // Immutable settings.
-    workspace_root: Option<PathBuf>,
 }
 
 impl Server {
-    pub fn new(lsp_tx: Sender<Message>, workspace_root: Option<PathBuf>) -> Self {
-        // Vfs root must be absolute.
-        let workspace_root = workspace_root.and_then(|root| root.canonicalize().ok());
-        let vfs = Vfs::new(workspace_root.clone().unwrap_or_else(|| PathBuf::from("/")));
-
+    pub fn new(lsp_tx: Sender<Message>) -> Self {
         let (task_tx, task_rx) = crossbeam_channel::unbounded();
         let (event_tx, event_rx) = crossbeam_channel::unbounded();
         let worker_cnt = thread::available_parallelism().map_or(1, |n| n.get());
@@ -73,7 +65,7 @@ impl Server {
 
         Self {
             host: Default::default(),
-            vfs: Arc::new(RwLock::new(vfs)),
+            vfs: Arc::new(RwLock::new(Vfs::new())),
             opened_files: Default::default(),
             config: Arc::new(Config::default()),
             is_shutdown: false,
@@ -83,8 +75,6 @@ impl Server {
             task_tx,
             event_tx,
             event_rx,
-
-            workspace_root,
         }
     }
 
@@ -96,31 +86,7 @@ impl Server {
         }
     }
 
-    pub fn run(&mut self, lsp_rx: Receiver<Message>) -> Result<()> {
-        if let Some(root) = &self.workspace_root {
-            let mut vfs = self.vfs.write().unwrap();
-            for entry in ignore::WalkBuilder::new(root).follow_links(false).build() {
-                (|| -> Option<()> {
-                    let entry = entry.ok()?;
-                    if entry
-                        .path()
-                        .extension()
-                        .map_or(true, |ext| ext != FILTER_FILE_EXTENTION)
-                    {
-                        return None;
-                    }
-
-                    let relative_path = entry.path().strip_prefix(root).ok()?;
-                    let vpath = VfsPath::from_path(relative_path)?;
-                    let text = fs::read_to_string(entry.path()).ok().unwrap_or_default();
-                    vfs.set_path_content(vpath, text);
-                    Some(())
-                })();
-            }
-            drop(vfs);
-            self.apply_vfs_change();
-        }
-
+    pub fn run(&mut self, lsp_rx: Receiver<Message>, _init_params: InitializeParams) -> Result<()> {
         loop {
             crossbeam_channel::select! {
                 recv(lsp_rx) -> msg => {

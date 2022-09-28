@@ -12,6 +12,7 @@ pub struct FileId(pub u32);
 pub struct SourceRootId(pub u32);
 
 /// An absolute path in format `(/.+)*`
+/// Currently, it represent an absolute filesytem path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VfsPath(String);
 

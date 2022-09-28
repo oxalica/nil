@@ -7,8 +7,7 @@ mod vfs;
 
 use lsp_server::{Connection, ErrorCode};
 use lsp_types::InitializeParams;
-use std::path::PathBuf;
-use std::{env, fmt};
+use std::fmt;
 
 pub(crate) use server::{Server, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
@@ -36,18 +35,9 @@ pub fn main_loop(conn: Connection) -> Result<()> {
     tracing::info!("Init params: {}", init_params);
 
     let init_params = serde_json::from_value::<InitializeParams>(init_params)?;
-    let workspace_path = (|| -> Option<PathBuf> {
-        if let Some(folders) = &init_params.workspace_folders {
-            return folders.get(0)?.uri.to_file_path().ok();
-        }
-        if let Some(uri) = &init_params.root_uri {
-            return uri.to_file_path().ok();
-        }
-        env::current_dir().ok()
-    })();
 
-    let mut state = Server::new(conn.sender.clone(), workspace_path);
-    state.run(conn.receiver)?;
+    let mut server = Server::new(conn.sender.clone());
+    server.run(conn.receiver, init_params)?;
 
     tracing::info!("Leaving main loop");
     Ok(())
