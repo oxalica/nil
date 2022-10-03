@@ -64,6 +64,7 @@ impl Vfs {
                 self.change.change_file(file, text);
                 if !is_valid {
                     self.local_file_set.remove_file(file);
+                    self.root_changed = true;
                 }
             }
             None => {
@@ -72,6 +73,7 @@ impl Vfs {
                 }
                 let file = FileId(u32::try_from(self.files.len()).expect("Length overflow"));
                 self.local_file_set.insert(file, path);
+                self.root_changed = true;
                 self.files.push((text.clone(), line_map));
                 self.change.change_file(file, text);
             }
@@ -120,8 +122,7 @@ impl Vfs {
 
     pub fn take_change(&mut self) -> Change {
         let mut change = mem::take(&mut self.change);
-        if self.root_changed {
-            self.root_changed = false;
+        if mem::take(&mut self.root_changed) {
             // TODO: Configurable.
             let entry = ["/flake.nix", "/default.nix"].iter().find_map(|&path| {
                 let path = VfsPath::new(path).unwrap();
