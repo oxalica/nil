@@ -64,7 +64,7 @@
           devShells.default = pkgs.mkShell {
             packages = with pkgs; with rustPkgs; [
               # Override the stable rustfmt.
-              rust-nightly_2022-08-01.availableComponents.rustfmt
+              rust-nightly_2022-10-01.availableComponents.rustfmt
               rust
               nix.out # For generation of builtins.
               gdb
