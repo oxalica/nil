@@ -17,6 +17,7 @@ use smol_str::SmolStr;
 use std::fmt;
 
 pub use completion::{CompletionItem, CompletionItemKind};
+pub use goto_definition::GotoDefinitionResult;
 pub use hover::HoverResult;
 pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
@@ -110,7 +111,7 @@ impl Analysis {
         self.with_db(|db| diagnostics::diagnostics(db, file))
     }
 
-    pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<Vec<NavigationTarget>>> {
+    pub fn goto_definition(&self, pos: FilePos) -> Cancellable<Option<GotoDefinitionResult>> {
         self.with_db(|db| goto_definition::goto_definition(db, pos))
     }
 

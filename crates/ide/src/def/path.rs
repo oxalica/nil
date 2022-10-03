@@ -15,7 +15,7 @@ impl salsa::InternKey for Path {
 }
 
 impl Path {
-    pub(crate) fn resolve_path_query(db: &dyn DefDatabase, path: Path) -> Option<FileId> {
+    pub(crate) fn resolve_path_query(db: &dyn DefDatabase, path: Path) -> Option<VfsPath> {
         let data = path.data(db);
         let file = match &data.anchor {
             &PathAnchor::Relative(file) => file,
@@ -29,17 +29,14 @@ impl Path {
             vpath.pop()?;
         }
         vpath.push(&data.relative);
-        root.file_for_path(&vpath).or_else(|| {
-            vpath.push_segment("default.nix").unwrap();
-            root.file_for_path(&vpath)
-        })
+        Some(vpath)
     }
 
     pub fn data(self, db: &dyn DefDatabase) -> PathData {
         db.lookup_intern_path(self)
     }
 
-    pub fn resolve(self, db: &dyn DefDatabase) -> Option<FileId> {
+    pub fn resolve(self, db: &dyn DefDatabase) -> Option<VfsPath> {
         db.resolve_path(self)
     }
 }

@@ -1,5 +1,5 @@
 use crate::{convert, Result, StateSnapshot};
-use ide::FileRange;
+use ide::{FileRange, GotoDefinitionResult};
 use lsp_types::{
     CompletionParams, CompletionResponse, Diagnostic, DocumentFormattingParams,
     DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
@@ -8,10 +8,12 @@ use lsp_types::{
     SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
     TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
+use std::path::Path;
 use std::process;
 use std::sync::Arc;
 use text_size::TextRange;
 
+const DEFAULT_CHILD: &str = "default.nix";
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 
 pub(crate) fn diagnostics(snap: StateSnapshot, uri: &Url) -> Result<Vec<Diagnostic>> {
@@ -27,17 +29,32 @@ pub(crate) fn goto_definition(
     params: GotoDefinitionParams,
 ) -> Result<Option<GotoDefinitionResponse>> {
     let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
-    let targets = match snap.analysis.goto_definition(fpos)? {
-        None => return Ok(None),
-        Some(targets) => targets,
-    };
+    let ret = snap.analysis.goto_definition(fpos)?;
     let vfs = snap.vfs();
-    let targets = targets
-        .into_iter()
-        .map(|target| {
-            convert::to_location(&vfs, FileRange::new(target.file_id, target.focus_range))
-        })
-        .collect::<Vec<_>>();
+    let targets = match ret {
+        None => return Ok(None),
+        Some(GotoDefinitionResult::Path(vpath)) => {
+            let path = Path::new(vpath.as_str());
+            let default_child = path.join(DEFAULT_CHILD);
+            let target_path = if path.is_file() {
+                path
+            } else if default_child.is_file() {
+                &default_child
+            } else {
+                return Ok(None);
+            };
+            vec![Location {
+                uri: Url::from_file_path(target_path).unwrap(),
+                range: Range::default(),
+            }]
+        }
+        Some(GotoDefinitionResult::Targets(targets)) => targets
+            .into_iter()
+            .map(|target| {
+                convert::to_location(&vfs, FileRange::new(target.file_id, target.focus_range))
+            })
+            .collect(),
+    };
     Ok(Some(GotoDefinitionResponse::Array(targets)))
 }
 

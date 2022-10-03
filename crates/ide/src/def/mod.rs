@@ -7,7 +7,7 @@ mod path;
 mod tests;
 
 use crate::base::SourceDatabase;
-use crate::{Diagnostic, FileId, SourceRootId};
+use crate::{Diagnostic, FileId, SourceRootId, VfsPath};
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
@@ -42,7 +42,7 @@ pub trait DefDatabase: SourceDatabase {
     fn source_root_closure(&self, id: SourceRootId) -> Arc<HashSet<FileId>>;
 
     #[salsa::invoke(Path::resolve_path_query)]
-    fn resolve_path(&self, path: Path) -> Option<FileId>;
+    fn resolve_path(&self, path: Path) -> Option<VfsPath>;
 
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
@@ -143,14 +143,21 @@ impl Module {
         db: &dyn DefDatabase,
         file_id: FileId,
     ) -> Arc<HashSet<FileId>> {
+        let source_root = db.source_root(db.file_source_root(file_id));
         let refs = db
             .module(file_id)
             .exprs()
-            .filter_map(|(_, kind)| match kind {
-                &Expr::Literal(Literal::Path(p)) => Some(p),
-                _ => None,
+            .filter_map(|(_, kind)| {
+                let path = match kind {
+                    &Expr::Literal(Literal::Path(p)) => p,
+                    _ => return None,
+                };
+                let mut vpath = path.resolve(db)?;
+                source_root.file_for_path(&vpath).or_else(|| {
+                    vpath.push_segment("default.nix");
+                    source_root.file_for_path(&vpath)
+                })
             })
-            .filter_map(|path| path.resolve(db))
             .collect();
         Arc::new(refs)
     }

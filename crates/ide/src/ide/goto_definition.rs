@@ -1,14 +1,19 @@
 use super::NavigationTarget;
 use crate::def::{AstPtr, Expr, Literal, ResolveResult};
-use crate::{DefDatabase, FilePos};
+use crate::{DefDatabase, FilePos, VfsPath};
 use rowan::ast::AstNode;
-use rowan::{TextRange, TextSize};
 use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, T};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GotoDefinitionResult {
+    Path(VfsPath),
+    Targets(Vec<NavigationTarget>),
+}
 
 pub(crate) fn goto_definition(
     db: &dyn DefDatabase,
     FilePos { file_id, pos }: FilePos,
-) -> Option<Vec<NavigationTarget>> {
+) -> Option<GotoDefinitionResult> {
     let parse = db.parse(file_id);
     let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
     if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT | SyntaxKind::PATH) {
@@ -28,46 +33,38 @@ pub(crate) fn goto_definition(
     let source_map = db.source_map(file_id);
     let expr_id = source_map.expr_for_node(ptr)?;
 
+    // Special case for goto-path.
     if tok.kind() == SyntaxKind::PATH {
         let module = db.module(file_id);
         let path = match &module[expr_id] {
             Expr::Literal(Literal::Path(path)) => path,
             _ => return None,
         };
-        let target_file_id = path.resolve(db)?;
-        let full_range = TextRange::up_to(TextSize::of(&*db.file_content(target_file_id)));
-        let focus_range = TextRange::default();
-        return Some(vec![NavigationTarget {
-            file_id: target_file_id,
-            focus_range,
-            full_range,
-        }]);
+        let path = path.resolve(db)?;
+        return Some(GotoDefinitionResult::Path(path));
     }
 
     let name_res = db.name_resolution(file_id);
-    match name_res.get(expr_id)? {
-        &ResolveResult::Definition(name) => {
-            let targets = source_map
-                .nodes_for_name(name)
-                .filter_map(|ptr| {
-                    let name_node = ptr.to_node(&parse.syntax_node());
-                    let full_node = name_node.ancestors().find(|n| {
-                        matches!(
-                            n.kind(),
-                            SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
-                        )
-                    })?;
-                    Some(NavigationTarget {
-                        file_id,
-                        focus_range: name_node.text_range(),
-                        full_range: full_node.text_range(),
-                    })
+    let targets = match name_res.get(expr_id)? {
+        &ResolveResult::Definition(name) => source_map
+            .nodes_for_name(name)
+            .filter_map(|ptr| {
+                let name_node = ptr.to_node(&parse.syntax_node());
+                let full_node = name_node.ancestors().find(|n| {
+                    matches!(
+                        n.kind(),
+                        SyntaxKind::LAMBDA | SyntaxKind::ATTR_PATH_VALUE | SyntaxKind::INHERIT
+                    )
+                })?;
+                Some(NavigationTarget {
+                    file_id,
+                    focus_range: name_node.text_range(),
+                    full_range: full_node.text_range(),
                 })
-                .collect();
-            Some(targets)
-        }
+            })
+            .collect(),
         ResolveResult::WithExprs(withs) => {
-            let targets = withs
+            withs
                 .iter()
                 .filter_map(|&with_expr| {
                     // with expr; body
@@ -89,36 +86,50 @@ pub(crate) fn goto_definition(
                         full_range: with_header,
                     })
                 })
-                .collect();
-            Some(targets)
+                .collect()
         }
         // Currently builtin names cannot "goto-definition".
-        ResolveResult::Builtin(_) => None,
-    }
+        ResolveResult::Builtin(_) => return None,
+    };
+
+    Some(GotoDefinitionResult::Targets(targets))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::base::SourceDatabase;
     use crate::tests::TestDB;
     use expect_test::{expect, Expect};
 
+    #[track_caller]
+    fn check_no(fixture: &str) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(goto_definition(&db, f[0]), None);
+    }
+
+    #[track_caller]
     fn check(fixture: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        let targets = super::goto_definition(&db, f[0])
-            .into_iter()
-            .flatten()
-            .map(|target| {
-                assert!(target.full_range.contains_range(target.focus_range));
-                let src = db.file_content(target.file_id);
-                let mut full = src[target.full_range].to_owned();
-                let relative_focus = target.focus_range - target.full_range.start();
-                full.insert(relative_focus.end().into(), '>');
-                full.insert(relative_focus.start().into(), '<');
-                full
-            })
-            .collect::<Vec<_>>();
-        let mut got = targets.join("\n");
+        let mut got = match goto_definition(&db, f[0]).expect("No definition") {
+            GotoDefinitionResult::Path(path) => format!("file://{}", path.as_str()),
+            GotoDefinitionResult::Targets(targets) => {
+                assert!(!targets.is_empty());
+                targets
+                    .into_iter()
+                    .map(|target| {
+                        assert!(target.full_range.contains_range(target.focus_range));
+                        let src = db.file_content(target.file_id);
+                        let mut full = src[target.full_range].to_owned();
+                        let relative_focus = target.focus_range - target.full_range.start();
+                        full.insert(relative_focus.end().into(), '>');
+                        full.insert(relative_focus.start().into(), '<');
+                        full
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        };
         // Prettify.
         if got.contains('\n') {
             got += "\n";
@@ -128,14 +139,14 @@ mod tests {
 
     #[test]
     fn not_found() {
-        check("$0a", expect![]);
-        check("b: $0a", expect![]);
+        check_no("$0a");
+        check_no("b: $0a");
     }
 
     #[test]
     fn invalid_position() {
-        check("1 $0+ 2", expect![]);
-        check("wi$0th 1; 2", expect![]);
+        check_no("1 $0+ 2");
+        check_no("wi$0th 1; 2");
     }
 
     #[test]
@@ -205,12 +216,12 @@ mod tests {
     #[test]
     fn builtin() {
         check("let true = 1; in $0true && false", expect!["<true> = 1;"]);
-        check("let true = 1; in true && $0false", expect![""]);
+        check_no("let true = 1; in true && $0false");
     }
 
     #[test]
     fn path() {
-        check("1 + $0./.", expect!["<>1 + ./."]);
+        check("1 + $0./.", expect!["file://"]);
         check(
             "
 #- /default.nix
@@ -219,7 +230,7 @@ import $0./bar.nix
 #- /bar.nix
 hello
             ",
-            expect!["<>hello"],
+            expect!["file:///bar.nix"],
         );
     }
 }

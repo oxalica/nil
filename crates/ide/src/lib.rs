@@ -8,8 +8,9 @@ mod text_edit;
 mod tests;
 
 pub use self::ide::{
-    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, HlKeyword, HlOperator,
-    HlPunct, HlRange, HlTag, HoverResult, NavigationTarget, RenameResult, RootDatabase, SymbolTree,
+    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, GotoDefinitionResult,
+    HlKeyword, HlOperator, HlPunct, HlRange, HlTag, HoverResult, NavigationTarget, RenameResult,
+    RootDatabase, SymbolTree,
 };
 pub use base::{
     Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,
