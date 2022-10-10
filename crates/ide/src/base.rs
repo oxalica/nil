@@ -2,7 +2,7 @@ use rowan::{TextRange, TextSize};
 use salsa::Durability;
 use std::collections::HashMap;
 use std::fmt;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,71 +11,85 @@ pub struct FileId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceRootId(pub u32);
 
-/// An absolute path in format `(/.+)*`
-/// Currently, it represent an absolute filesytem path.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// An absolute Unix-like path in the virtual filesystem.
+///
+/// It must be in form `(/[^/]+)+` and every segment must be non-empty and not `.` or `..`.
+/// The root represented by an empty path.
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VfsPath(String);
 
 impl VfsPath {
     pub fn root() -> Self {
-        Self(String::new())
+        Self::default()
     }
 
-    pub fn from_path(p: &Path) -> Option<Self> {
-        Self::new(p.to_str()?)
+    /// Construct a new absolute path in Unix-like format.
+    pub fn new(s: impl Into<String>) -> Result<Self, ParseVfsPathError> {
+        let s = s.into();
+        if s == "/" {
+            return Ok(Self::root());
+        }
+        if !s.starts_with('/') || s[1..].split('/').any(|seg| matches!(seg, "" | "." | "..")) {
+            return Err(ParseVfsPathError);
+        }
+        Ok(Self(s))
     }
 
-    pub fn new(s: impl Into<String>) -> Option<Self> {
-        let mut s: String = s.into();
-        if s.is_empty() || s == "/" {
-            return Some(Self::root());
+    pub fn from_path(path: &Path) -> Result<Self, ParseVfsPathError> {
+        let mut ret = Self::root();
+        for comp in path.components() {
+            match comp {
+                Component::RootDir => {}
+                Component::Normal(seg) => {
+                    ret.push_segment(seg.to_str().ok_or(ParseVfsPathError)?);
+                }
+                _ => return Err(ParseVfsPathError),
+            }
         }
-        if s.ends_with('/') || s.as_bytes().windows(2).any(|w| w == b"//") {
-            return None;
-        }
-        if !s.starts_with('/') {
-            s.insert(0, '/');
-        }
-        Some(Self(s))
+        Ok(ret)
     }
 
-    pub fn push(&mut self, relative: &Self) {
+    /// Assume another VfsPath as relative and append it to this one.
+    pub fn append(&mut self, relative: &Self) {
         self.0.push_str(&relative.0);
     }
 
-    pub fn push_segment(&mut self, segment: &str) -> Option<()> {
-        if !segment.contains('/') {
-            self.0 += "/";
-            self.0 += segment;
-            Some(())
-        } else {
-            None
-        }
+    /// Push a path segment at the end.
+    /// Panic if it is empty or contains `/`.
+    pub fn push_segment(&mut self, segment: &str) {
+        assert!(!segment.is_empty() && !segment.contains('/'));
+        self.0 += "/";
+        self.0 += segment;
     }
 
+    /// Pop the last segment from the end.
+    /// Returns `None` if it is already the root.
     pub fn pop(&mut self) -> Option<()> {
         self.0.truncate(self.0.rsplit_once('/')?.0.len());
         Some(())
     }
 
+    /// Get the path in Unix-like form.
     pub fn as_str(&self) -> &str {
-        &self.0
+        if !self.0.is_empty() {
+            &self.0
+        } else {
+            "/"
+        }
     }
 }
 
-impl TryFrom<String> for VfsPath {
-    type Error = ();
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::new(s).ok_or(())
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct ParseVfsPathError;
+
+impl fmt::Display for ParseVfsPathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Invalid VfsPath")
     }
 }
 
-impl<'a> TryFrom<&'a str> for VfsPath {
-    type Error = ();
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        Self::new(s).ok_or(())
-    }
-}
+impl std::error::Error for ParseVfsPathError {}
 
 /// A set of [`VfsPath`]s identified by [`FileId`]s.
 #[derive(Default, Clone, PartialEq, Eq)]

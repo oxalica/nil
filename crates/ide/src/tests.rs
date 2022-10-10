@@ -37,7 +37,7 @@ impl TestDB {
             change.change_file(file, text.to_owned().into());
         }
         let entry = file_set
-            .file_for_path(&"/default.nix".try_into().unwrap())
+            .file_for_path(&VfsPath::new("/default.nix").unwrap())
             .context("Missing entry file")?;
         change.set_roots(vec![SourceRoot::new_local(file_set, Some(entry))]);
         change.apply(&mut db);
@@ -101,7 +101,7 @@ impl Fixture {
             if let Some(path) = line.strip_prefix("#- ") {
                 ensure!(!missing_header, "Missing path header at the first line");
 
-                let path = VfsPath::new(path).context("Invalid path")?;
+                let path = VfsPath::new(path)?;
                 if let Some(prev_path) = cur_path.replace(path) {
                     this.insert_file(prev_path, mem::take(&mut cur_text))?;
                     cur_file.0 += 1;
@@ -109,7 +109,7 @@ impl Fixture {
             } else {
                 if cur_path.is_none() {
                     missing_header = true;
-                    cur_path = Some("/default.nix".try_into().unwrap());
+                    cur_path = Some(VfsPath::new("/default.nix").unwrap());
                 }
 
                 let mut iter = line.chars().peekable();

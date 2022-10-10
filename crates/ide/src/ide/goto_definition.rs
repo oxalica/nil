@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn path() {
-        check("1 + $0./.", expect!["file://"]);
+        check("1 + $0./.", expect!["file:///"]);
         check(
             "
 #- /default.nix
