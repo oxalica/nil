@@ -27,3 +27,7 @@ features = [
     "std",
     "tracing-log",
 ]
+
+[target.'cfg(target_os="linux")'.dependencies]
+async-pidfd = { version = "0.1.4", default_features = false }
+libc = "0.2.135"

@@ -30,6 +30,7 @@ type Task = Box<dyn FnOnce() -> Event + Send>;
 enum Event {
     Response(Response),
     Diagnostics(Url, Vec<Diagnostic>),
+    ClientExited,
 }
 
 pub struct Server {
@@ -86,7 +87,24 @@ impl Server {
         }
     }
 
-    pub fn run(&mut self, lsp_rx: Receiver<Message>, _init_params: InitializeParams) -> Result<()> {
+    pub fn run(&mut self, lsp_rx: Receiver<Message>, init_params: InitializeParams) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        if let Some(pid) = init_params.process_id {
+            let event_tx = self.event_tx.clone();
+            thread::spawn(move || {
+                let ret = async_pidfd::PidFd::from_pid(pid as _).and_then(|pidfd| pidfd.wait());
+                match ret {
+                    Ok(_) => {}
+                    Err(err) if err.raw_os_error() == Some(libc::ESRCH) => {}
+                    Err(err) => {
+                        tracing::error!("Failed to monitor parent pid {}: {}", pid, err);
+                        return;
+                    }
+                }
+                let _ = event_tx.send(Event::ClientExited);
+            });
+        }
+
         loop {
             crossbeam_channel::select! {
                 recv(lsp_rx) -> msg => {
@@ -106,13 +124,13 @@ impl Server {
                     }
                 }
                 recv(self.event_rx) -> event => {
-                    self.dispatch_event(event.map_err(|_| "Worker panicked")?);
+                    self.dispatch_event(event.map_err(|_| "Worker panicked")?)?;
                 }
             }
         }
     }
 
-    fn dispatch_event(&mut self, event: Event) {
+    fn dispatch_event(&mut self, event: Event) -> Result<()> {
         match event {
             Event::Response(resp) => {
                 if let Some(()) = self.req_queue.incoming.complete(resp.id.clone()) {
@@ -126,7 +144,11 @@ impl Server {
                     version: None,
                 });
             }
+            Event::ClientExited => {
+                return Err("The process initializing this server is exited. Stopping.".into());
+            }
         }
+        Ok(())
     }
 
     fn dispatch_request(&mut self, req: Request) {
