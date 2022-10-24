@@ -42,7 +42,19 @@ let
     let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
     let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
     set termguicolors
+
     packadd! nightfox.nvim
+    " https://github.com/EdenEast/nightfox.nvim/issues/218
+    lua <<EOF
+      require("nightfox").setup({
+        options = {
+          modules = {
+            native_lsp = { enable = false },
+            treesitter = false,
+          },
+        },
+      })
+    EOF
     colorscheme nightfox
 
     highlight link Identifier        TSVariable
