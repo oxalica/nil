@@ -9,8 +9,8 @@ use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::collections::HashMap;
-use std::str;
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
+use syntax::semantic::AttrKind;
 use syntax::Parse;
 
 pub(super) fn lower(
@@ -300,63 +300,6 @@ impl LowerCtx<'_> {
     }
 }
 
-enum AttrKind {
-    Static(SmolStr),
-    Dynamic(Option<ast::Expr>),
-}
-
-impl AttrKind {
-    fn classify(attr: ast::Attr) -> Self {
-        let string_node = match attr {
-            ast::Attr::String(s) => s,
-            ast::Attr::Name(n) => {
-                let name = n
-                    .token()
-                    .map_or_else(Default::default, |tok| tok.text().into());
-                return Self::Static(name);
-            }
-            // Unwrap parenthesis around string literals.
-            // `{ ${(("foo"))} = 1; }` => `{ "foo" = 1; }`
-            ast::Attr::Dynamic(d) => {
-                let mut e = d.expr();
-                loop {
-                    match e {
-                        Some(ast::Expr::String(s)) => break s,
-                        Some(ast::Expr::Paren(p)) => e = p.expr(),
-                        _ => return Self::Dynamic(e),
-                    }
-                }
-            }
-        };
-
-        if string_node
-            .string_parts()
-            .any(|part| matches!(part, ast::StringPart::Dynamic(_)))
-        {
-            return Self::Dynamic(Some(ast::Expr::String(string_node)));
-        }
-
-        let content = string_node
-            .string_parts()
-            .fold(String::new(), |prev, part| match part {
-                ast::StringPart::Dynamic(_) => unreachable!(),
-                ast::StringPart::Fragment(tok) => prev + tok.text(),
-                ast::StringPart::Escape(tok) => {
-                    prev + match tok.text().as_bytes() {
-                        b"\\n" => "\n",
-                        b"\\r" => "\r",
-                        b"\\t" => "\t",
-                        [b'\\', bytes @ ..] => {
-                            str::from_utf8(bytes).expect("Verified by the lexer")
-                        }
-                        _ => unreachable!("Verified by the lexer"),
-                    }
-                }
-            });
-        Self::Static(content.into())
-    }
-}
-
 #[derive(Debug)]
 struct MergingSet {
     name_kind: NameKind,
@@ -427,8 +370,8 @@ impl MergingSet {
             no_attrs = false;
 
             let ptr = AstPtr::new(attr.syntax());
-            let text = match AttrKind::classify(attr) {
-                AttrKind::Static(name) => name,
+            let text = match AttrKind::of(attr) {
+                AttrKind::Static(text) => SmolStr::from(text.unwrap_or_default()),
                 // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
                 AttrKind::Dynamic(expr) => {
                     ctx.diagnostic(Diagnostic::new(
@@ -489,8 +432,9 @@ impl MergingSet {
 
         loop {
             let attr_ptr = AstPtr::new(next_attr.syntax());
-            let entry = match AttrKind::classify(next_attr) {
+            let entry = match AttrKind::of(next_attr) {
                 AttrKind::Static(text) => {
+                    let text = SmolStr::from(text.unwrap_or_default());
                     match self.statics.entry(text.clone()) {
                         Entry::Occupied(entry) => {
                             // Append this location to the existing name.

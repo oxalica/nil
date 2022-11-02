@@ -252,6 +252,16 @@ enums! {
     },
 }
 
+impl Expr {
+    pub fn flatten_paren(self) -> Option<Self> {
+        let mut cur = Some(self);
+        while let Some(Self::Paren(p)) = cur {
+            cur = p.expr();
+        }
+        cur
+    }
+}
+
 asts! {
     SOURCE_FILE = SourceFile {
         expr: Expr,
