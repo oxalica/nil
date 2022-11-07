@@ -1,5 +1,6 @@
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
+use crate::ty::TyDatabaseStorage;
 use crate::{Change, DefDatabase, FileId, FilePos, FileSet, SourceRoot, VfsPath};
 use anyhow::{ensure, Context, Result};
 use indexmap::IndexMap;
@@ -10,7 +11,7 @@ use syntax::{NixLanguage, SyntaxNode};
 
 pub const MARKER_INDICATOR: char = '$';
 
-#[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
+#[salsa::database(SourceDatabaseStorage, DefDatabaseStorage, TyDatabaseStorage)]
 #[derive(Default)]
 pub struct TestDB {
     storage: salsa::Storage<Self>,

@@ -121,6 +121,7 @@ name = "ide"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bitflags",
  "builtin",
  "either",
  "expect-test",
