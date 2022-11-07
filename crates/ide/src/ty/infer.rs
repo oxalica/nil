@@ -14,6 +14,12 @@ use syntax::ast::{BinaryOpKind, UnaryOpKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ty(u32);
 
+impl Ty {
+    pub fn kind(self, infer: &InferenceResult) -> &TyKind {
+        infer.kind(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyKind {
     Unknown,
@@ -35,6 +41,13 @@ pub enum TyKind {
 impl TyKind {
     fn intern(self, ctx: &mut InferCtx<'_>) -> Ty {
         Ty(ctx.table.push(self))
+    }
+
+    pub fn as_attrset(&self) -> Option<&Attrset> {
+        match self {
+            Self::Attrset(v) => Some(v),
+            _ => None,
+        }
     }
 }
 
