@@ -55,6 +55,14 @@ impl TyKind {
 pub struct Attrset(BTreeMap<SmolStr, Ty>);
 
 impl Attrset {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn get(&self, field: &str) -> Option<Ty> {
         self.0.get(field).copied()
     }
@@ -85,7 +93,11 @@ impl InferenceResult {
     }
 
     pub fn display_ty(&self, ty: Ty) -> TyDisplay<'_> {
-        TyDisplay::new(ty, self)
+        TyDisplay::new(ty, self, 2)
+    }
+
+    pub fn debug_ty(&self, ty: Ty) -> TyDisplay<'_> {
+        TyDisplay::new(ty, self, usize::MAX)
     }
 }
 

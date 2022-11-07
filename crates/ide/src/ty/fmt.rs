@@ -1,20 +1,24 @@
-//! TODO: Limit type length.
 use super::{InferenceResult, Ty, TyKind};
 use std::fmt;
+
+const MAX_FIELD_CNT: usize = 8;
 
 #[derive(Clone, Copy)]
 pub struct TyDisplay<'a> {
     ty: Ty,
     infer: &'a InferenceResult,
+    depth: usize,
+    in_param: bool,
 }
 
 impl<'a> TyDisplay<'a> {
-    pub fn new(ty: Ty, infer: &'a InferenceResult) -> Self {
-        Self { ty, infer }
-    }
-
-    fn with(self, ty: Ty) -> Self {
-        Self::new(ty, self.infer)
+    pub fn new(ty: Ty, infer: &'a InferenceResult, depth: usize) -> Self {
+        Self {
+            ty,
+            infer,
+            depth,
+            in_param: false,
+        }
     }
 }
 
@@ -27,21 +31,74 @@ impl fmt::Display for TyDisplay<'_> {
             TyKind::Float => "float".fmt(f),
             TyKind::String => "string".fmt(f),
             TyKind::Path => "path".fmt(f),
-            &TyKind::List(elem) => write!(f, "[{}]", self.with(elem)),
-            &TyKind::Lambda(a, b) => write!(f, "{} -> {}", self.with(a), self.with(b)),
-            TyKind::Attrset(set) => {
-                write!(f, "{{")?;
-                let mut first = true;
-                for (name, ty) in set.iter() {
-                    if first {
-                        first = false;
-                    } else {
-                        write!(f, ",")?;
-                    }
-                    // FIXME: Escape field names.
-                    write!(f, " {}: {}", name, self.with(ty))?;
+            &TyKind::List(ty) => {
+                if self.depth == 0 {
+                    "[…]".fmt(f)
+                } else {
+                    let elem = Self {
+                        ty,
+                        infer: self.infer,
+                        depth: self.depth - 1,
+                        in_param: false,
+                    };
+                    write!(f, "[{}]", elem)
                 }
-                write!(f, " }}")
+            }
+            &TyKind::Lambda(param, ret) => {
+                if self.in_param {
+                    "(".fmt(f)?;
+                }
+                if self.depth == 0 {
+                    "… → …".fmt(f)?;
+                } else {
+                    let param = Self {
+                        ty: param,
+                        infer: self.infer,
+                        // Show full lambda type.
+                        depth: self.depth,
+                        in_param: true,
+                    };
+                    let ret = Self {
+                        ty: ret,
+                        infer: self.infer,
+                        // Show full lambda type.
+                        depth: self.depth,
+                        in_param: false,
+                    };
+                    write!(f, "{} → {}", param, ret)?;
+                }
+                if self.in_param {
+                    ")".fmt(f)?;
+                }
+                Ok(())
+            }
+            TyKind::Attrset(set) => {
+                if self.depth == 0 {
+                    "{ … }".fmt(f)
+                } else {
+                    "{".fmt(f)?;
+                    let mut first = true;
+                    for (name, ty) in set.iter().take(MAX_FIELD_CNT) {
+                        if first {
+                            first = false;
+                        } else {
+                            ",".fmt(f)?;
+                        }
+                        // FIXME: Escape field names.
+                        let value = Self {
+                            ty,
+                            infer: self.infer,
+                            depth: self.depth - 1,
+                            in_param: false,
+                        };
+                        write!(f, " {}: {}", name, value)?;
+                    }
+                    if set.len() > MAX_FIELD_CNT {
+                        ", … }".fmt(f)
+                    } else {
+                        " }".fmt(f)
+                    }
+                }
             }
         }
     }

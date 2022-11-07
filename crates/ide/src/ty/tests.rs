@@ -7,7 +7,7 @@ fn check(src: &str, expect: Expect) {
     let module = db.module(file);
     let infer = db.infer(file);
     let ty = infer.ty_for_expr(module.entry_expr());
-    let got = infer.display_ty(ty).to_string();
+    let got = infer.debug_ty(ty).to_string();
     expect.assert_eq(&got);
 }
 
@@ -17,16 +17,10 @@ fn check_all(src: &str, expect: Expect) {
     let infer = db.infer(file);
     let got = module
         .names()
-        .map(|(i, name)| {
-            format!(
-                "{}: {}\n",
-                name.text,
-                infer.display_ty(infer.ty_for_name(i))
-            )
-        })
+        .map(|(i, name)| format!("{}: {}\n", name.text, infer.debug_ty(infer.ty_for_name(i))))
         .chain([format!(
             ": {}\n",
-            infer.display_ty(infer.ty_for_expr(module.entry_expr()))
+            infer.debug_ty(infer.ty_for_expr(module.entry_expr()))
         )])
         .collect::<String>();
     expect.assert_eq(&got);
@@ -116,32 +110,32 @@ fn if_then_else() {
 
 #[test]
 fn lambda() {
-    check("a: a", expect!["? -> ?"]);
+    check("a: a", expect!["? → ?"]);
     check("(a: a) 1", expect!["int"]);
 
-    check("{ }: 1", expect!["{ } -> int"]);
+    check("{ }: 1", expect!["{ } → int"]);
     check_all(
         "{ a ? b, b ? 42 }@c: b",
         expect![[r#"
             c: { a: int, b: int }
             a: int
             b: int
-            : { a: int, b: int } -> int
+            : { a: int, b: int } → int
         "#]],
     );
 }
 
 #[test]
 fn select() {
-    check("a: a.b.c", expect!["{ b: { c: ? } } -> ?"]);
-    check("a: a.b.c or 42", expect!["{ b: { c: int } } -> int"]);
+    check("a: a.b.c", expect!["{ b: { c: ? } } → ?"]);
+    check("a: a.b.c or 42", expect!["{ b: { c: int } } → int"]);
 
     check_all(
         "a: b: a.${b}",
         expect![[r#"
             a: { }
             b: string
-            : { } -> string -> ?
+            : { } → string → ?
         "#]],
     );
 }
