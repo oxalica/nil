@@ -1,11 +1,11 @@
-use crate::def::{AstPtr, NameKind};
+use crate::def::{AstPtr, BindingValue, Expr, NameKind};
 use crate::{FileId, FilePos, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use syntax::semantic::AttrKind;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
+use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, TextRange, T};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[
@@ -20,7 +20,6 @@ const EXPR_POS_KEYWORDS: &[&str] = &[
     // "then",
     "with",
 ];
-const ATTR_POS_KEYWORDS: &[&str] = &["inherit"];
 
 /// A single completion variant in the editor pop-up.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,26 +97,7 @@ pub(crate) fn completions(
 
     match node {
         Left(ref_node) => complete_expr(db, file_id, source_range, ref_node),
-        Right(name_node) => {
-            let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
-            let parent_node = path_node.syntax().parent()?;
-            let container_node = match_ast! {
-                match parent_node {
-                    ast::AttrpathValue(_) => parent_node.parent()?,
-                    ast::HasAttr(n) => n.set()?.syntax().clone(),
-                    ast::Select(n) => n.set()?.syntax().clone(),
-                    _ => return None,
-                }
-            };
-            complete_attrpath(
-                db,
-                file_id,
-                source_range,
-                container_node,
-                path_node,
-                name_node,
-            )
-        }
+        Right(name_node) => complete_attrpath(db, file_id, source_range, name_node),
     }
 }
 
@@ -209,27 +189,84 @@ fn complete_attrpath(
     db: &dyn TyDatabase,
     file_id: FileId,
     source_range: TextRange,
-    container_node: SyntaxNode,
-    path_node: ast::Attrpath,
     name_node: ast::Name,
 ) -> Option<Vec<CompletionItem>> {
-    let mut items = Vec::new();
+    let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
+    let (set_node, container_node) = match_ast! {
+        match (path_node.syntax().parent()?){
+            ast::AttrpathValue(n) => {
+                let n = n.syntax().parent()?;
+                (n.clone(), n)
+            },
+            ast::HasAttr(n) => (n.set()?.syntax().clone(), n.syntax().clone()),
+            ast::Select(n) => (n.set()?.syntax().clone(), n.syntax().clone()),
+            _ => return None,
+        }
+    };
 
     let is_let = ast::LetIn::can_cast(container_node.kind());
+    let is_attrset = ast::AttrSet::can_cast(container_node.kind());
     let attr_cnt = path_node.attrs().count();
+    let current_input = name_node
+        .token()
+        .map_or(SmolStr::default(), |tok| tok.text().into());
 
-    if attr_cnt <= 1 {
-        items.extend(
-            ATTR_POS_KEYWORDS
-                .iter()
-                .copied()
-                .chain(is_let.then_some("in"))
-                .map(|kw| keyword_to_completion(kw, source_range)),
-        )
+    let module = db.module(file_id);
+    let source_map = db.source_map(file_id);
+
+    let mut items = Vec::new();
+
+    // Only complete keywords when this Attrpath has only one Attr.
+    if attr_cnt == 1 && (is_let || is_attrset) {
+        items.push(keyword_to_completion("inherit", source_range));
+    }
+    if attr_cnt == 1 && is_let {
+        items.push(keyword_to_completion("in", source_range));
     }
 
+    // We are inside the first Attr of a Let.
+    // Completes all static names in the same `Let` for splited definition.
+    // ```nix
+    // let
+    //   foo.bar = 42;
+    //   f| # <- We may want to also define `foo.baz`.
+    // in /**/
+    // ```
+    // Note that the first Attr of an Attrset can be handled by types later.
+    if is_let
+        && path_node
+            .attrs()
+            .next()
+            .map_or(false, |attr| attr.syntax() == name_node.syntax())
+    {
+        if let Some(expr) = source_map.expr_for_node(AstPtr::new(&container_node)) {
+            if let Expr::LetIn(b, _) = &module[expr] {
+                items.extend(
+                    b.statics
+                        .iter()
+                        .filter(|(_, v)| matches!(v, BindingValue::Expr(_)))
+                        .map(|&(name, _)| module[name].text.clone())
+                        // We should not report current incomplete definition.
+                        // This is covered by `no_incomplete_field`.
+                        .filter(|name| *name != current_input)
+                        .map(|name| CompletionItem {
+                            label: name.clone(),
+                            source_range,
+                            replace: name,
+                            kind: CompletionItemKind::LetBinding,
+                            brief: None,
+                            doc: None,
+                        }),
+                );
+            }
+        }
+        return Some(items);
+    }
+
+    // If we get here, we are either inside a selection path `a.b|`,
+    // or non-first parts of a definition `{ a.b| }`.
+    // Use type information
     (|| -> Option<()> {
-        let source_map = db.source_map(file_id);
         let infer = db.infer(file_id);
 
         let mut attrs = path_node.attrs();
@@ -237,15 +274,15 @@ fn complete_attrpath(
             let name = source_map.name_for_node(AstPtr::new(attrs.next()?.syntax()))?;
             infer.ty_for_name(name)
         } else {
-            let container_expr = source_map.expr_for_node(AstPtr::new(&container_node))?;
-            infer.ty_for_expr(container_expr)
+            let set_expr = source_map.expr_for_node(AstPtr::new(&set_node))?;
+            infer.ty_for_expr(set_expr)
         };
 
-        // Resolve prefix paths, except for the last one.
-        // foo.a.b.c
+        // Resolve prefix paths, except for the current NAME.
+        // foo.a.b.c|.d
         // ^-----^
         let set = attrs
-            .take(attr_cnt.saturating_sub(if is_let { 2 } else { 1 }))
+            .take_while(|attr| attr.syntax() != name_node.syntax())
             .try_fold(set_ty, |set_ty, attr| match AttrKind::of(attr) {
                 AttrKind::Static(Some(field)) => set_ty.kind(&infer).as_attrset()?.get(&field),
                 _ => None,
@@ -253,9 +290,6 @@ fn complete_attrpath(
             .kind(&infer)
             .as_attrset()?;
 
-        let current_input = name_node
-            .token()
-            .map_or(SmolStr::default(), |tok| tok.text().into());
         items.extend(
             set.iter()
                 // We should not report current incomplete definition.
@@ -401,6 +435,11 @@ mod tests {
             expect!["(Field) { foo.bar = 1; }.foo"],
         );
         check(
+            "{ foo.bar = 1; }.f$0.bar",
+            "foo",
+            expect!["(Field) { foo.bar = 1; }.foo.bar"],
+        );
+        check(
             "{ foo.bar = 1; }.foo.b$0",
             "bar",
             expect!["(Field) { foo.bar = 1; }.foo.bar"],
@@ -419,11 +458,35 @@ mod tests {
     }
 
     #[test]
+    fn has_known_field() {
+        check(
+            "{ foo.bar = 1; } ? f$0",
+            "foo",
+            expect!["(Field) { foo.bar = 1; } ? foo"],
+        );
+        check(
+            "{ foo.bar = 1; } ? f$0.bar",
+            "foo",
+            expect!["(Field) { foo.bar = 1; } ? foo.bar"],
+        );
+        check(
+            "{ foo.bar = 1; } ? foo.b$0",
+            "bar",
+            expect!["(Field) { foo.bar = 1; } ? foo.bar"],
+        );
+    }
+
+    #[test]
     fn define_known_field_let() {
         check(
             "let a.f$0 = 1; in a.foo.bar",
             "foo",
             expect!["(Field) let a.foo = 1; in a.foo.bar"],
+        );
+        check(
+            "let a.f$0.bar = 1; in a.foo.bar",
+            "foo",
+            expect!["(Field) let a.foo.bar = 1; in a.foo.bar"],
         );
         check(
             "let a.foo.b$0 = 1; in a.foo.bar",
@@ -440,6 +503,11 @@ mod tests {
             expect!["(Field) let f = { foo }: foo.bar; in f { foo }"],
         );
         check(
+            "let f = { foo }: foo.bar; in f { f$0.bar }",
+            "foo",
+            expect!["(Field) let f = { foo }: foo.bar; in f { foo.bar }"],
+        );
+        check(
             "let f = { foo }: foo.bar; in f { foo.b$0 }",
             "bar",
             expect!["(Field) let f = { foo }: foo.bar; in f { foo.bar }"],
@@ -447,7 +515,18 @@ mod tests {
     }
 
     #[test]
+    fn define_let_sibling() {
+        check(
+            "let foo.bar = 1; f$0 in 1",
+            "foo",
+            expect!["(LetBinding) let foo.bar = 1; foo in 1"],
+        );
+    }
+
+    #[test]
     fn no_incomplete_field() {
         check_no("a: a.f$0", "f");
+        check_no("{ f$0 = 1; }", "f");
+        check_no("let f$0 = 1; in 1", "f");
     }
 }
