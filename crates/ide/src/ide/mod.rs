@@ -116,8 +116,12 @@ impl Analysis {
         self.with_db(|db| goto_definition::goto_definition(db, pos))
     }
 
-    pub fn completions(&self, pos: FilePos) -> Cancellable<Option<Vec<CompletionItem>>> {
-        self.with_db(|db| completion::completions(db, pos))
+    pub fn completions(
+        &self,
+        pos: FilePos,
+        trigger_char: Option<char>,
+    ) -> Cancellable<Option<Vec<CompletionItem>>> {
+        self.with_db(|db| completion::completions(db, pos, trigger_char))
     }
 
     pub fn references(&self, pos: FilePos) -> Cancellable<Option<Vec<FileRange>>> {

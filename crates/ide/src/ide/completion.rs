@@ -4,8 +4,9 @@ use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
+use syntax::ast::Attr;
 use syntax::semantic::AttrKind;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, TextRange, T};
+use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[
@@ -74,9 +75,16 @@ impl TryFrom<NameKind> for CompletionItemKind {
 
 pub(crate) fn completions(
     db: &dyn TyDatabase,
-    FilePos { file_id, pos }: FilePos,
+    fpos @ FilePos { file_id, pos }: FilePos,
+    trigger_char: Option<char>,
 ) -> Option<Vec<CompletionItem>> {
     let parse = db.parse(file_id);
+
+    if let Some(items) =
+        trigger_char.and_then(|ch| complete_trigger(db, fpos, parse.syntax_node(), ch))
+    {
+        return Some(items);
+    }
 
     let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
     let source_range = match tok.kind() {
@@ -99,6 +107,46 @@ pub(crate) fn completions(
         Left(ref_node) => complete_expr(db, file_id, source_range, ref_node),
         Right(name_node) => complete_attrpath(db, file_id, source_range, name_node),
     }
+}
+
+fn complete_trigger(
+    db: &dyn TyDatabase,
+    FilePos { file_id, pos }: FilePos,
+    root_node: SyntaxNode,
+    trigger_char: char,
+) -> Option<Vec<CompletionItem>> {
+    if !matches!(trigger_char, '.' | '?') {
+        return None;
+    }
+
+    let trigger_tok = root_node.token_at_offset(pos).left_biased()?;
+    let source_range = TextRange::empty(trigger_tok.text_range().end());
+    let path_node = match_ast! {
+        match (trigger_tok.parent()?) {
+            // `foo.bar.|` or `foo?bar.|`
+            ast::Attrpath(n) => n,
+            // `foo.|`
+            ast::Select(n) => n.attrpath()?,
+            // `foo?|`
+            ast::HasAttr(n) => n.attrpath()?,
+            _ => return None,
+        }
+    };
+
+    // There may be triva between `.` and NAME, due to parser lookahead.
+    // We skips them to locate the correct node, while keeping `source_range` at the cursor.
+    // `{ a.| = 42; }`
+    //     ^  \ NAME before here
+    //     DOT is here
+    let name_node = match path_node
+        .attrs()
+        .find(|attr| source_range.start() <= attr.syntax().text_range().start())?
+    {
+        Attr::Name(name) => name,
+        _ => return None,
+    };
+
+    complete_attrpath(db, file_id, source_range, name_node)
 }
 
 fn complete_expr(
@@ -348,15 +396,15 @@ mod tests {
     #[track_caller]
     fn check_no(fixture: &str, label: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        if let Some(compes) = super::completions(&db, f[0]) {
+        if let Some(compes) = super::completions(&db, f[0], None) {
             assert_eq!(compes.iter().find(|item| item.label == label), None);
         }
     }
 
     #[track_caller]
-    fn check(fixture: &str, label: &str, expect: Expect) {
+    fn check_trigger(fixture: &str, trigger_char: Option<char>, label: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        let compes = super::completions(&db, f[0]).expect("No completion");
+        let compes = super::completions(&db, f[0], trigger_char).expect("No completion");
         let item = compes
             .iter()
             .find(|item| item.label == label)
@@ -368,6 +416,11 @@ mod tests {
         completed.replace_range(source_range, &item.replace);
         let got = format!("({:?}) {}", item.kind, completed);
         expect.assert_eq(&got);
+    }
+
+    #[track_caller]
+    fn check(fixture: &str, label: &str, expect: Expect) {
+        check_trigger(fixture, None, label, expect);
     }
 
     #[test]
@@ -458,6 +511,28 @@ mod tests {
     }
 
     #[test]
+    fn trigger_select_known_field() {
+        check_trigger(
+            "{ foo.bar = 1; }.$0",
+            Some('.'),
+            "foo",
+            expect!["(Field) { foo.bar = 1; }.foo"],
+        );
+        check_trigger(
+            "{ foo.bar = 1; }.$0.bar",
+            Some('.'),
+            "foo",
+            expect!["(Field) { foo.bar = 1; }.foo.bar"],
+        );
+        check_trigger(
+            "{ foo.bar = 1; }.foo.$0",
+            Some('.'),
+            "bar",
+            expect!["(Field) { foo.bar = 1; }.foo.bar"],
+        );
+    }
+
+    #[test]
     fn has_known_field() {
         check(
             "{ foo.bar = 1; } ? f$0",
@@ -477,6 +552,28 @@ mod tests {
     }
 
     #[test]
+    fn trigger_has_known_field() {
+        check_trigger(
+            "{ foo.bar = 1; }?$0",
+            Some('?'),
+            "foo",
+            expect!["(Field) { foo.bar = 1; }?foo"],
+        );
+        check_trigger(
+            "{ foo.bar = 1; }?foo.$0",
+            Some('.'),
+            "bar",
+            expect!["(Field) { foo.bar = 1; }?foo.bar"],
+        );
+        check_trigger(
+            "{ foo.bar = 1; }?$0.bar",
+            Some('.'),
+            "foo",
+            expect!["(Field) { foo.bar = 1; }?foo.bar"],
+        );
+    }
+
+    #[test]
     fn define_known_field_let() {
         check(
             "let a.f$0 = 1; in a.foo.bar",
@@ -490,6 +587,28 @@ mod tests {
         );
         check(
             "let a.foo.b$0 = 1; in a.foo.bar",
+            "bar",
+            expect!["(Field) let a.foo.bar = 1; in a.foo.bar"],
+        );
+    }
+
+    #[test]
+    fn trigger_define_known_field_let() {
+        check_trigger(
+            "let a.$0 = 1; in a.foo.bar",
+            Some('.'),
+            "foo",
+            expect!["(Field) let a.foo = 1; in a.foo.bar"],
+        );
+        check_trigger(
+            "let a.$0.bar = 1; in a.foo.bar",
+            Some('.'),
+            "foo",
+            expect!["(Field) let a.foo.bar = 1; in a.foo.bar"],
+        );
+        check_trigger(
+            "let a.foo.$0 = 1; in a.foo.bar",
+            Some('.'),
             "bar",
             expect!["(Field) let a.foo.bar = 1; in a.foo.bar"],
         );

@@ -80,7 +80,10 @@ pub(crate) fn completion(
     params: CompletionParams,
 ) -> Result<Option<CompletionResponse>> {
     let (line_map, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
-    let items = match snap.analysis.completions(fpos)? {
+    let trigger_char = params
+        .context
+        .and_then(|ctx| ctx.trigger_character?.chars().next());
+    let items = match snap.analysis.completions(fpos, trigger_char)? {
         None => return Ok(None),
         Some(items) => items,
     };

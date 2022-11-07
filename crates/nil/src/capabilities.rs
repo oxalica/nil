@@ -20,7 +20,7 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
         )),
         definition_provider: Some(OneOf::Left(true)),
         completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![".".into()]),
+            trigger_characters: Some(vec![".".into(), "?".into()]),
             ..Default::default()
         }),
         references_provider: Some(OneOf::Left(true)),
