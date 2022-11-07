@@ -4,6 +4,7 @@ use builtin::ALL_BUILTINS;
 use rowan::ast::AstNode;
 use rowan::TextRange;
 use std::fmt::Write;
+use syntax::semantic::AttrKind;
 use syntax::{ast, best_token_at_offset, match_ast};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,11 +16,16 @@ pub struct HoverResult {
 pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> Option<HoverResult> {
     let parse = db.parse(file_id);
     let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
+    let mut name_node = None;
     let ptr = tok.parent_ancestors().find_map(|node| {
         match_ast! {
             match node {
                 ast::Ref(n) => Some(AstPtr::new(n.syntax())),
-                ast::Name(n) => Some(AstPtr::new(n.syntax())),
+                ast::Name(n) => {
+                    let ptr = AstPtr::new(n.syntax());
+                    name_node = Some(n);
+                    Some(ptr)
+                },
                 ast::Literal(n) => Some(AstPtr::new(n.syntax())),
                 _ => None,
             }
@@ -85,6 +91,42 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             range,
             markup: format!("{kind} `{text}`: `{ty}`"),
         });
+    }
+
+    // Selected attr type.
+    // `let a.b.c = 1; in a.b.c`
+    //                      ^ { c: int }
+    if let Some(ret) = name_node.and_then(|name_node| {
+        let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
+        let set_node = match_ast! {
+            match (path_node.syntax().parent()?) {
+                ast::HasAttr(n) => n.set(),
+                ast::Select(n) => n.set(),
+                _ => None,
+            }
+        }?;
+        let expr = source_map.expr_for_node(AstPtr::new(set_node.syntax()))?;
+        let mut ty = infer.ty_for_expr(expr);
+        for attr in path_node.attrs() {
+            ty = match AttrKind::of(attr.clone()) {
+                AttrKind::Static(Some(field)) => ty.kind(&infer).as_attrset()?.get(&field)?,
+                _ => return None,
+            };
+            if attr.syntax() == name_node.syntax() {
+                break;
+            }
+        }
+        let range = name_node.syntax().text_range();
+        let markup = format!(
+            "Field `{}`: `{}`",
+            name_node
+                .token()
+                .map_or_else(String::new, |t| t.text().into()),
+            infer.display_ty(ty),
+        );
+        Some(HoverResult { range, markup })
+    }) {
+        return Some(ret);
     }
 
     None
@@ -192,6 +234,25 @@ mod tests {
 
                 evaluates to `[ "foobar" "foobla" "fooabc" ]`.
             "#]],
+        );
+    }
+
+    #[test]
+    fn attrpath() {
+        check(
+            "let foo.$0bar = 1; in foo.bar",
+            "bar",
+            expect!["Attrset attribute `bar`: `int`"],
+        );
+        check(
+            "let foo.bar = 1; in foo.$0bar",
+            "bar",
+            expect!["Field `bar`: `int`"],
+        );
+        check(
+            "let foo.bar = 1; in foo?$0bar",
+            "bar",
+            expect!["Field `bar`: `int`"],
         );
     }
 }
