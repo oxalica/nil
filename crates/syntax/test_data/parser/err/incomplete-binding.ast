@@ -6,8 +6,12 @@
 65..66: ExpectAttr
 84..85: ExpectToken(SEMICOLON)
 84..85: ExpectAttr
-SOURCE_FILE@0..91
-  ATTR_SET@0..90
+93..94: ExpectAttr
+95..96: ExpectAttr
+95..96: ExpectToken(EQ)
+95..96: ExpectToken(SEMICOLON)
+SOURCE_FILE@0..97
+  ATTR_SET@0..96
     L_CURLY@0..1 "{"
     SPACE@1..4 "\n  "
     ATTR_PATH_VALUE@4..10
@@ -114,6 +118,15 @@ SOURCE_FILE@0..91
       LITERAL@86..87
         INT@86..87 "1"
       SEMICOLON@87..88 ";"
-    SPACE@88..89 "\n"
-    R_CURLY@89..90 "}"
-  SPACE@90..91 "\n"
+    SPACE@88..91 "\n  "
+    ATTR_PATH_VALUE@91..95
+      ATTR_PATH@91..95
+        NAME@91..92
+          IDENT@91..92 "x"
+        DOT@92..93 "."
+        NAME@93..93
+        DOT@93..94 "."
+        SPACE@94..95 "\n"
+        NAME@95..95
+    R_CURLY@95..96 "}"
+  SPACE@96..97 "\n"

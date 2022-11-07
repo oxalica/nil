@@ -1,0 +1,76 @@
+10..11: ExpectAttr
+20..21: ExpectAttr
+32..33: ExpectAttr
+44..45: ExpectAttr
+SOURCE_FILE@0..48
+  ATTR_SET@0..47
+    L_CURLY@0..1 "{"
+    SPACE@1..4 "\n  "
+    ATTR_PATH_VALUE@4..11
+      ATTR_PATH@4..6
+        NAME@4..5
+          IDENT@4..5 "a"
+        SPACE@5..6 " "
+      EQ@6..7 "="
+      SPACE@7..8 " "
+      SELECT@8..10
+        REF@8..9
+          IDENT@8..9 "a"
+        DOT@9..10 "."
+        ATTR_PATH@10..10
+          NAME@10..10
+      SEMICOLON@10..11 ";"
+    SPACE@11..14 "\n  "
+    ATTR_PATH_VALUE@14..23
+      ATTR_PATH@14..16
+        NAME@14..15
+          IDENT@14..15 "b"
+        SPACE@15..16 " "
+      EQ@16..17 "="
+      SPACE@17..18 " "
+      SELECT@18..22
+        REF@18..19
+          IDENT@18..19 "a"
+        DOT@19..20 "."
+        ATTR_PATH@20..22
+          NAME@20..20
+          DOT@20..21 "."
+          NAME@21..22
+            IDENT@21..22 "b"
+      SEMICOLON@22..23 ";"
+    SPACE@23..26 "\n  "
+    ATTR_PATH_VALUE@26..33
+      ATTR_PATH@26..28
+        NAME@26..27
+          IDENT@26..27 "c"
+        SPACE@27..28 " "
+      EQ@28..29 "="
+      SPACE@29..30 " "
+      HAS_ATTR@30..32
+        REF@30..31
+          IDENT@30..31 "a"
+        QUESTION@31..32 "?"
+        ATTR_PATH@32..32
+          NAME@32..32
+      SEMICOLON@32..33 ";"
+    SPACE@33..36 "\n  "
+    ATTR_PATH_VALUE@36..45
+      ATTR_PATH@36..38
+        NAME@36..37
+          IDENT@36..37 "d"
+        SPACE@37..38 " "
+      EQ@38..39 "="
+      SPACE@39..40 " "
+      HAS_ATTR@40..44
+        REF@40..41
+          IDENT@40..41 "a"
+        QUESTION@41..42 "?"
+        ATTR_PATH@42..44
+          NAME@42..43
+            IDENT@42..43 "b"
+          DOT@43..44 "."
+          NAME@44..44
+      SEMICOLON@44..45 ";"
+    SPACE@45..46 "\n"
+    R_CURLY@46..47 "}"
+  SPACE@47..48 "\n"

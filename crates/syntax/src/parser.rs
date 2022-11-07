@@ -666,7 +666,7 @@ impl<'i> Parser<'i> {
                     }
                     // Use lookahead for ending condition, since `;` might not be typed yet.
                     while self.peek_non_ws().map_or(false, SyntaxKind::can_start_attr) {
-                        self.attr_opt();
+                        self.attr_opt(false);
                     }
                     self.want(T![;]);
                     self.finish_node()
@@ -725,16 +725,17 @@ impl<'i> Parser<'i> {
     /// Maybe consume tokens and always make a ATTR_PATH node.
     fn attrpath_opt(&mut self) {
         self.start_node(ATTR_PATH);
-        self.attr_opt();
+        self.attr_opt(true);
         while self.peek_non_ws() == Some(T![.]) {
             self.bump(); // .
-            self.attr_opt();
+            self.attr_opt(true);
         }
         self.finish_node();
     }
 
     /// Maybe consume tokens and always make a {IDENT,DYNAMIC,STRING} node.
-    fn attr_opt(&mut self) {
+    /// If `force_name` is true, an empty NAME node would be created when the next token is unexpected.
+    fn attr_opt(&mut self, force_name: bool) {
         // This must matches SyntaxKind::can_start_attr.
         match self.peek_non_ws() {
             Some(IDENT | T![or]) => {
@@ -744,7 +745,13 @@ impl<'i> Parser<'i> {
             }
             Some(T!["${"]) => self.dynamic(),
             Some(T!['"']) => self.string(STRING),
-            _ => self.error(ErrorKind::ExpectAttr),
+            _ => {
+                self.error(ErrorKind::ExpectAttr);
+                if force_name {
+                    self.start_node(NAME);
+                    self.finish_node();
+                }
+            }
         }
     }
 
