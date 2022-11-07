@@ -10,6 +10,7 @@ mod syntax_highlighting;
 
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
+use crate::ty::TyDatabaseStorage;
 use crate::{Change, Diagnostic, FileId, FilePos, FileRange, WorkspaceEdit};
 use rowan::TextRange;
 use salsa::{Database, Durability, ParallelDatabase};
@@ -34,7 +35,7 @@ pub use salsa::Cancelled;
 
 pub type Cancellable<T> = Result<T, Cancelled>;
 
-#[salsa::database(SourceDatabaseStorage, DefDatabaseStorage)]
+#[salsa::database(SourceDatabaseStorage, DefDatabaseStorage, TyDatabaseStorage)]
 #[derive(Default)]
 pub struct RootDatabase {
     storage: salsa::Storage<Self>,
