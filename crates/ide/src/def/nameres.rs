@@ -30,7 +30,7 @@ impl ModuleScopes {
             parent: None,
             kind: ScopeKind::Definitions(Default::default()),
         });
-        this.traverse_expr(&*module, module.entry_expr, root_scope);
+        this.traverse_expr(&module, module.entry_expr, root_scope);
         Arc::new(this)
     }
 

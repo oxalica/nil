@@ -38,7 +38,7 @@ fn setup_logger() {
     let file = env::var_os(LOG_PATH_ENV).and_then(|path| {
         let path = PathBuf::from(path);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(&parent).ok()?;
+            fs::create_dir_all(parent).ok()?;
         }
         fs::OpenOptions::new()
             .create(true)
