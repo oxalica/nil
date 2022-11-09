@@ -3,6 +3,7 @@ mod diagnostics;
 mod expand_selection;
 mod goto_definition;
 mod hover;
+mod links;
 mod references;
 mod rename;
 mod symbol_hierarchy;
@@ -20,6 +21,7 @@ use std::fmt;
 pub use completion::{CompletionItem, CompletionItemKind};
 pub use goto_definition::GotoDefinitionResult;
 pub use hover::HoverResult;
+pub use links::{Link, LinkTarget};
 pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
 pub use syntax_highlighting::{HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
@@ -146,5 +148,9 @@ impl Analysis {
 
     pub fn symbol_hierarchy(&self, file: FileId) -> Cancellable<Vec<SymbolTree>> {
         self.with_db(|db| symbol_hierarchy::symbol_hierarchy(db, file))
+    }
+
+    pub fn links(&self, file: FileId) -> Cancellable<Vec<Link>> {
+        self.with_db(|db| links::links(db, file))
     }
 }

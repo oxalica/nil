@@ -1,12 +1,12 @@
 use crate::{convert, Result, StateSnapshot};
-use ide::{FileRange, GotoDefinitionResult};
+use ide::{FileRange, GotoDefinitionResult, LinkTarget};
 use lsp_types::{
-    CompletionParams, CompletionResponse, Diagnostic, DocumentFormattingParams,
-    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverParams, Location, Position, PrepareRenameResponse, Range, ReferenceParams,
-    RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
-    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
-    TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
+    CompletionParams, CompletionResponse, Diagnostic, DocumentFormattingParams, DocumentLink,
+    DocumentLinkParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverParams, Location, Position, PrepareRenameResponse, Range,
+    ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens,
+    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
 use std::path::Path;
 use std::process;
@@ -263,4 +263,41 @@ pub(crate) fn formatting(
         },
         new_text: new_content,
     }]))
+}
+
+pub(crate) fn document_links(
+    snap: StateSnapshot,
+    params: DocumentLinkParams,
+) -> Result<Option<Vec<DocumentLink>>> {
+    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let line_map = snap.vfs().line_map_for_file(file);
+    let links = snap.analysis.links(file)?;
+    let links = links
+        .into_iter()
+        .filter_map(|link| {
+            let uri = match link.target {
+                LinkTarget::Uri(uri) => uri,
+                // FIXME: Duplicated with `goto_definition`.
+                LinkTarget::VfsPath(vpath) => {
+                    let path = Path::new(vpath.as_str());
+                    let default_child = path.join(DEFAULT_CHILD);
+                    let target_path = if path.is_file() {
+                        path
+                    } else if default_child.is_file() {
+                        &default_child
+                    } else {
+                        return None;
+                    };
+                    Url::from_file_path(target_path).ok()?
+                }
+            };
+            Some(DocumentLink {
+                range: convert::to_range(&line_map, link.range),
+                target: Some(uri),
+                tooltip: Some(link.tooltip),
+                data: None,
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(Some(links))
 }

@@ -16,6 +16,7 @@ rowan = "0.15.6"
 salsa = "0.17.0-pre.2"
 smol_str = "0.1.23"
 syntax = { path = "../syntax" }
+url = "2.3.1"
 
 [dev-dependencies]
 anyhow = "1.0.60"

@@ -178,6 +178,7 @@ impl Server {
             .on::<req::HoverRequest>(handler::hover)
             .on::<req::DocumentSymbolRequest>(handler::document_symbol)
             .on::<req::Formatting>(handler::formatting)
+            .on::<req::DocumentLinkRequest>(handler::document_links)
             .finish();
     }
 

@@ -132,6 +132,7 @@ dependencies = [
  "salsa",
  "smol_str",
  "syntax",
+ "url",
 ]
 
 [[package]]

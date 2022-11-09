@@ -8,6 +8,12 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Find references. `textDocument/reference`
   - [x] Parameters, `let` and `rec {}` bindings.
   - [x] With expression.
+- [x] Links. `textDocument/documentLink`
+  - [x] Links for relative and absolute paths.
+  - [ ] Links for search paths like `<nixpkgs>`.
+  - [x] Links for URLs like `"https://..."`, `"http://..."` and etc.
+  - [x] Links for [flake references][flake-ref] like `"github:NixOS/nixpkgs"`.
+
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
     - With documentations.
@@ -85,3 +91,4 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Request cancellation. `$/cancelRequest`
 
 [`coc.nvim`]: https://github.com/neoclide/coc.nvim
+[flake-ref]: https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-flake.html#types
