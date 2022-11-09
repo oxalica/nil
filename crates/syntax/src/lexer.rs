@@ -6,6 +6,19 @@ use regex_automata::SyntaxConfig;
 use rowan::{TextRange, TextSize};
 use std::ptr;
 
+pub const KEYWORDS: &[(&str, SyntaxKind)] = &[
+    ("assert", T![assert]),
+    ("else", T![else]),
+    ("if", T![if]),
+    ("in", T![in]),
+    ("inherit", T![inherit]),
+    ("let", T![let]),
+    ("or", T![or]),
+    ("rec", T![rec]),
+    ("then", T![then]),
+    ("with", T![with]),
+];
+
 type Dfa = dense::DFA<Vec<u32>>;
 
 fn build_dfa(pats: &[&str]) -> Dfa {
@@ -43,6 +56,7 @@ regex_dfa! {
         FLOAT = r"(\d+\.\d*|\.\d+)([Ee][+-]?\d+)?",
         INT = r"\d+",
         URI = r"[a-zA-Z][a-zA-Z0-9.+-]*:[a-zA-Z0-9%/?:@&=+$,_.!~*'-]+",
+        // This should match `crate::semantic::is_valid_ident`.
         IDENT = r"[a-zA-Z_][a-zA-Z0-9_'-]*",
 
         DQUOTE = "\"",
@@ -169,19 +183,11 @@ pub fn lex(src: &[u8]) -> LexTokens {
                 ctxs.pop();
             }
             IDENT => {
-                tok = match &rest[..usize::from(len)] {
-                    b"assert" => T![assert],
-                    b"else" => T![else],
-                    b"if" => T![if],
-                    b"in" => T![in],
-                    b"inherit" => T![inherit],
-                    b"let" => T![let],
-                    b"or" => T![or],
-                    b"rec" => T![rec],
-                    b"then" => T![then],
-                    b"with" => T![with],
-                    _ => IDENT,
-                };
+                let ident = &rest[..usize::from(len)];
+                tok = KEYWORDS
+                    .iter()
+                    .find_map(|&(kw, tok)| (kw.as_bytes() == ident).then_some(tok))
+                    .unwrap_or(IDENT);
             }
             PATH_START => {
                 len -= TextSize::of("${");

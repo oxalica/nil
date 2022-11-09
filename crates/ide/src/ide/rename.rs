@@ -2,6 +2,8 @@ use crate::def::{AstPtr, NameId, ResolveResult};
 use crate::{DefDatabase, FilePos, TextEdit, WorkspaceEdit};
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
+use std::borrow::Cow;
+use syntax::semantic::escape_literal_attr;
 use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, TextRange};
 
 pub type RenameResult<T> = Result<T, String>;
@@ -23,7 +25,7 @@ pub(crate) fn rename(
 ) -> RenameResult<WorkspaceEdit> {
     let (_, name) = find_name(db, fpos).ok_or_else(|| "No references found".to_owned())?;
 
-    let (is_new_name_ident, new_attr) = name_to_attr(new_name);
+    let new_attr = escape_literal_attr(new_name);
 
     let file_id = fpos.file_id;
     let src = db.file_content(file_id);
@@ -31,7 +33,7 @@ pub(crate) fn rename(
     let module = db.module(fpos.file_id);
     let source_map = db.source_map(file_id);
 
-    let (is_old_name_ident, old_attr) = name_to_attr(&module[name].text);
+    let old_attr = escape_literal_attr(&module[name].text);
 
     let mut edits = Vec::new();
 
@@ -44,7 +46,7 @@ pub(crate) fn rename(
             None => {
                 edits.push(TextEdit {
                     delete: attr_node.text_range(),
-                    insert: new_attr.clone(),
+                    insert: SmolStr::new(&new_attr),
                 });
                 continue;
             }
@@ -73,7 +75,7 @@ pub(crate) fn rename(
         // Then construct a new binding.
         match i.from_expr() {
             None => {
-                if !is_old_name_ident {
+                if matches!(old_attr, Cow::Owned(_)) {
                     return Err("Cannot rename from a string literal while it is inherited".into());
                 }
                 // `new = old;`.
@@ -102,7 +104,7 @@ pub(crate) fn rename(
     // Rename usages.
     let name_refs = db.name_reference(file_id);
     let refs = name_refs.name_references(name).unwrap_or_default();
-    if !is_new_name_ident && !refs.is_empty() {
+    if matches!(new_attr, Cow::Owned(_)) && !refs.is_empty() {
         return Err("Cannot rename to a string literal while it is referenced".into());
     }
     for &expr in refs {
@@ -116,7 +118,7 @@ pub(crate) fn rename(
             None => {
                 edits.push(TextEdit {
                     delete: ptr.text_range(),
-                    insert: new_attr.clone(),
+                    insert: SmolStr::new(&new_attr),
                 });
                 continue;
             }
@@ -212,33 +214,6 @@ fn find_name(
     }
 
     None
-}
-
-fn is_valid_ident(name: &str) -> bool {
-    const KEYWORDS: &[&[u8]] = &[
-        b"assert", b"else", b"if", b"in", b"inherit", b"let", b"or", b"rec", b"then", b"with",
-    ];
-
-    let bytes = name.as_bytes();
-    !name.is_empty()
-        && name.is_ascii()
-        && (bytes[0].is_ascii_alphabetic() || bytes[0] == b'_')
-        && bytes[1..]
-            .iter()
-            .all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'\'' || b == b'-')
-        && !KEYWORDS.contains(&bytes)
-}
-
-/// Return whether this name is a valid identifier, and the attribute form of it, escaped by need.
-fn name_to_attr(name: &str) -> (bool, SmolStr) {
-    if is_valid_ident(name) {
-        (true, name.into())
-    } else {
-        (
-            false,
-            ("\"".to_owned() + &name.replace('\\', "\\\\").replace('"', "\\\"") + "\"").into(),
-        )
-    }
 }
 
 #[cfg(test)]

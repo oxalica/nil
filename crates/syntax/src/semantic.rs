@@ -1,7 +1,34 @@
 //! Auxiliary functions for semantics of AST nodes.
 //! Mostly about syntax desugaring.
 use crate::ast::{Attr, Expr, HasStringParts, StringPart};
+use crate::lexer::KEYWORDS;
+use std::borrow::Cow;
 use std::str;
+
+/// Check if a name is a valid identifier.
+pub fn is_valid_ident(name: &str) -> bool {
+    // This should match lexer impl.
+    !name.is_empty()
+        && matches!(name.as_bytes()[0], b'A'..=b'Z' | b'a'..=b'z' | b'_')
+        && name
+            .bytes()
+            .all(|b| matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'_' | b'0'..=b'9' | b'\'' | b'-'))
+        && KEYWORDS.iter().all(|&(kw, _)| name != kw)
+}
+
+/// Escape a literal Attr. Quote it if it's not a valid identifier.
+pub fn escape_literal_attr(name: &str) -> Cow<'_, str> {
+    if is_valid_ident(name) {
+        return Cow::Borrowed(name);
+    }
+    Cow::Owned(
+        std::iter::empty()
+            .chain(Some('"'))
+            .chain(name.chars().flat_map(|ch| ch.escape_default()))
+            .chain(Some('"'))
+            .collect(),
+    )
+}
 
 /// Unescape a single string escape sequence.
 ///
