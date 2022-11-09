@@ -43,6 +43,9 @@ let
     let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
     set termguicolors
 
+    " Workaround: https://github.com/EdenEast/nightfox.nvim/issues/236
+    lua vim.treesitter = { highlighter = { hl_map = {} } }
+
     packadd! nightfox.nvim
     " https://github.com/EdenEast/nightfox.nvim/issues/218
     lua <<EOF
@@ -50,7 +53,7 @@ let
         options = {
           modules = {
             native_lsp = { enable = false },
-            treesitter = false,
+            treesitter = true,
           },
         },
       })
@@ -60,7 +63,7 @@ let
     highlight link Identifier        TSVariable
     highlight link CocSemPath        Include
     highlight link CocSemVariable    TSVariable
-    highlight link CocSemParameter   TSVariable
+    highlight link CocSemParameter   Identifier
     highlight link CocSemPunctuation TSOperator
 
     highlight link CocSemEscape     TSStringEscape
