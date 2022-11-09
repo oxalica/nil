@@ -1,6 +1,6 @@
 //! Auxiliary functions for semantics of AST nodes.
 //! Mostly about syntax desugaring.
-use crate::ast::{Attr, Expr, HasStringParts, StringPart};
+use crate::ast::{self, Attr, Expr, HasStringParts, StringPart};
 use crate::lexer::KEYWORDS;
 use std::borrow::Cow;
 use std::str;
@@ -46,6 +46,25 @@ pub fn unescape_string_escape(escape: &str) -> &str {
     }
 }
 
+/// Retrieve the unescaped content of a String node if it contains no Dynamic.
+/// Otherwise, return None.
+pub fn unescape_string_literal(n: &ast::String) -> Option<String> {
+    if n.string_parts()
+        .any(|part| matches!(part, StringPart::Dynamic(_)))
+    {
+        return None;
+    }
+
+    let ret = n
+        .string_parts()
+        .fold(String::new(), |prev, part| match part {
+            StringPart::Fragment(f) => prev + f.text(),
+            StringPart::Escape(e) => prev + unescape_string_escape(e.text()),
+            StringPart::Dynamic(_) => unreachable!(),
+        });
+    Some(ret)
+}
+
 /// The dynamic-ness of an `Attr`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AttrKind {
@@ -66,19 +85,9 @@ impl AttrKind {
             },
         };
 
-        if s.string_parts()
-            .any(|part| matches!(part, StringPart::Dynamic(_)))
-        {
-            return Self::Dynamic(Some(Expr::String(s)));
+        match unescape_string_literal(&s) {
+            Some(lit) => Self::Static(Some(lit)),
+            None => Self::Dynamic(Some(Expr::String(s))),
         }
-
-        let literal = s
-            .string_parts()
-            .fold(String::new(), |prev, part| match part {
-                StringPart::Fragment(tok) => prev + tok.text(),
-                StringPart::Escape(tok) => prev + unescape_string_escape(tok.text()),
-                StringPart::Dynamic(_) => unreachable!(),
-            });
-        Self::Static(Some(literal))
     }
 }

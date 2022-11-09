@@ -10,7 +10,7 @@ use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::collections::HashMap;
 use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
-use syntax::semantic::AttrKind;
+use syntax::semantic::{unescape_string_literal, AttrKind};
 use syntax::Parse;
 
 pub(super) fn lower(
@@ -130,7 +130,7 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::Select(set, attrpath, default_expr), ptr)
             }
             ast::Expr::String(s) => self.lower_string(&s),
-            ast::Expr::IndentString(s) => self.lower_string(&s),
+            ast::Expr::IndentString(s) => self.lower_string_interpolation(&s),
             ast::Expr::List(e) => {
                 let elements = e.elements().map(|e| self.lower_expr(e)).collect();
                 self.alloc_expr(Expr::List(elements), ptr)
@@ -282,10 +282,18 @@ impl LowerCtx<'_> {
             .collect()
     }
 
-    fn lower_string(&mut self, n: &impl HasStringParts) -> ExprId {
+    fn lower_string(&mut self, n: &ast::String) -> ExprId {
         let ptr = AstPtr::new(n.syntax());
-        // Here we don't need to special case literal strings.
-        // They would simply become `Expr::StringInterpolation([])`.
+        // Special case for literal strings.
+        // They are subjects to URI detection.
+        match unescape_string_literal(n) {
+            Some(lit) => self.alloc_expr(Expr::Literal(Literal::String(lit.into())), ptr),
+            None => self.lower_string_interpolation(n),
+        }
+    }
+
+    fn lower_string_interpolation(&mut self, n: &impl HasStringParts) -> ExprId {
+        let ptr = AstPtr::new(n.syntax());
         let parts = n
             .string_parts()
             .filter_map(|part| {
@@ -815,7 +823,7 @@ mod tests {
         check_lower(
             r#"" fo\no ""#,
             expect![[r#"
-                0: StringInterpolation([])
+                0: Literal(String(" fo\no "))
             "#]],
         );
         check_lower(
@@ -912,7 +920,7 @@ mod tests {
             expect![[r#"
                 0: Reference("a")
                 1: Literal(String("b"))
-                2: StringInterpolation([])
+                2: Literal(String("c"))
                 3: Reference("d")
                 4: Reference("e")
                 5: Select(Idx::<Expr>(0), [Idx::<Expr>(1), Idx::<Expr>(2), Idx::<Expr>(3)], Some(Idx::<Expr>(4)))
@@ -923,7 +931,7 @@ mod tests {
             expect![[r#"
                 0: Reference("a")
                 1: Literal(String("b"))
-                2: StringInterpolation([])
+                2: Literal(String("c"))
                 3: Reference("d")
                 4: HasAttr(Idx::<Expr>(0), [Idx::<Expr>(1), Idx::<Expr>(2), Idx::<Expr>(3)])
             "#]],
