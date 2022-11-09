@@ -208,7 +208,8 @@ impl<'db> InferCtx<'db> {
                 self.infer_expr(body)
             }
             &Expr::IfThenElse(cond, then, else_) => {
-                self.infer_expr(cond);
+                let cond_ty = self.infer_expr(cond);
+                self.unify_kind(cond_ty, TyKind::Bool);
                 let then_ty = self.infer_expr(then);
                 let else_ty = self.infer_expr(else_);
                 self.unify(then_ty, else_ty);

@@ -102,6 +102,7 @@ fn recursive() {
 
 #[test]
 fn if_then_else() {
+    check("a: if a then 1 else 1", expect!["bool → int"]);
     check(
         "if 1 == 2 then { a = 1; } else { b = 1; }",
         expect!["{ a: int, b: int }"],
