@@ -35,6 +35,7 @@ enum Event {
 
 pub struct Server {
     // States.
+    /// This contains an internal RWLock and must not lock together with `vfs`.
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
     opened_files: HashSet<Url>,
@@ -389,26 +390,26 @@ impl Server {
     }
 
     fn apply_vfs_change(&mut self) {
-        let file_changes = {
-            let mut vfs = self.vfs.write().unwrap();
-            let change = vfs.take_change();
-            let file_changes = change
-                .file_changes
-                .iter()
-                .map(|(file, text)| (vfs.uri_for_file(*file), !text.is_empty()))
-                .collect::<Vec<_>>();
-            tracing::debug!("Change: {:?}", change);
-            self.host.apply_change(change);
-            file_changes
-        };
+        let changes = self.vfs.write().unwrap().take_change();
+        tracing::trace!("Change: {:?}", changes);
+        let file_changes = changes.file_changes.clone();
 
-        for (uri, has_text) in file_changes {
+        // N.B. This acquires the internal write lock.
+        // Must be called without holding the lock of `vfs`.
+        self.host.apply_change(changes);
+
+        let vfs = self.vfs.read().unwrap();
+        for (file, text) in file_changes {
+            let uri = vfs.uri_for_file(file);
             if !self.opened_files.contains(&uri) {
                 continue;
             }
-            if has_text {
+
+            // FIXME: Removed or closed files are indistinguishable from empty files.
+            if !text.is_empty() {
                 self.update_diagnostics(uri);
             } else {
+                // Clear diagnostics.
                 self.event_tx
                     .send(Event::Diagnostics(uri, Vec::new()))
                     .unwrap();
