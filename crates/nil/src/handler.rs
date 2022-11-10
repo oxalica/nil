@@ -28,7 +28,7 @@ pub(crate) fn goto_definition(
     snap: StateSnapshot,
     params: GotoDefinitionParams,
 ) -> Result<Option<GotoDefinitionResponse>> {
-    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
+    let (fpos, _) = convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
     let ret = snap.analysis.goto_definition(fpos)?;
     let vfs = snap.vfs();
     let targets = match ret {
@@ -62,7 +62,7 @@ pub(crate) fn references(
     snap: StateSnapshot,
     params: ReferenceParams,
 ) -> Result<Option<Vec<Location>>> {
-    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
+    let (fpos, _) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let refs = match snap.analysis.references(fpos)? {
         None => return Ok(None),
         Some(refs) => refs,
@@ -79,7 +79,7 @@ pub(crate) fn completion(
     snap: StateSnapshot,
     params: CompletionParams,
 ) -> Result<Option<CompletionResponse>> {
-    let (line_map, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
+    let (fpos, line_map) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let trigger_char = params
         .context
         .and_then(|ctx| ctx.trigger_character?.chars().next());
@@ -98,8 +98,7 @@ pub(crate) fn selection_range(
     snap: StateSnapshot,
     params: SelectionRangeParams,
 ) -> Result<Option<Vec<SelectionRange>>> {
-    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().line_map_for_file(file);
+    let (file, line_map) = convert::from_file(&snap.vfs(), &params.text_document)?;
     let ret = params
         .positions
         .iter()
@@ -133,7 +132,7 @@ pub(crate) fn prepare_rename(
     snap: StateSnapshot,
     params: TextDocumentPositionParams,
 ) -> Result<Option<PrepareRenameResponse>> {
-    let (line_map, fpos) = convert::from_file_pos(&snap.vfs(), &params)?;
+    let (fpos, line_map) = convert::from_file_pos(&snap.vfs(), &params)?;
     let (range, text) = snap
         .analysis
         .prepare_rename(fpos)?
@@ -143,7 +142,7 @@ pub(crate) fn prepare_rename(
 }
 
 pub(crate) fn rename(snap: StateSnapshot, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-    let (_, fpos) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
+    let (fpos, _) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
     let ws_edit = snap
         .analysis
         .rename(fpos, &params.new_name)?
@@ -156,8 +155,7 @@ pub(crate) fn semantic_token_full(
     snap: StateSnapshot,
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokensResult>> {
-    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().line_map_for_file(file);
+    let (file, line_map) = convert::from_file(&snap.vfs(), &params.text_document)?;
     let hls = snap.analysis.syntax_highlight(file, None)?;
     let toks = convert::to_semantic_tokens(&line_map, &hls);
     Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
@@ -170,8 +168,12 @@ pub(crate) fn semantic_token_range(
     snap: StateSnapshot,
     params: SemanticTokensRangeParams,
 ) -> Result<Option<SemanticTokensRangeResult>> {
-    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let (line_map, range) = convert::from_range(&snap.vfs(), file, params.range)?;
+    let (file, range, line_map) = {
+        let vfs = snap.vfs();
+        let (file, line_map) = convert::from_file(&vfs, &params.text_document)?;
+        let (_, range) = convert::from_range(&vfs, file, params.range)?;
+        (file, range, line_map)
+    };
     let hls = snap.analysis.syntax_highlight(file, Some(range))?;
     let toks = convert::to_semantic_tokens(&line_map, &hls);
     Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
@@ -181,7 +183,7 @@ pub(crate) fn semantic_token_range(
 }
 
 pub(crate) fn hover(snap: StateSnapshot, params: HoverParams) -> Result<Option<Hover>> {
-    let (line_map, fpos) =
+    let (fpos, line_map) =
         convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
     let ret = snap.analysis.hover(fpos)?;
     Ok(ret.map(|hover| convert::to_hover(&line_map, hover)))
@@ -191,8 +193,7 @@ pub(crate) fn document_symbol(
     snap: StateSnapshot,
     params: DocumentSymbolParams,
 ) -> Result<Option<DocumentSymbolResponse>> {
-    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().line_map_for_file(file);
+    let (file, line_map) = convert::from_file(&snap.vfs(), &params.text_document)?;
     let syms = snap.analysis.symbol_hierarchy(file)?;
     let syms = convert::to_document_symbols(&line_map, syms);
     Ok(Some(DocumentSymbolResponse::Nested(syms)))
@@ -237,8 +238,8 @@ pub(crate) fn formatting(
 
     let (file_content, line_map) = {
         let vfs = snap.vfs();
-        let file = convert::from_file(&vfs, &params.text_document)?;
-        (vfs.content_for_file(file), vfs.line_map_for_file(file))
+        let (file, line_map) = convert::from_file(&vfs, &params.text_document)?;
+        (vfs.content_for_file(file), line_map)
     };
 
     let new_content = run_with_stdin(cmd, <Arc<[u8]>>::from(file_content.clone()))
@@ -269,8 +270,7 @@ pub(crate) fn document_links(
     snap: StateSnapshot,
     params: DocumentLinkParams,
 ) -> Result<Option<Vec<DocumentLink>>> {
-    let file = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let line_map = snap.vfs().line_map_for_file(file);
+    let (file, line_map) = convert::from_file(&snap.vfs(), &params.text_document)?;
     let links = snap.analysis.links(file)?;
     let links = links
         .into_iter()

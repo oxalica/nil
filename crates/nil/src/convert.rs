@@ -3,18 +3,20 @@ use ide::{
     CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange,
     HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
-use lsp::{DocumentSymbol, SymbolKind};
 use lsp_server::ErrorCode;
 use lsp_types::{
-    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, Documentation,
-    Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse,
-    Range, SemanticToken, TextDocumentIdentifier, TextDocumentPositionParams,
+    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, DocumentSymbol,
+    Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position,
+    PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
+    TextDocumentPositionParams,
 };
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
 
-pub(crate) fn from_file(vfs: &Vfs, doc: &TextDocumentIdentifier) -> Result<FileId> {
-    vfs.file_for_uri(&doc.uri)
+pub(crate) fn from_file(vfs: &Vfs, doc: &TextDocumentIdentifier) -> Result<(FileId, Arc<LineMap>)> {
+    let file = vfs.file_for_uri(&doc.uri)?;
+    let line_map = vfs.line_map_for_file(file);
+    Ok((file, line_map))
 }
 
 pub(crate) fn from_pos(line_map: &LineMap, pos: Position) -> Result<TextSize> {
@@ -24,11 +26,10 @@ pub(crate) fn from_pos(line_map: &LineMap, pos: Position) -> Result<TextSize> {
 pub(crate) fn from_file_pos(
     vfs: &Vfs,
     params: &TextDocumentPositionParams,
-) -> Result<(Arc<LineMap>, FilePos)> {
-    let file = from_file(vfs, &params.text_document)?;
-    let line_map = vfs.line_map_for_file(file);
+) -> Result<(FilePos, Arc<LineMap>)> {
+    let (file, line_map) = from_file(vfs, &params.text_document)?;
     let pos = from_pos(&line_map, params.position)?;
-    Ok((line_map, FilePos::new(file, pos)))
+    Ok((FilePos::new(file, pos), line_map))
 }
 
 pub(crate) fn from_range(
