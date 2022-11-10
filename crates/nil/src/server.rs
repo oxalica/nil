@@ -90,14 +90,40 @@ impl Server {
     pub fn run(&mut self, lsp_rx: Receiver<Message>, init_params: InitializeParams) -> Result<()> {
         #[cfg(target_os = "linux")]
         if let Some(pid) = init_params.process_id {
+            use std::io;
+            use std::mem::MaybeUninit;
+            use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+            use std::ptr::null_mut;
+
+            fn wait_remote_pid(pid: libc::pid_t) -> Result<(), io::Error> {
+                let pidfd = unsafe {
+                    let ret = libc::syscall(libc::SYS_pidfd_open, pid, 0 as libc::c_int);
+                    if ret == -1 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    OwnedFd::from_raw_fd(ret as RawFd)
+                };
+                unsafe {
+                    let mut fdset = MaybeUninit::uninit();
+                    libc::FD_ZERO(fdset.as_mut_ptr());
+                    libc::FD_SET(pidfd.as_raw_fd(), fdset.as_mut_ptr());
+                    let nfds = pidfd.as_raw_fd() + 1;
+                    let ret =
+                        libc::select(nfds, fdset.as_mut_ptr(), null_mut(), null_mut(), null_mut());
+                    if ret == -1 {
+                        return Err(io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            }
+
             let event_tx = self.event_tx.clone();
             thread::spawn(move || {
-                let ret = async_pidfd::PidFd::from_pid(pid as _).and_then(|pidfd| pidfd.wait());
-                match ret {
-                    Ok(_) => {}
+                match wait_remote_pid(pid as _) {
+                    Ok(()) => {}
                     Err(err) if err.raw_os_error() == Some(libc::ESRCH) => {}
                     Err(err) => {
-                        tracing::error!("Failed to monitor parent pid {}: {}", pid, err);
+                        tracing::warn!("Failed to monitor parent pid {}: {}", pid, err);
                         return;
                     }
                 }
