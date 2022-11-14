@@ -52,7 +52,7 @@ impl TyKind {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Attrset(BTreeMap<SmolStr, Ty>);
+pub struct Attrset(BTreeMap<SmolStr, (Ty, AttrSource)>);
 
 impl Attrset {
     pub fn is_empty(&self) -> bool {
@@ -64,11 +64,33 @@ impl Attrset {
     }
 
     pub fn get(&self, field: &str) -> Option<Ty> {
-        self.0.get(field).copied()
+        Some(self.0.get(field)?.0)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&SmolStr, Ty)> + '_ {
-        self.0.iter().map(|(k, &v)| (k, v))
+    pub fn get_src(&self, field: &str) -> Option<AttrSource> {
+        Some(self.0.get(field)?.1)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&SmolStr, Ty, AttrSource)> + '_ {
+        self.0.iter().map(|(k, (ty, src))| (k, *ty, *src))
+    }
+}
+
+/// The source of an Attr.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttrSource {
+    /// Unknown source, possibly generated or referenced.
+    Unknown,
+    /// Defined by a name.
+    Name(NameId),
+    // TODO: Builtins.
+}
+
+impl AttrSource {
+    fn unify(&mut self, rhs: Self) {
+        if *self == Self::Unknown {
+            *self = rhs;
+        }
     }
 }
 
@@ -191,7 +213,8 @@ impl<'db> InferCtx<'db> {
                             self.unify(name_ty, default_ty);
                         }
                         let field_text = self.module[name].text.clone();
-                        let param_field_ty = self.infer_set_field(param_ty, field_text);
+                        let param_field_ty =
+                            self.infer_set_field(param_ty, field_text, AttrSource::Name(name));
                         self.unify(param_field_ty, name_ty);
                     }
                 }
@@ -298,7 +321,7 @@ impl<'db> InferCtx<'db> {
                     self.unify_kind(attr_ty, TyKind::String);
                     match &self.module[attr] {
                         Expr::Literal(Literal::String(key)) => {
-                            self.infer_set_field(set_ty, key.clone())
+                            self.infer_set_field(set_ty, key.clone(), AttrSource::Unknown)
                         }
                         _ => {
                             self.unify_kind(set_ty, TyKind::Attrset(Attrset::default()));
@@ -348,7 +371,7 @@ impl<'db> InferCtx<'db> {
             Expr::LetAttrset(bindings) => {
                 let set = self.infer_bindings(bindings);
                 let set_ty = TyKind::Attrset(set).intern(self);
-                self.infer_set_field(set_ty, "body".into())
+                self.infer_set_field(set_ty, "body".into(), AttrSource::Unknown)
             }
         }
     }
@@ -366,11 +389,12 @@ impl<'db> InferCtx<'db> {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => self.infer_expr(e),
                 BindingValue::InheritFrom(from_expr) => {
                     let from_ty = self.ty_for_expr(from_expr);
-                    self.infer_set_field(from_ty, name_text.clone())
+                    self.infer_set_field(from_ty, name_text.clone(), AttrSource::Name(name))
                 }
             };
             self.unify(name_ty, value_ty);
-            fields.insert(name_text, value_ty);
+            let src = AttrSource::Name(name);
+            fields.insert(name_text, (value_ty, src));
         }
 
         for &(k, v) in bindings.dynamics.iter() {
@@ -382,17 +406,21 @@ impl<'db> InferCtx<'db> {
         Attrset(fields)
     }
 
-    fn infer_set_field(&mut self, set_ty: Ty, field: SmolStr) -> Ty {
+    fn infer_set_field(&mut self, set_ty: Ty, field: SmolStr, src: AttrSource) -> Ty {
         let next_ty = Ty(self.table.len() as u32);
         match self.table.get_mut(set_ty.0) {
             TyKind::Attrset(set) => match set.0.entry(field) {
-                Entry::Occupied(ent) => return *ent.get(),
+                Entry::Occupied(mut ent) => {
+                    let (ty, prev_src) = ent.get_mut();
+                    prev_src.unify(src);
+                    return *ty;
+                }
                 Entry::Vacant(ent) => {
-                    ent.insert(next_ty);
+                    ent.insert((next_ty, src));
                 }
             },
             k @ TyKind::Unknown => {
-                *k = TyKind::Attrset(Attrset([(field, next_ty)].into_iter().collect()));
+                *k = TyKind::Attrset(Attrset([(field, (next_ty, src))].into_iter().collect()));
             }
             TyKind::Bool
             | TyKind::Int
@@ -438,13 +466,15 @@ impl<'db> InferCtx<'db> {
                 self.unify(a2, b2);
             }
             (TyKind::Attrset(a), TyKind::Attrset(b)) => {
-                for (field, ty) in b.0 {
+                for (field, (ty2, src2)) in b.0 {
                     match a.0.entry(field) {
                         Entry::Vacant(ent) => {
-                            ent.insert(ty);
+                            ent.insert((ty2, src2));
                         }
-                        Entry::Occupied(ent) => {
-                            self.unify(*ent.get(), ty);
+                        Entry::Occupied(mut ent) => {
+                            let (ty1, src1) = ent.get_mut();
+                            src1.unify(src2);
+                            self.unify(*ty1, ty2);
                         }
                     }
                 }
@@ -533,7 +563,7 @@ impl<'a> TableCompresser<'a> {
                 *b = self.intern(*b);
             }
             TyKind::Attrset(set) => {
-                for ty in set.0.values_mut() {
+                for (ty, _) in set.0.values_mut() {
                     *ty = self.intern(*ty);
                 }
             }

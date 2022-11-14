@@ -1,4 +1,5 @@
 use crate::def::{AstPtr, BindingValue, Expr, NameKind};
+use crate::ty::AttrSource;
 use crate::{FileId, FilePos, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
@@ -61,14 +62,13 @@ impl From<BuiltinKind> for CompletionItemKind {
     }
 }
 
-impl TryFrom<NameKind> for CompletionItemKind {
-    type Error = ();
-    fn try_from(k: NameKind) -> Result<Self, Self::Error> {
+impl From<NameKind> for CompletionItemKind {
+    fn from(k: NameKind) -> Self {
         match k {
-            NameKind::LetIn => Ok(Self::LetBinding),
-            NameKind::RecAttrset => Ok(Self::Field),
-            NameKind::Param | NameKind::PatField => Ok(Self::Param),
-            NameKind::PlainAttrset => Err(()),
+            NameKind::LetIn => Self::LetBinding,
+            NameKind::RecAttrset => Self::Field,
+            NameKind::Param | NameKind::PatField => Self::Param,
+            NameKind::PlainAttrset => Self::Field,
         }
     }
 }
@@ -203,10 +203,7 @@ fn complete_expr(
             label: text.clone(),
             source_range,
             replace: text.clone(),
-            kind: module[*name]
-                .kind
-                .try_into()
-                .expect("NonRecAttrset names are not definitions"),
+            kind: module[*name].kind.into(),
             brief: None,
             doc: None,
         })
@@ -342,12 +339,15 @@ fn complete_attrpath(
             set.iter()
                 // We should not report current incomplete definition.
                 // This is covered by `no_incomplete_field`.
-                .filter(|(name, _)| **name != current_input)
-                .map(|(name, ty)| CompletionItem {
+                .filter(|(name, _, _)| **name != current_input)
+                .map(|(name, ty, src)| CompletionItem {
                     label: name.clone(),
                     source_range,
                     replace: name.clone(),
-                    kind: CompletionItemKind::Field,
+                    kind: match src {
+                        AttrSource::Unknown => CompletionItemKind::Field,
+                        AttrSource::Name(name) => module[name].kind.into(),
+                    },
                     brief: Some(infer.display_ty(ty).to_string()),
                     doc: None,
                 }),
@@ -506,7 +506,7 @@ mod tests {
         check(
             "{ foo }@b: b.f$0",
             "foo",
-            expect!["(Field) { foo }@b: b.foo"],
+            expect!["(Param) { foo }@b: b.foo"],
         );
     }
 
@@ -619,12 +619,12 @@ mod tests {
         check(
             "let f = { foo }: foo.bar; in f { f$0 }",
             "foo",
-            expect!["(Field) let f = { foo }: foo.bar; in f { foo }"],
+            expect!["(Param) let f = { foo }: foo.bar; in f { foo }"],
         );
         check(
             "let f = { foo }: foo.bar; in f { f$0.bar }",
             "foo",
-            expect!["(Field) let f = { foo }: foo.bar; in f { foo.bar }"],
+            expect!["(Param) let f = { foo }: foo.bar; in f { foo.bar }"],
         );
         check(
             "let f = { foo }: foo.bar; in f { foo.b$0 }",

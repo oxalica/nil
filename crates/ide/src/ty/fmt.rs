@@ -78,7 +78,7 @@ impl fmt::Display for TyDisplay<'_> {
                 } else {
                     "{".fmt(f)?;
                     let mut first = true;
-                    for (name, ty) in set.iter().take(MAX_FIELD_CNT) {
+                    for (name, ty, _src) in set.iter().take(MAX_FIELD_CNT) {
                         if first {
                             first = false;
                         } else {
