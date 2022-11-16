@@ -3,14 +3,15 @@ use super::{
     ModuleSourceMap, Name, NameId, NameKind, Pat, PathAnchor, PathData,
 };
 use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
-use indexmap::map::Entry;
 use indexmap::IndexMap;
 use la_arena::Arena;
 use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::collections::HashMap;
-use syntax::ast::{self, HasBindings, HasStringParts, LiteralKind};
-use syntax::semantic::{unescape_string_literal, AttrKind};
+use syntax::ast::{self, HasStringParts, LiteralKind};
+use syntax::semantic::{
+    unescape_string_literal, AttrKind, BindingDesugar, BindingValueKind, HasBindingsDesugar,
+};
 use syntax::Parse;
 
 pub(super) fn lower(
@@ -136,9 +137,7 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::List(elements), ptr)
             }
             ast::Expr::LetIn(e) => {
-                let mut set = MergingSet::new(NameKind::LetIn);
-                set.merge_bindings(self, &e);
-                let bindings = set.finish(self);
+                let bindings = MergingSet::desugar(self, NameKind::LetIn, &e).finish(self);
                 if bindings.statics.is_empty() && bindings.inherit_froms.is_empty() {
                     let let_tok_range = e
                         .let_token()
@@ -153,20 +152,18 @@ impl LowerCtx<'_> {
             }
             ast::Expr::AttrSet(e) => {
                 // RecAttrset is popular than LetAttrset, and is preferred.
-                let (name_kind, ctor): (_, fn(_) -> _) = if e.rec_token().is_some() {
-                    (NameKind::RecAttrset, Expr::RecAttrset)
+                let ctor = if e.rec_token().is_some() {
+                    Expr::RecAttrset
                 } else if e.let_token().is_some() {
                     self.diagnostic(Diagnostic::new(
                         e.syntax().text_range(),
                         DiagnosticKind::LetAttrset,
                     ));
-                    (NameKind::RecAttrset, Expr::LetAttrset)
+                    Expr::LetAttrset
                 } else {
-                    (NameKind::PlainAttrset, Expr::Attrset)
+                    Expr::Attrset
                 };
-                let mut set = MergingSet::new(name_kind);
-                set.merge_bindings(self, &e);
-                let bindings = set.finish(self);
+                let bindings = MergingSet::desugar(self, name_kind_of_set(&e), &e).finish(self);
                 self.alloc_expr(ctor(bindings), ptr)
             }
             ast::Expr::PathInterpolation(e) => {
@@ -308,60 +305,68 @@ impl LowerCtx<'_> {
     }
 }
 
+fn name_kind_of_set(set: &ast::AttrSet) -> NameKind {
+    if set.rec_token().is_some() || set.let_token().is_some() {
+        NameKind::RecAttrset
+    } else {
+        NameKind::PlainAttrset
+    }
+}
+
 #[derive(Debug)]
 struct MergingSet {
     name_kind: NameKind,
+    /// The span of this set if it's from an {Rec,}Attrset literal.
+    /// Otherwise, it's None.
+    ptr: Option<AstPtr>,
     statics: IndexMap<SmolStr, MergingEntry>,
     inherit_froms: Vec<ExprId>,
-    dynamics: Vec<(ExprId, MergingEntry)>,
+    dynamics: Vec<(ExprId, ExprId)>,
 }
 
 #[derive(Debug)]
 struct MergingEntry {
     /// The key of this entry.
-    /// For dynamic bindings, this is None.
-    name: Option<NameId>,
-    value: MergingValue,
-}
-
-#[derive(Debug)]
-enum MergingValue {
-    Placeholder,
-    Attrset(Option<AstPtr>, MergingSet),
-    Final(BindingValue),
-}
-
-impl From<BindingValue> for MergingValue {
-    fn from(value: BindingValue) -> Self {
-        Self::Final(value)
-    }
+    /// Used for tracking source map.
+    name: NameId,
+    /// The RHS if it is implicit or explicit set.
+    /// We stores both `set` and `value` components to prevent information loss
+    /// when handling duplicated keys.
+    set: Option<MergingSet>,
+    /// The RHS if it is not merge-able.
+    /// The source location is for error reporting.
+    value: Option<(AstPtr, BindingValue)>,
 }
 
 impl MergingSet {
-    fn new(name_kind: NameKind) -> Self {
+    fn new(name_kind: NameKind, ptr: Option<AstPtr>) -> Self {
         Self {
             name_kind,
+            ptr,
             statics: IndexMap::default(),
             inherit_froms: Vec::new(),
             dynamics: Vec::new(),
         }
     }
 
-    // Place an orphaned Expr as dynamic-attrs for error recovery.
-    fn recover_error(&mut self, ctx: &mut LowerCtx, expr: ExprId, expr_ptr: AstPtr) {
-        let key = ctx.alloc_expr(Expr::Missing, expr_ptr);
-        let entry = MergingEntry {
-            name: None,
-            value: BindingValue::Expr(expr).into(),
-        };
-        self.dynamics.push((key, entry));
+    fn desugar(ctx: &mut LowerCtx, name_kind: NameKind, n: &impl HasBindingsDesugar) -> Self {
+        let ptr = n.expr_syntax().map(AstPtr::new);
+        let mut this = Self::new(name_kind, ptr);
+        this.merge_bindings(ctx, n);
+        this
     }
 
-    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindings) {
-        for b in n.bindings() {
+    fn merge_bindings(&mut self, ctx: &mut LowerCtx, n: &impl HasBindingsDesugar) {
+        for b in n.desugar_bindings() {
             match b {
-                ast::Binding::Inherit(i) => self.merge_inherit(ctx, i),
-                ast::Binding::AttrpathValue(entry) => self.merge_path_value(ctx, entry),
+                BindingDesugar::Inherit(i) => self.merge_inherit(ctx, i),
+                BindingDesugar::AttrValue(Some(attr), value) => {
+                    self.merge_attr_value(ctx, attr, value);
+                }
+                // Just recover. The error is already reported by the parser.
+                BindingDesugar::AttrValue(None, value) => {
+                    self.push_dynamic(ctx, None, value);
+                }
             }
         }
     }
@@ -373,117 +378,181 @@ impl MergingSet {
             expr
         });
 
-        let mut no_attrs = true;
-        for attr in i.attrs() {
-            no_attrs = false;
-
-            let ptr = AstPtr::new(attr.syntax());
-            let text = match AttrKind::of(attr) {
-                AttrKind::Static(text) => SmolStr::from(text.unwrap_or_default()),
-                // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
-                AttrKind::Dynamic(expr) => {
-                    ctx.diagnostic(Diagnostic::new(
-                        ptr.text_range(),
-                        DiagnosticKind::InvalidDynamic,
-                    ));
-                    let expr = ctx.lower_expr_opt(expr);
-                    self.recover_error(ctx, expr, ptr.clone());
-                    continue;
-                }
-            };
-
-            let name = ctx.alloc_name(text.clone(), self.name_kind, ptr.clone());
-
-            // Inherited names never merge other values. It must be an error.
-            if let Some(v) = self.statics.get_mut(&text) {
-                v.emit_duplicated_key(ctx, ptr);
-                continue;
-            }
-
-            let value = match from_expr {
-                Some(e) => BindingValue::InheritFrom(e),
-                None => {
-                    let ref_expr = ctx.alloc_expr(Expr::Reference(text.clone()), ptr.clone());
-                    BindingValue::Inherit(ref_expr)
-                }
-            };
-            let entry = MergingEntry {
-                name: Some(name),
-                value: value.into(),
-            };
-            self.statics.insert(text, entry);
-        }
-
-        if no_attrs {
+        if i.attrs().next().is_none() {
             ctx.diagnostic(Diagnostic::new(
                 i.syntax().text_range(),
                 DiagnosticKind::EmptyInherit,
             ));
+            return;
+        }
+
+        for attr in i.attrs() {
+            let attr_ptr = AstPtr::new(attr.syntax());
+            let key = match AttrKind::of(attr) {
+                AttrKind::Static(key) => SmolStr::from(key.unwrap_or_default()),
+                // `inherit ${expr}` or `inherit (expr) ${expr}` is invalid.
+                AttrKind::Dynamic(expr) => {
+                    ctx.diagnostic(Diagnostic::new(
+                        attr_ptr.text_range(),
+                        DiagnosticKind::InvalidDynamic,
+                    ));
+                    self.push_dynamic(ctx, None, BindingValueKind::Expr(expr));
+                    continue;
+                }
+            };
+
+            let value = match from_expr {
+                Some(e) => BindingValue::InheritFrom(e),
+                None => {
+                    let ref_expr = ctx.alloc_expr(Expr::Reference(key.clone()), attr_ptr.clone());
+                    BindingValue::Inherit(ref_expr)
+                }
+            };
+            self.merge_static_value(ctx, key, attr_ptr, value);
         }
     }
 
-    fn merge_path_value(mut self: &mut Self, ctx: &mut LowerCtx, path_value: ast::AttrpathValue) {
-        let mut attrs = path_value
-            .attrpath()
-            .into_iter()
-            .flat_map(|path| path.attrs());
-        let mut next_attr = match attrs.next() {
-            Some(first_attr) => first_attr,
-            // Recover from missing Attrpath. This is already a syntax error,
-            // don't report it again.
-            None => {
-                let value_expr = ctx.lower_expr_opt(path_value.value());
-                self.recover_error(ctx, value_expr, AstPtr::new(path_value.syntax()));
-                return;
+    /// Push a dynamic Attr. This is also used for error recovery,
+    /// so InvalidDynamic is not checked here.
+    fn push_dynamic(
+        &mut self,
+        ctx: &mut LowerCtx,
+        key_expr: Option<ast::Expr>,
+        value: BindingValueKind,
+    ) {
+        let key_expr = ctx.lower_expr_opt(key_expr);
+        let value_expr = match value {
+            BindingValueKind::Expr(e) => ctx.lower_expr_opt(e),
+            BindingValueKind::ImplicitSet(set) => {
+                Self::desugar(ctx, NameKind::PlainAttrset, &set).finish_expr(ctx)
+            }
+            BindingValueKind::ExplicitSet(set) => {
+                Self::desugar(ctx, name_kind_of_set(&set), &set).finish_expr(ctx)
             }
         };
+        self.dynamics.push((key_expr, value_expr));
+    }
 
-        loop {
-            let attr_ptr = AstPtr::new(next_attr.syntax());
-            let entry = match AttrKind::of(next_attr) {
-                AttrKind::Static(text) => {
-                    let text = SmolStr::from(text.unwrap_or_default());
-                    match self.statics.entry(text.clone()) {
-                        Entry::Occupied(entry) => {
-                            // Append this location to the existing name.
-                            if let Some(name) = entry.get().name {
-                                ctx.source_map.name_map.insert(attr_ptr.clone(), name);
-                                ctx.source_map.name_map_rev[name].push(attr_ptr.clone());
-                            }
-                            entry.into_mut()
-                        }
-                        Entry::Vacant(entry) => {
-                            let name = ctx.alloc_name(text, self.name_kind, attr_ptr.clone());
-                            entry.insert(MergingEntry::new(Some(name)))
-                        }
+    fn merge_attr_value(&mut self, ctx: &mut LowerCtx, attr: ast::Attr, value: BindingValueKind) {
+        let attr_ptr = AstPtr::new(attr.syntax());
+        match AttrKind::of(attr) {
+            AttrKind::Static(key) => {
+                let key = SmolStr::new(key.unwrap_or_default());
+                match value {
+                    BindingValueKind::Expr(e) => {
+                        let e = ctx.lower_expr_opt(e);
+                        self.merge_static_value(ctx, key, attr_ptr, BindingValue::Expr(e));
                     }
-                }
-                AttrKind::Dynamic(expr) => {
-                    // LetIn doesn't allow dynamic attrs.
-                    if self.name_kind == NameKind::LetIn {
-                        ctx.diagnostic(Diagnostic::new(
-                            attr_ptr.text_range(),
-                            DiagnosticKind::InvalidDynamic,
-                        ));
-                        // We don't skip the RHS but still process it as a recovery.
+                    BindingValueKind::ImplicitSet(set) => {
+                        self.merge_static_set(ctx, key, attr_ptr, &set, NameKind::PlainAttrset);
                     }
-                    let expr = ctx.lower_expr_opt(expr);
-                    self.dynamics.push((expr, MergingEntry::new(None)));
-                    &mut self.dynamics.last_mut().unwrap().1
-                }
-            };
-            match attrs.next() {
-                Some(attr) => {
-                    // Deeper attrsets created via attrpath is not `rec`.
-                    self = entry.make_attrset(ctx, NameKind::PlainAttrset, attr_ptr, None);
-                    next_attr = attr;
-                }
-                None => {
-                    entry.merge_ast(ctx, attr_ptr, path_value.value());
-                    return;
+                    BindingValueKind::ExplicitSet(set) => {
+                        self.merge_static_set(ctx, key, attr_ptr, &set, name_kind_of_set(&set));
+                    }
                 }
             }
+            AttrKind::Dynamic(key_expr) => {
+                if self.name_kind == NameKind::LetIn {
+                    ctx.diagnostic(Diagnostic::new(
+                        attr_ptr.text_range(),
+                        DiagnosticKind::InvalidDynamic,
+                    ));
+                    // We don't skip the RHS but still process it as a recovery.
+                }
+                self.push_dynamic(ctx, key_expr, value)
+            }
         }
+    }
+
+    fn merge_static_value(
+        &mut self,
+        ctx: &mut LowerCtx,
+        key: SmolStr,
+        attr_ptr: AstPtr,
+        value: BindingValue,
+    ) {
+        self.statics
+            .entry(key.clone())
+            // Set-value or value-value collision.
+            .and_modify(|ent| {
+                // Append this location to the existing name.
+                ctx.source_map.name_map.insert(attr_ptr.clone(), ent.name);
+                ctx.source_map.name_map_rev[ent.name].push(attr_ptr.clone());
+
+                let prev_ptr = ctx.source_map.nodes_for_name(ent.name).next().unwrap();
+                ctx.diagnostic(
+                    Diagnostic::new(attr_ptr.text_range(), DiagnosticKind::DuplicatedKey)
+                        .with_note(
+                            FileRange::new(ctx.file_id, prev_ptr.text_range()),
+                            "Previously defined here",
+                        ),
+                );
+            })
+            .or_insert_with(|| MergingEntry {
+                name: ctx.alloc_name(key, self.name_kind, attr_ptr.clone()),
+                set: None,
+                value: Some((attr_ptr, value)),
+            });
+    }
+
+    fn merge_static_set(
+        &mut self,
+        ctx: &mut LowerCtx,
+        key: SmolStr,
+        attr_ptr: AstPtr,
+        n: &impl HasBindingsDesugar,
+        child_name_kind: NameKind,
+    ) {
+        self.statics
+            .entry(key.clone())
+            .and_modify(|ent| {
+                // Append this location to the existing name.
+                ctx.source_map.name_map.insert(attr_ptr.clone(), ent.name);
+                ctx.source_map.name_map_rev[ent.name].push(attr_ptr.clone());
+
+                if let Some(prev_set) = &mut ent.set {
+                    // Erase the source information when merging occurs.
+                    // Since the previous definition is not exhaustive now.
+                    // `{ a = { b = 1; }; a.c = 2; }`
+                    prev_set.ptr = None;
+
+                    if prev_set.name_kind.is_definition() {
+                        ctx.diagnostic(Diagnostic::new(
+                            attr_ptr.text_range(),
+                            DiagnosticKind::MergeRecAttrset,
+                        ));
+                    } else if child_name_kind.is_definition() {
+                        ctx.diagnostic(Diagnostic::new(
+                            attr_ptr.text_range(),
+                            DiagnosticKind::MergePlainRecAttrset,
+                        ));
+                    }
+                }
+
+                // Value-set collision.
+                // N.B. Report the previous value's definition, not the first one.
+                // `{ a.b = 1; a = 2; a.c = 3; }`.
+                //                      ^ Collides with `a =`, not `a.b =`
+                if let Some((prev_ptr, _)) = &ent.value {
+                    ctx.diagnostic(
+                        Diagnostic::new(attr_ptr.text_range(), DiagnosticKind::DuplicatedKey)
+                            .with_note(
+                                FileRange::new(ctx.file_id, prev_ptr.text_range()),
+                                "Previously defined here",
+                            ),
+                    );
+                }
+            })
+            // Otherwise, insert a new entry.
+            .or_insert_with(|| MergingEntry {
+                name: ctx.alloc_name(key, self.name_kind, attr_ptr),
+                set: None,
+                value: None,
+            })
+            .set
+            // If the previous entry is not a set, make it to be.
+            .get_or_insert_with(|| Self::new(child_name_kind, n.expr_syntax().map(AstPtr::new)))
+            .merge_bindings(ctx, n);
     }
 
     fn finish(self, ctx: &mut LowerCtx) -> Bindings {
@@ -492,144 +561,31 @@ impl MergingSet {
                 .statics
                 .into_values()
                 .map(|entry| {
-                    (
-                        entry.name.expect("Static entry must has Name"),
-                        entry.finish(ctx),
-                    )
+                    let value = match entry.set {
+                        Some(set) => BindingValue::Expr(set.finish_expr(ctx)),
+                        None => entry.value.unwrap().1,
+                    };
+                    (entry.name, value)
                 })
                 .collect(),
             inherit_froms: self.inherit_froms.into(),
-            dynamics: self
-                .dynamics
-                .into_iter()
-                .map(|(key_expr, entry)| {
-                    let expr = match entry.finish(ctx) {
-                        BindingValue::Inherit(_) | BindingValue::InheritFrom(_) => unreachable!(),
-                        BindingValue::Expr(expr) => expr,
-                    };
-                    (key_expr, expr)
-                })
-                .collect(),
-        }
-    }
-}
-
-impl MergingEntry {
-    fn new(name: Option<NameId>) -> Self {
-        Self {
-            name,
-            value: MergingValue::Placeholder,
+            dynamics: self.dynamics.into(),
         }
     }
 
-    fn make_attrset(
-        &mut self,
-        ctx: &mut LowerCtx,
-        name_kind: NameKind,
-        def_ptr: AstPtr,
-        value_ptr: Option<AstPtr>,
-    ) -> &mut MergingSet {
-        match &mut self.value {
-            MergingValue::Placeholder => {
-                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(name_kind));
-            }
-            MergingValue::Attrset(_, prev_set) => {
-                if prev_set.name_kind.is_definition() {
-                    ctx.diagnostic(Diagnostic::new(
-                        def_ptr.text_range(),
-                        DiagnosticKind::MergeRecAttrset,
-                    ));
-                } else if name_kind.is_definition() {
-                    ctx.diagnostic(Diagnostic::new(
-                        def_ptr.text_range(),
-                        DiagnosticKind::MergePlainRecAttrset,
-                    ));
-                }
-            }
-            // We prefer to become a Attrset as a guess, which allows further merging.
-            MergingValue::Final(value) => {
-                let mut set = MergingSet::new(name_kind);
-                if let BindingValue::Expr(expr) = *value {
-                    if let Some(ptr) = ctx.source_map.node_for_expr(expr) {
-                        set.recover_error(ctx, expr, ptr);
-                    }
-                }
-                self.emit_duplicated_key(ctx, def_ptr);
-                self.value = MergingValue::Attrset(value_ptr, MergingSet::new(name_kind));
-            }
-        }
-        match &mut self.value {
-            MergingValue::Attrset(_, set) => set,
+    fn finish_expr(mut self, ctx: &mut LowerCtx) -> ExprId {
+        let ctor = match self.name_kind {
+            // Implicit Attrsets can only be one of these two.
+            NameKind::PlainAttrset => Expr::Attrset,
+            NameKind::RecAttrset => Expr::RecAttrset,
             _ => unreachable!(),
-        }
-    }
-
-    fn merge_ast(&mut self, ctx: &mut LowerCtx, def_ptr: AstPtr, mut e: Option<ast::Expr>) {
-        loop {
-            match &e {
-                Some(ast::Expr::Paren(p)) => e = p.expr(),
-                Some(ast::Expr::AttrSet(e)) => {
-                    // RecAttrset is popular than LetAttrset, and is preferred.
-                    let name_kind = if e.rec_token().is_some() {
-                        NameKind::RecAttrset
-                    } else if e.let_token().is_some() {
-                        break;
-                    } else {
-                        NameKind::PlainAttrset
-                    };
-                    let value_ptr = AstPtr::new(e.syntax());
-                    return self
-                        .make_attrset(ctx, name_kind, def_ptr, Some(value_ptr))
-                        .merge_bindings(ctx, e);
-                }
-                _ => break,
-            }
-        }
-        // Here we got an unmergable Expr.
-        match &mut self.value {
-            MergingValue::Placeholder => {
-                self.value = BindingValue::Expr(ctx.lower_expr_opt(e)).into();
-            }
-            MergingValue::Attrset(..) | MergingValue::Final { .. } => {
-                // Suppress errors when there is no RHS, which happens during typing.
-                if e.is_some() {
-                    self.emit_duplicated_key(ctx, def_ptr);
-                }
-            }
-        }
-    }
-
-    fn emit_duplicated_key(&mut self, ctx: &mut LowerCtx, new_def_ptr: AstPtr) {
-        let mut diag = Diagnostic::new(new_def_ptr.text_range(), DiagnosticKind::DuplicatedKey);
-        if let Some(prev_ptr) = self
-            .name
-            .and_then(|name| ctx.source_map.nodes_for_name(name).next())
-        {
-            diag = diag.with_note(
-                FileRange::new(ctx.file_id, prev_ptr.text_range()),
-                "Previously defined here",
-            );
-        }
-        ctx.diagnostic(diag);
-    }
-
-    fn finish(self, ctx: &mut LowerCtx) -> BindingValue {
-        match self.value {
-            MergingValue::Placeholder => unreachable!(),
-            MergingValue::Final(value) => value,
-            MergingValue::Attrset(value_ptr, set) => {
-                let expr = if set.name_kind.is_definition() {
-                    Expr::RecAttrset(set.finish(ctx))
-                } else {
-                    Expr::Attrset(set.finish(ctx))
-                };
-                let expr = match value_ptr {
-                    Some(ptr) => ctx.alloc_expr(expr, ptr),
-                    // Implicit attrsets have no source!
-                    None => ctx.module.exprs.alloc(expr),
-                };
-                BindingValue::Expr(expr)
-            }
+        };
+        let ptr = self.ptr.take();
+        let e = ctor(self.finish(ctx));
+        match ptr {
+            Some(ptr) => ctx.alloc_expr(e, ptr),
+            // For implicit Attrset produced by merging, there's no "source" for it.
+            None => ctx.module.exprs.alloc(e),
         }
     }
 }
@@ -1138,7 +1094,8 @@ mod tests {
                     6..7: Previously defined here
 
                 0: Literal(Int(1))
-                1: RecAttrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                1: Literal(Int(2))
+                2: RecAttrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
 
                 0: Name { text: "a", kind: RecAttrset }
             "#]],
@@ -1186,15 +1143,15 @@ mod tests {
                 8..24: LetAttrset
 
                 0: Literal(Int(1))
-                1: Attrset(Bindings { statics: [(Idx::<Name>(3), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
-                2: LetAttrset(Bindings { statics: [(Idx::<Name>(2), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                3: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
+                1: Attrset(Bindings { statics: [(Idx::<Name>(2), Expr(Idx::<Expr>(0)))], inherit_froms: [], dynamics: [] })
+                2: LetAttrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Attrset(Bindings { statics: [(Idx::<Name>(3), Expr(Idx::<Expr>(2)))], inherit_froms: [], dynamics: [] })
                 4: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
 
                 0: Name { text: "a", kind: PlainAttrset }
-                1: Name { text: "b", kind: PlainAttrset }
-                2: Name { text: "c", kind: RecAttrset }
-                3: Name { text: "d", kind: PlainAttrset }
+                1: Name { text: "c", kind: RecAttrset }
+                2: Name { text: "d", kind: PlainAttrset }
+                3: Name { text: "b", kind: PlainAttrset }
             "#]],
         );
     }
@@ -1206,11 +1163,11 @@ mod tests {
             expect![[r#"
                 0: Reference("a")
                 1: Literal(Int(1))
-                2: Reference("a")
-                3: Literal(Int(2))
-                4: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
-                5: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(3)))], inherit_froms: [], dynamics: [] })
-                6: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(4)), (Idx::<Expr>(2), Idx::<Expr>(5))] })
+                2: Attrset(Bindings { statics: [(Idx::<Name>(0), Expr(Idx::<Expr>(1)))], inherit_froms: [], dynamics: [] })
+                3: Reference("a")
+                4: Literal(Int(2))
+                5: Attrset(Bindings { statics: [(Idx::<Name>(1), Expr(Idx::<Expr>(4)))], inherit_froms: [], dynamics: [] })
+                6: Attrset(Bindings { statics: [], inherit_froms: [], dynamics: [(Idx::<Expr>(0), Idx::<Expr>(2)), (Idx::<Expr>(3), Idx::<Expr>(5))] })
 
                 0: Name { text: "b", kind: PlainAttrset }
                 1: Name { text: "b", kind: PlainAttrset }

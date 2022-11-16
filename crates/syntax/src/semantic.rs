@@ -2,6 +2,8 @@
 //! Mostly about syntax desugaring.
 use crate::ast::{self, Attr, Expr, HasStringParts, StringPart};
 use crate::lexer::KEYWORDS;
+use crate::SyntaxNode;
+use rowan::ast::{AstChildren, AstNode};
 use std::borrow::Cow;
 use std::str;
 
@@ -89,5 +91,117 @@ impl AttrKind {
             Some(lit) => Self::Static(Some(lit)),
             None => Self::Dynamic(Some(Expr::String(s))),
         }
+    }
+}
+
+pub trait HasBindingsDesugar {
+    type IntoIter: Iterator<Item = BindingDesugar>;
+
+    fn expr_syntax(&self) -> Option<&SyntaxNode>;
+
+    fn desugar_bindings(&self) -> Self::IntoIter;
+}
+
+impl<N: ast::HasBindings> HasBindingsDesugar for N {
+    type IntoIter = std::iter::Map<AstChildren<ast::Binding>, fn(ast::Binding) -> BindingDesugar>;
+
+    fn expr_syntax(&self) -> Option<&SyntaxNode> {
+        Some(<N as AstNode>::syntax(self))
+    }
+
+    fn desugar_bindings(&self) -> Self::IntoIter {
+        self.bindings().map(BindingDesugar::of)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum BindingDesugar {
+    Inherit(ast::Inherit),
+    AttrValue(Option<ast::Attr>, BindingValueKind),
+}
+
+impl BindingDesugar {
+    fn of(b: ast::Binding) -> Self {
+        let pv = match b {
+            ast::Binding::Inherit(i) => return Self::Inherit(i),
+            ast::Binding::AttrpathValue(pv) => pv,
+        };
+        let value = pv.value();
+        let (attr, value_kind) = match pv.attrpath() {
+            None => (None, BindingValueKind::of(None, value)),
+            Some(path) => {
+                let mut iter = path.attrs();
+                (iter.next(), BindingValueKind::of(Some(iter), value))
+            }
+        };
+        Self::AttrValue(attr, value_kind)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum BindingValueKind {
+    Expr(Option<ast::Expr>),
+    ImplicitSet(ImplicitSet),
+    ExplicitSet(ast::AttrSet),
+}
+
+impl BindingValueKind {
+    fn of(attr_iter: Option<AstChildren<Attr>>, value: Option<ast::Expr>) -> Self {
+        if let Some(mut attr_iter) = attr_iter {
+            if let Some(attr) = attr_iter.next() {
+                return Self::ImplicitSet(ImplicitSet {
+                    attr,
+                    attr_iter,
+                    value,
+                });
+            }
+        }
+        match value.and_then(|e| e.flatten_paren()) {
+            Some(ast::Expr::AttrSet(set)) if set.let_token().is_none() => Self::ExplicitSet(set),
+            value => Self::Expr(value),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplicitSet {
+    attr: ast::Attr,
+    attr_iter: AstChildren<ast::Attr>,
+    value: Option<ast::Expr>,
+}
+
+impl HasBindingsDesugar for ImplicitSet {
+    type IntoIter = ImplicitSetIter;
+
+    fn expr_syntax(&self) -> Option<&SyntaxNode> {
+        None
+    }
+
+    fn desugar_bindings(&self) -> Self::IntoIter {
+        ImplicitSetIter(Some(self.clone()))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplicitSetIter(Option<ImplicitSet>);
+
+impl Iterator for ImplicitSetIter {
+    type Item = BindingDesugar;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ImplicitSet {
+            attr,
+            mut attr_iter,
+            value,
+        } = self.0.take()?;
+        let value_kind = match attr_iter.next() {
+            None => BindingValueKind::of(Some(attr_iter), value),
+            Some(next_attr) => BindingValueKind::ImplicitSet(ImplicitSet {
+                attr: next_attr,
+                attr_iter,
+                value,
+            }),
+        };
+        Some(BindingDesugar::AttrValue(Some(attr), value_kind))
     }
 }
