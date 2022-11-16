@@ -56,15 +56,39 @@ pub fn unescape_string_literal(n: &ast::String) -> Option<String> {
     {
         return None;
     }
+    let mut ret = String::new();
+    unescape_string(n, |part| {
+        match part {
+            UnescapedStringPart::Fragment(frag) => ret += frag,
+            UnescapedStringPart::Dynamic(_) => return Err(()),
+        }
+        Ok(())
+    })
+    .ok()
+    .map(|()| ret)
+}
 
-    let ret = n
-        .string_parts()
-        .fold(String::new(), |prev, part| match part {
-            StringPart::Fragment(f) => prev + f.text(),
-            StringPart::Escape(e) => prev + unescape_string_escape(e.text()),
-            StringPart::Dynamic(_) => unreachable!(),
-        });
-    Some(ret)
+/// Unescape strings and traverse the result parts.
+pub fn unescape_string<E>(
+    n: &ast::String,
+    mut f: impl FnMut(UnescapedStringPart<'_>) -> Result<(), E>,
+) -> Result<(), E> {
+    for part in n.string_parts() {
+        match part {
+            StringPart::Fragment(tok) => f(UnescapedStringPart::Fragment(tok.text()))?,
+            StringPart::Escape(tok) => f(UnescapedStringPart::Fragment(unescape_string_escape(
+                tok.text(),
+            )))?,
+            StringPart::Dynamic(d) => f(UnescapedStringPart::Dynamic(d))?,
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum UnescapedStringPart<'a> {
+    Fragment(&'a str),
+    Dynamic(ast::Dynamic),
 }
 
 /// Calculate the minimal indentation of an IndentString.
@@ -326,10 +350,28 @@ mod tests {
     }
 
     #[test]
-    fn unescape_string() {
-        let unescape = |src| unescape_string_literal(&parse(src));
+    fn unescape_string_literal() {
+        let unescape = |src| super::unescape_string_literal(&parse(src));
         assert_eq!(unescape(r#""foo\n""#), Some("foo\n".into()));
         assert_eq!(unescape(r#""foo\n${"b"}""#), None);
+    }
+
+    #[test]
+    fn unescape_string_parts() {
+        let unescape = |src| {
+            let mut ret = String::new();
+            unescape_string::<()>(&parse(src), |part| {
+                match part {
+                    UnescapedStringPart::Fragment(frag) => ret += frag,
+                    UnescapedStringPart::Dynamic(_) => ret += "<dyn>",
+                }
+                Ok(())
+            })
+            .unwrap();
+            ret
+        };
+        assert_eq!(unescape(r#""foo\n""#), "foo\n");
+        assert_eq!(unescape(r#""foo\n${"b"}""#), "foo\n<dyn>");
     }
 
     #[test]
