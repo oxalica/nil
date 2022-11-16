@@ -284,6 +284,7 @@ asts! {
         attrpath: Attrpath,
         equal_token: T![=],
         value: Expr,
+        semicolon_token: T![;],
     },
     ATTR_SET = AttrSet [HasBindings] {
         l_curly_token: T!['{'],
@@ -367,6 +368,7 @@ asts! {
         inherit_token: T![inherit],
         from_expr: Paren,
         attrs: [Attr],
+        semicolon_token: T![;],
     },
     LAMBDA = Lambda {
         param: Param,
@@ -471,4 +473,386 @@ asts! {
         semicolon_token: T![;],
         body[1]: Expr,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[track_caller]
+    fn parse<N: AstNode<Language = NixLanguage>>(src: &str) -> N {
+        let parse = crate::parse_file(src);
+        assert!(parse.errors().is_empty());
+        parse.syntax_node().descendants().find_map(N::cast).unwrap()
+    }
+
+    trait HasSyntaxNode {
+        fn has_syntax_node(&self) -> &SyntaxNode;
+    }
+
+    trait AstTest {
+        fn should_eq(&self, expect: &str);
+    }
+
+    impl AstTest for SyntaxNode {
+        #[track_caller]
+        fn should_eq(&self, expect: &str) {
+            assert_eq!(self.to_string().trim(), expect);
+        }
+    }
+
+    impl AstTest for SyntaxToken {
+        #[track_caller]
+        fn should_eq(&self, expect: &str) {
+            assert_eq!(self.to_string(), expect);
+        }
+    }
+
+    #[test]
+    fn apply() {
+        let e = parse::<Apply>("1 2");
+        e.function().unwrap().syntax().should_eq("1");
+        e.argument().unwrap().syntax().should_eq("2");
+    }
+
+    #[test]
+    fn assert() {
+        let e = parse::<Assert>("assert 1; 2");
+        e.assert_token().unwrap().should_eq("assert");
+        e.condition().unwrap().syntax().should_eq("1");
+        e.semicolon_token().unwrap().should_eq(";");
+        e.body().unwrap().syntax().should_eq("2");
+    }
+
+    #[test]
+    fn attr_path() {
+        let e = parse::<Attrpath>(r#"{ foo."bar".${baz} = 1; }"#);
+        let mut iter = e.attrs();
+        iter.next().unwrap().syntax().should_eq("foo");
+        iter.next().unwrap().syntax().should_eq(r#""bar""#);
+        iter.next().unwrap().syntax().should_eq("${baz}");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn attr_path_value() {
+        let e = parse::<AttrpathValue>(r#"{ foo."bar".${baz} = 1; }"#);
+        e.attrpath()
+            .unwrap()
+            .syntax()
+            .should_eq(r#"foo."bar".${baz}"#);
+        e.equal_token().unwrap().should_eq("=");
+        e.value().unwrap().syntax().should_eq("1");
+        e.semicolon_token().unwrap().should_eq(";");
+    }
+
+    #[test]
+    fn plain_attrset() {
+        let e = parse::<AttrSet>("{ a = let { }; b = rec { }; }");
+        assert!(e.let_token().is_none());
+        assert!(e.rec_token().is_none());
+        e.l_curly_token().unwrap().should_eq("{");
+        e.r_curly_token().unwrap().should_eq("}");
+
+        let mut iter = e.bindings();
+        iter.next().unwrap().syntax().should_eq("a = let { };");
+        iter.next().unwrap().syntax().should_eq("b = rec { };");
+    }
+
+    #[test]
+    fn rec_attrset() {
+        let e = parse::<AttrSet>("rec { a = let { }; b = rec { }; }");
+        assert!(e.let_token().is_none());
+        assert!(e.rec_token().is_some());
+        e.l_curly_token().unwrap().should_eq("{");
+        e.r_curly_token().unwrap().should_eq("}");
+    }
+
+    #[test]
+    fn let_attrset() {
+        let e = parse::<AttrSet>("let { a = let { }; b = rec { }; }");
+        assert!(e.let_token().is_some());
+        assert!(e.rec_token().is_none());
+        e.l_curly_token().unwrap().should_eq("{");
+        e.r_curly_token().unwrap().should_eq("}");
+    }
+
+    #[test]
+    fn binary_op() {
+        let e = parse::<BinaryOp>("1 + 2");
+        assert_eq!(e.op_kind(), Some(BinaryOpKind::Add));
+        e.op_token().unwrap().should_eq("+");
+        e.lhs().unwrap().syntax().should_eq("1");
+        e.rhs().unwrap().syntax().should_eq("2");
+    }
+
+    #[test]
+    fn dynamic() {
+        let e = parse::<Dynamic>(r#""${a}""#);
+        e.dollar_l_curly_token().unwrap().should_eq("${");
+        e.expr().unwrap().syntax().should_eq("a");
+        e.r_curly_token().unwrap().should_eq("}");
+    }
+
+    #[test]
+    fn has_attr() {
+        let e = parse::<HasAttr>("a ? b.c");
+        e.set().unwrap().syntax().should_eq("a");
+        e.question_token().unwrap().should_eq("?");
+        e.attrpath().unwrap().syntax().should_eq("b.c");
+    }
+
+    #[test]
+    fn if_then_else() {
+        let e = parse::<IfThenElse>("if 1 then 2 else 3");
+        e.if_token().unwrap().should_eq("if");
+        e.condition().unwrap().syntax().should_eq("1");
+        e.then_token().unwrap().should_eq("then");
+        e.then_body().unwrap().syntax().should_eq("2");
+        e.else_token().unwrap().should_eq("else");
+        e.else_body().unwrap().syntax().should_eq("3");
+    }
+
+    #[test]
+    fn indent_string() {
+        let e = parse::<IndentString>("''a''$${1}''");
+        let start = e.start_quote2_token().unwrap();
+        let end = e.end_quote2_token().unwrap();
+        start.should_eq("''");
+        end.should_eq("''");
+        assert_eq!(u32::from(start.text_range().start()), 0);
+        assert_eq!(u32::from(end.text_range().start()), 10);
+
+        let mut iter = e.string_parts();
+        assert!(matches!(iter.next().unwrap(), StringPart::Fragment(_)));
+        assert!(matches!(iter.next().unwrap(), StringPart::Escape(_)));
+        assert!(matches!(iter.next().unwrap(), StringPart::Dynamic(_)));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn inherit_plain() {
+        let e = parse::<Inherit>("{ inherit a b; }");
+        e.inherit_token().unwrap().should_eq("inherit");
+        assert!(e.from_expr().is_none());
+        e.semicolon_token().unwrap().should_eq(";");
+
+        let mut iter = e.attrs();
+        iter.next().unwrap().syntax().should_eq("a");
+        iter.next().unwrap().syntax().should_eq("b");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn inherit_from() {
+        let e = parse::<Inherit>("{ inherit (x) a b; }");
+        e.inherit_token().unwrap().should_eq("inherit");
+        e.from_expr().unwrap().syntax().should_eq("(x)");
+        e.semicolon_token().unwrap().should_eq(";");
+
+        let mut iter = e.attrs();
+        iter.next().unwrap().syntax().should_eq("a");
+        iter.next().unwrap().syntax().should_eq("b");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn lambda() {
+        let e = parse::<Lambda>("a: b");
+        e.param().unwrap().syntax().should_eq("a");
+        e.colon_token().unwrap().should_eq(":");
+        e.body().unwrap().syntax().should_eq("b");
+    }
+
+    #[test]
+    fn let_in() {
+        let e = parse::<LetIn>("let a = 1; in b");
+        e.let_token().unwrap().should_eq("let");
+        e.in_token().unwrap().should_eq("in");
+
+        let mut iter = e.bindings();
+        iter.next().unwrap().syntax().should_eq("a = 1;");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn list() {
+        let e = parse::<List>("[ a b ]");
+        e.l_brack_token().unwrap().should_eq("[");
+        e.r_brack_token().unwrap().should_eq("]");
+
+        let mut iter = e.elements();
+        iter.next().unwrap().syntax().should_eq("a");
+        iter.next().unwrap().syntax().should_eq("b");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn literal() {
+        for (src, k) in [
+            ("1", LiteralKind::Int),
+            ("1.e2", LiteralKind::Float),
+            ("a:b", LiteralKind::Uri),
+            ("/.", LiteralKind::Path),
+            ("<a>", LiteralKind::SearchPath),
+        ] {
+            let e = parse::<Literal>(src);
+            e.token().unwrap().should_eq(src);
+            assert_eq!(e.kind(), Some(k));
+        }
+    }
+
+    #[test]
+    fn name() {
+        let e = parse::<Name>("{ a = 1; }");
+        e.token().unwrap().should_eq("a");
+    }
+
+    #[test]
+    fn param_name() {
+        let e = parse::<Param>("a: b");
+        e.name().unwrap().syntax().should_eq("a");
+        assert!(e.at_token().is_none());
+        assert!(e.pat().is_none());
+    }
+
+    #[test]
+    fn param_pat() {
+        let e = parse::<Param>("{ }: b");
+        assert!(e.name().is_none());
+        assert!(e.at_token().is_none());
+        e.pat().unwrap().syntax().should_eq("{ }");
+    }
+
+    #[test]
+    fn param_name_pat() {
+        let e = parse::<Param>("a @ { }: b");
+        e.name().unwrap().syntax().should_eq("a");
+        e.at_token().unwrap().should_eq("@");
+        e.pat().unwrap().syntax().should_eq("{ }");
+    }
+
+    #[test]
+    fn param_pat_name() {
+        let e = parse::<Param>("{ } @ a: b");
+        e.name().unwrap().syntax().should_eq("a");
+        e.at_token().unwrap().should_eq("@");
+        e.pat().unwrap().syntax().should_eq("{ }");
+    }
+
+    #[test]
+    fn paren() {
+        let e = parse::<Paren>("(1)");
+        e.l_brack_token().unwrap().should_eq("(");
+        e.expr().unwrap().syntax().should_eq("1");
+        e.r_brack_token().unwrap().should_eq(")");
+    }
+
+    #[test]
+    fn path_interpolation() {
+        let e = parse::<PathInterpolation>("/${a}b/c");
+        let mut iter = e.path_parts();
+        assert!(matches!(iter.next(), Some(PathPart::Fragment(_))));
+        assert!(matches!(iter.next(), Some(PathPart::Dynamic(_))));
+        assert!(matches!(iter.next(), Some(PathPart::Fragment(_))));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn pat_exhaustive() {
+        let e = parse::<Pat>("{ a, b }: 1");
+        assert!(e.ellipsis_token().is_none());
+
+        let mut iter = e.fields();
+        iter.next().unwrap().syntax().should_eq("a");
+        iter.next().unwrap().syntax().should_eq("b");
+    }
+
+    #[test]
+    fn pat_ellipsis() {
+        let e = parse::<Pat>("{ a, b, ... }: 1");
+        e.ellipsis_token().unwrap().should_eq("...");
+
+        let mut iter = e.fields();
+        iter.next().unwrap().syntax().should_eq("a");
+        iter.next().unwrap().syntax().should_eq("b");
+    }
+
+    #[test]
+    fn pat_field_simple() {
+        let e = parse::<PatField>("{ a }: 1");
+        e.name().unwrap().syntax().should_eq("a");
+        assert!(e.question_token().is_none());
+        assert!(e.default_expr().is_none());
+    }
+
+    #[test]
+    fn pat_field_default() {
+        let e = parse::<PatField>("{ a ? b }: 1");
+        e.name().unwrap().syntax().should_eq("a");
+        e.question_token().unwrap().should_eq("?");
+        e.default_expr().unwrap().syntax().should_eq("b");
+    }
+
+    #[test]
+    fn ref_() {
+        let e = parse::<Ref>("a");
+        e.token().unwrap().should_eq("a");
+    }
+
+    #[test]
+    fn select_simple() {
+        let e = parse::<Select>("a.b.c");
+        e.set().unwrap().syntax().should_eq("a");
+        e.dot_token().unwrap().should_eq(".");
+        assert_eq!(u32::from(e.dot_token().unwrap().text_range().start()), 1);
+        e.attrpath().unwrap().syntax().should_eq("b.c");
+        assert!(e.or_token().is_none());
+        assert!(e.default_expr().is_none());
+    }
+
+    #[test]
+    fn select_default() {
+        let e = parse::<Select>("a.b.c or d");
+        e.set().unwrap().syntax().should_eq("a");
+        e.dot_token().unwrap().should_eq(".");
+        assert_eq!(u32::from(e.dot_token().unwrap().text_range().start()), 1);
+        e.attrpath().unwrap().syntax().should_eq("b.c");
+        e.or_token().unwrap().should_eq("or");
+        e.default_expr().unwrap().syntax().should_eq("d");
+    }
+
+    #[test]
+    fn string() {
+        let e = parse::<String>(r#""a\n${b}""#);
+        let start = e.start_dquote_token().unwrap();
+        let end = e.end_dquote_token().unwrap();
+        start.should_eq("\"");
+        end.should_eq("\"");
+        assert_eq!(u32::from(start.text_range().start()), 0);
+        assert_eq!(u32::from(end.text_range().start()), 8);
+
+        let mut iter = e.string_parts();
+        assert!(matches!(iter.next().unwrap(), StringPart::Fragment(_)));
+        assert!(matches!(iter.next().unwrap(), StringPart::Escape(_)));
+        assert!(matches!(iter.next().unwrap(), StringPart::Dynamic(_)));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn unary_op() {
+        let e = parse::<UnaryOp>("-1");
+        assert_eq!(e.op_kind(), Some(UnaryOpKind::Negate));
+        e.op_token().unwrap().should_eq("-");
+        e.arg().unwrap().syntax().should_eq("1");
+    }
+
+    #[test]
+    fn with() {
+        let e = parse::<With>("with 1; 2");
+        e.with_token().unwrap().should_eq("with");
+        e.environment().unwrap().syntax().should_eq("1");
+        e.semicolon_token().unwrap().should_eq(";");
+        e.body().unwrap().syntax().should_eq("2");
+    }
 }
