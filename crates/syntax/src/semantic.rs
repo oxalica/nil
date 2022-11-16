@@ -2,7 +2,7 @@
 //! Mostly about syntax desugaring.
 use crate::ast::{self, Attr, Expr, HasStringParts, StringPart};
 use crate::lexer::KEYWORDS;
-use crate::SyntaxNode;
+use crate::{SyntaxNode, SyntaxToken};
 use rowan::ast::{AstChildren, AstNode};
 use std::borrow::Cow;
 use std::str;
@@ -65,6 +65,103 @@ pub fn unescape_string_literal(n: &ast::String) -> Option<String> {
             StringPart::Dynamic(_) => unreachable!(),
         });
     Some(ret)
+}
+
+/// Calculate the minimal indentation of an IndentString.
+/// Or returns `usize::MAX` if all lines are empty.
+///
+/// See:
+/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/parser.y#L195
+/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/lexer.l#L204
+pub fn common_indent_of(n: &ast::IndentString) -> usize {
+    let mut ret = usize::MAX;
+    let mut counter = Some(0usize);
+    for part in n.string_parts() {
+        let tok = match part {
+            StringPart::Escape(_) | StringPart::Dynamic(_) => {
+                if let Some(ind) = counter {
+                    ret = ret.min(ind);
+                    counter = None;
+                }
+                continue;
+            }
+            StringPart::Fragment(tok) => tok,
+        };
+        for b in tok.text().bytes() {
+            match (b, &mut counter) {
+                (b' ', Some(ind)) => *ind += 1,
+                (b'\n', _) => counter = Some(0),
+                (_, Some(ind)) => {
+                    ret = ret.min(*ind);
+                    counter = None;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // N.B. The last indentation doesn't count.
+    ret
+}
+
+/// Strip the common indentation and traverse stripped parts.
+/// See also [`common_indent_of`].
+pub fn strip_indent<E>(
+    n: &ast::IndentString,
+    mut f: impl FnMut(StrippedStringPart<'_>) -> Result<(), E>,
+) -> Result<(), E> {
+    let indent = common_indent_of(n);
+
+    let part_cnt = n.string_parts().count();
+    for (i, part) in n.string_parts().enumerate() {
+        let tok = match part {
+            StringPart::Fragment(tok) => tok,
+            StringPart::Escape(e) => {
+                f(StrippedStringPart::Escape(e))?;
+                continue;
+            }
+            StringPart::Dynamic(d) => {
+                f(StrippedStringPart::Dynamic(d))?;
+                continue;
+            }
+        };
+
+        let mut frag = tok.text();
+        // s/^ *\n//
+        if i == 0 {
+            if let Some(pos) = frag.find(|c| c != ' ') {
+                if frag.as_bytes()[pos] == b'\n' {
+                    frag = &frag[pos + 1..];
+                }
+            }
+        }
+        // s/\n *$/\n/
+        if i + 1 == part_cnt {
+            if let Some(pos) = frag.rfind(|c| c != ' ') {
+                if frag.as_bytes()[pos] == b'\n' {
+                    frag = &frag[..pos + 1];
+                }
+            }
+        }
+        for (j, line) in frag.split_inclusive('\n').enumerate() {
+            if i != 0 && j == 0 {
+                // Line continuation is kept.
+                f(StrippedStringPart::Fragment(line))?;
+            } else {
+                let line_len = line.strip_suffix('\n').unwrap_or(line).len();
+                f(StrippedStringPart::Fragment(&line[indent.min(line_len)..]))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StrippedStringPart<'a> {
+    Fragment(&'a str),
+    Escape(SyntaxToken),
+    Dynamic(ast::Dynamic),
 }
 
 /// The dynamic-ness of an `Attr`.
@@ -233,6 +330,76 @@ mod tests {
         let unescape = |src| unescape_string_literal(&parse(src));
         assert_eq!(unescape(r#""foo\n""#), Some("foo\n".into()));
         assert_eq!(unescape(r#""foo\n${"b"}""#), None);
+    }
+
+    #[test]
+    fn strip_indent_string() {
+        #[track_caller]
+        fn check(src: &str, expect_indent: usize, expect: &str) {
+            let s = parse(src);
+            assert_eq!(common_indent_of(&s), expect_indent);
+            let mut stripped = String::new();
+            strip_indent::<()>(&s, |part| {
+                match part {
+                    StrippedStringPart::Fragment(frag) => stripped += frag,
+                    StrippedStringPart::Escape(e) => stripped += unescape_string_escape(e.text()),
+                    StrippedStringPart::Dynamic(_) => stripped += "<dyn>",
+                }
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(stripped, expect);
+        }
+
+        // Trivial cases.
+        check("'' a ''", 1, "a ");
+        check("''a\n a''", 0, "a\n a");
+        check("''''\\n\n a''", 0, "\n\n a");
+        check("''${a}\n a''", 0, "<dyn>\n a");
+
+        // The first empty line is stripped.
+        check("'' \nb''", 0, "b");
+        check("'' a\nb''", 0, " a\nb");
+        check("''\n  a\n  b''", 2, "a\nb");
+        check("'' \n  a\n  b''", 2, "a\nb");
+
+        // The last line is stripped if it's empty.
+        check("''\n  a\n ''", 2, "a\n");
+        check("''\n  a\n     ''", 2, "a\n");
+        check("''\n  a ''", 2, "a ");
+        check("''\n  a \n  b ''", 2, "a \nb ");
+
+        // Not indentation.
+        check("''\n  a b ${c} \n  d ''' ''", 2, "a b <dyn> \nd '' ");
+
+        // Minimal.
+        check("'' ''", usize::MAX, "");
+        check("'' a''", 1, "a");
+        check("''\n a\n  b''", 1, "a\n b");
+        check("''\n  a\n b''", 1, " a\nb");
+        check("''\n a\n b''", 1, "a\nb");
+        check("''\n a\n  b\n  ''", 1, "a\n b\n");
+        check("''\n a\n  b\n  c ''", 1, "a\n b\n c ");
+
+        check(
+            "
+''
+   a
+  b
+    c
+''",
+            2,
+            " a\nb\n  c\n",
+        );
+        check(
+            "
+  ''
+    a
+   ''
+        ",
+            4,
+            "a\n",
+        );
     }
 
     #[test]
