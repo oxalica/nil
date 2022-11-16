@@ -1,8 +1,17 @@
-use crate::parse_file;
+use crate::{parse_file, NixLanguage};
 use expect_test::expect_file;
+use rowan::ast::AstNode;
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
+
+// Used by subtests.
+#[track_caller]
+pub fn parse<N: AstNode<Language = NixLanguage>>(src: &str) -> N {
+    let parse = crate::parse_file(src);
+    assert!(parse.errors().is_empty());
+    parse.syntax_node().descendants().find_map(N::cast).unwrap()
+}
 
 fn run_test(dir: &Path, ok: bool) {
     let mut test_files = dir

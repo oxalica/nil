@@ -478,13 +478,7 @@ asts! {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[track_caller]
-    fn parse<N: AstNode<Language = NixLanguage>>(src: &str) -> N {
-        let parse = crate::parse_file(src);
-        assert!(parse.errors().is_empty());
-        parse.syntax_node().descendants().find_map(N::cast).unwrap()
-    }
+    use crate::tests::parse;
 
     trait HasSyntaxNode {
         fn has_syntax_node(&self) -> &SyntaxNode;

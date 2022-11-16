@@ -205,3 +205,116 @@ impl Iterator for ImplicitSetIter {
         Some(BindingDesugar::AttrValue(Some(attr), value_kind))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::parse;
+
+    #[test]
+    fn ident_validity() {
+        assert!(is_valid_ident("foo"));
+        assert!(is_valid_ident("bar'-"));
+        assert!(!is_valid_ident(" "));
+        assert!(!is_valid_ident("a*b"));
+        assert!(!is_valid_ident("in"));
+    }
+
+    #[test]
+    fn escape_attr() {
+        assert_eq!(escape_literal_attr("foo"), "foo");
+        assert_eq!(escape_literal_attr("in"), r#""in""#);
+        assert_eq!(escape_literal_attr(" "), r#"" ""#);
+        assert_eq!(escape_literal_attr("\n"), r#""\n""#);
+    }
+
+    #[test]
+    fn unescape_string() {
+        let unescape = |src| unescape_string_literal(&parse(src));
+        assert_eq!(unescape(r#""foo\n""#), Some("foo\n".into()));
+        assert_eq!(unescape(r#""foo\n${"b"}""#), None);
+    }
+
+    #[test]
+    fn attr_kind() {
+        let classify = |src| match AttrKind::of(parse(src)) {
+            AttrKind::Static(text) => Ok(text.unwrap()),
+            AttrKind::Dynamic(expr) => Err(expr.unwrap().syntax().to_string()),
+        };
+
+        assert_eq!(classify("{ a-b = 1; }"), Ok("a-b".into()));
+        assert_eq!(classify(r#"{ "a\n" = 1; }"#), Ok("a\n".into()));
+        assert_eq!(classify(r#"{ ${"b"} = 1; }"#), Ok("b".into()));
+        assert_eq!(classify(r#"{ ${(("b"))} = 1; }"#), Ok("b".into()));
+
+        assert_eq!(
+            classify(r#"{ "a${"b"}" = 1; }"#),
+            Err(r#""a${"b"}""#.into()),
+        );
+        assert_eq!(
+            classify(r#"{ ${"b" + "c"} = 1; }"#),
+            Err(r#""b" + "c""#.into()),
+        );
+    }
+
+    #[test]
+    fn desugar_bindings_flat() {
+        let e = parse::<ast::AttrSet>("{ a = 1; ${b} = 2; inherit c; }");
+        assert!(e.expr_syntax().is_some());
+
+        let mut iter = e.desugar_bindings();
+
+        assert!(matches!(iter.next().unwrap(),
+            BindingDesugar::AttrValue(Some(k), BindingValueKind::Expr(Some(v)))
+            if k.syntax().to_string() == "a" && v.syntax().to_string() == "1"
+        ));
+        assert!(matches!(iter.next().unwrap(),
+            BindingDesugar::AttrValue(Some(k), BindingValueKind::Expr(Some(v)))
+            if k.syntax().to_string() == "${b}" && v.syntax().to_string() == "2"
+        ));
+        assert!(matches!(iter.next().unwrap(),
+            BindingDesugar::Inherit(i)
+            if i.syntax().to_string() == "inherit c;"
+        ));
+
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn desugar_bindings_nest() {
+        let e = parse::<ast::AttrSet>("{ a.b = 1; c = rec { d = 2; }; }");
+        assert!(e.expr_syntax().is_some());
+
+        let mut iter = e.desugar_bindings();
+
+        match iter.next().unwrap() {
+            BindingDesugar::AttrValue(Some(k), BindingValueKind::ImplicitSet(set)) => {
+                assert_eq!(k.syntax().to_string(), "a");
+                assert!(set.expr_syntax().is_none());
+                let mut deep = set.desugar_bindings();
+                assert!(matches!(deep.next().unwrap(),
+                    BindingDesugar::AttrValue(Some(k), BindingValueKind::Expr(Some(v)))
+                    if k.syntax().to_string() == "b" && v.syntax().to_string() == "1"
+                ));
+                assert!(deep.next().is_none());
+            }
+            _ => unreachable!(),
+        }
+
+        match iter.next().unwrap() {
+            BindingDesugar::AttrValue(Some(k), BindingValueKind::ExplicitSet(set)) => {
+                assert_eq!(k.syntax().to_string(), "c");
+                assert_eq!(set.syntax().to_string(), "rec { d = 2; }");
+                let mut deep = set.desugar_bindings();
+                assert!(matches!(deep.next().unwrap(),
+                    BindingDesugar::AttrValue(Some(k), BindingValueKind::Expr(Some(v)))
+                    if k.syntax().to_string() == "d" && v.syntax().to_string() == "2"
+                ));
+                assert!(deep.next().is_none());
+            }
+            _ => unreachable!(),
+        }
+
+        assert!(iter.next().is_none());
+    }
+}
