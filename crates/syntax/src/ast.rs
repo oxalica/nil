@@ -286,10 +286,25 @@ asts! {
         value: Expr,
     },
     ATTR_SET = AttrSet [HasBindings] {
-        rec_token: T![rec],
-        let_token: T![let],
         l_curly_token: T!['{'],
         r_curly_token: T!['}'],
+
+        // These two are exclusive and can only be the first non-white token.
+        // Don't scan all children.
+        pub fn let_token(&self) -> Option<SyntaxToken> {
+            self.0
+                .children_with_tokens()
+                .filter_map(|it| it.into_token())
+                .find(|it| !it.kind().is_whitespace())
+                .filter(|tok| tok.kind() == T![let])
+        }
+        pub fn rec_token(&self) -> Option<SyntaxToken> {
+            self.0
+                .children_with_tokens()
+                .filter_map(|it| it.into_token())
+                .find(|it| !it.kind().is_whitespace())
+                .filter(|tok| tok.kind() == T![rec])
+        }
     },
     BINARY_OP = BinaryOp {
         lhs: Expr,

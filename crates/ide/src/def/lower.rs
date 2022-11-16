@@ -151,7 +151,6 @@ impl LowerCtx<'_> {
                 self.alloc_expr(Expr::LetIn(bindings, body), ptr)
             }
             ast::Expr::AttrSet(e) => {
-                // RecAttrset is popular than LetAttrset, and is preferred.
                 let ctor = if e.rec_token().is_some() {
                     Expr::RecAttrset
                 } else if e.let_token().is_some() {
