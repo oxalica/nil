@@ -17,6 +17,9 @@ let
     set updatetime=300
     syntax off " Disable the builtin regex-based highlighting for semantic tokens.
 
+    " Semantic highlighting.
+    autocmd CursorHold * silent call CocActionAsync('highlight')
+
     inoremap <silent><expr> <TAB> coc#pum#visible() ? coc#pum#confirm() : "\<Tab>"
     inoremap <expr><S-TAB> coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"
     inoremap <silent><expr> <c-@> coc#refresh()
@@ -33,8 +36,11 @@ let
 
     nnoremap <silent> <Space><Space> <Cmd>call CocActionAsync('doHover')<CR>
     nnoremap <silent> <Space>s       <Cmd>call CocActionAsync('showSignatureHelp')<CR>
-    nmap     <silent> <Space>a       <Plug>(coc-codeaction)
-    nmap     <silent> <Space>r       <Plug>(coc-rename)
+
+    nmap <silent> <Leader>r <Plug>(coc-rename)
+    xmap <silent> <Leader>a <Plug>(coc-codeaction-selected)
+    nmap <silent> <Leader>a <Plug>(coc-codeaction-selected)
+    nmap <silent> <Leader>qf <Plug>(coc-fix-current)
 
     command -nargs=0 CocShowOutput CocCommand workspace.showOutput languageserver.nix
     command -nargs=0 CocSemanticHighlightInfo call CocActionAsync('showSemanticHighlightInfo')

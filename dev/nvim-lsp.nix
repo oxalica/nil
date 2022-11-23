@@ -55,14 +55,15 @@ let
       { ']d', vim.diagnostic.goto_next },
       { ' ' , vim.lsp.buf.hover },
       { ' s', vim.lsp.buf.signature_help },
-      { ' r', vim.lsp.buf.rename },
-      { ' a', vim.lsp.buf.code_action },
       { ' d', vim.diagnostic.open_float },
       { ' q', vim.diagnostic.setloclist },
+      { '\\r', vim.lsp.buf.rename },
+      { '\\a', vim.lsp.buf.code_action },
     }
     for i, map in pairs(lsp_mappings) do
       vim.keymap.set('n', map[1], function() map[2]() end)
     end
+    vim.keymap.set('x', '\\a', function() vim.lsp.buf.code_action() end)
 
     -- https://github.com/neovim/nvim-lspconfig/wiki/Autocompletion
     local caps = vim.tbl_extend(
