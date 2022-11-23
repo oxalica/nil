@@ -47,10 +47,6 @@
               && die 'Found dbg!()'
             cargo fmt --quiet --check >/dev/null \
               || die 'Format failed'
-            cargo clippy --quiet --all-targets --all-features -- --deny warnings \
-              || die 'Clippy failed'
-            cargo test --quiet \
-              || die 'Test failed'
           '';
 
           nil = pkgs.callPackage mkNil { };
