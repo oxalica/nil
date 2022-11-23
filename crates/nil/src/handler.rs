@@ -1,12 +1,13 @@
 use crate::{convert, Result, StateSnapshot};
 use ide::{FileRange, GotoDefinitionResult, LinkTarget};
 use lsp_types::{
-    CompletionParams, CompletionResponse, Diagnostic, DocumentFormattingParams, DocumentLink,
-    DocumentLinkParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, Location, Position, PrepareRenameResponse, Range,
-    ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens,
-    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
+    CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse, Diagnostic,
+    DocumentFormattingParams, DocumentLink, DocumentLinkParams, DocumentSymbolParams,
+    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
+    Location, Position, PrepareRenameResponse, Range, ReferenceParams, RenameParams,
+    SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
+    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
+    TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
 use std::path::Path;
 use std::process;
@@ -300,4 +301,19 @@ pub(crate) fn document_links(
         })
         .collect::<Vec<_>>();
     Ok(Some(links))
+}
+
+pub(crate) fn code_action(
+    snap: StateSnapshot,
+    params: CodeActionParams,
+) -> Result<Option<CodeActionResponse>> {
+    let (file_id, _) = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let (_, range) = convert::from_range(&snap.vfs(), file_id, params.range)?;
+    let assists = snap.analysis.assists(FileRange { file_id, range })?;
+    let vfs = snap.vfs();
+    let actions = assists
+        .into_iter()
+        .map(|assist| convert::to_code_action(&vfs, assist))
+        .collect();
+    Ok(Some(actions))
 }

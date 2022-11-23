@@ -14,12 +14,16 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Links for URLs like `"https://..."`, `"http://..."` and etc.
   - [x] Links for [flake references][flake-ref] like `"github:NixOS/nixpkgs"`.
 
+- [x] Code actions. `textDocument/codeAction`
+  - [x] Convert `name = name;` bindings to `inherit`.
+
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
     - With documentations.
   - [x] Local bindings and rec-attrset fields.
   - [x] Keywords.
   - [ ] Attrset fields.
+
 - [x] Diagnostics. `textDocument/publishDiagnostics`
   - [x] Syntax errors. 
   - [x] Hard semantic errors reported as parse errors by Nix, like duplicated keys in attrsets.

@@ -1,3 +1,4 @@
+mod assists;
 mod completion;
 mod diagnostics;
 mod expand_selection;
@@ -18,6 +19,7 @@ use salsa::{Database, Durability, ParallelDatabase};
 use smol_str::SmolStr;
 use std::fmt;
 
+pub use assists::{Assist, AssistKind};
 pub use completion::{CompletionItem, CompletionItemKind};
 pub use goto_definition::GotoDefinitionResult;
 pub use hover::HoverResult;
@@ -152,5 +154,9 @@ impl Analysis {
 
     pub fn links(&self, file: FileId) -> Cancellable<Vec<Link>> {
         self.with_db(|db| links::links(db, file))
+    }
+
+    pub fn assists(&self, frange: FileRange) -> Cancellable<Vec<Assist>> {
+        self.with_db(|db| assists::assists(db, frange))
     }
 }

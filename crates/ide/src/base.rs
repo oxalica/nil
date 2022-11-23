@@ -199,6 +199,15 @@ impl FileRange {
     pub fn new(file_id: FileId, range: TextRange) -> Self {
         Self { file_id, range }
     }
+
+    pub fn empty(pos: FilePos) -> Self {
+        Self::new(pos.file_id, TextRange::empty(pos.pos))
+    }
+
+    pub fn span(start: FilePos, end: FilePos) -> Self {
+        assert_eq!(start.file_id, end.file_id);
+        Self::new(start.file_id, TextRange::new(start.pos, end.pos))
+    }
 }
 
 #[salsa::query_group(SourceDatabaseStorage)]

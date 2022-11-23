@@ -87,21 +87,11 @@ fn is_node_kind_good(kind: SyntaxKind) -> bool {
 mod tests {
     use crate::base::SourceDatabase;
     use crate::tests::TestDB;
-    use crate::FileRange;
     use expect_test::{expect, Expect};
-    use rowan::TextRange;
 
     fn check(fixture: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        let frange = match f.markers() {
-            [fpos] => FileRange::new(fpos.file_id, TextRange::empty(fpos.pos)),
-            [lpos, rpos] => {
-                assert_eq!(lpos.file_id, rpos.file_id);
-                FileRange::new(lpos.file_id, TextRange::new(lpos.pos, rpos.pos))
-            }
-            _ => unreachable!(),
-        };
-
+        let frange = f.marker_single_range();
         let src = db.file_content(f[0].file_id);
         let got = super::expand_selection(&db, frange)
             .into_iter()

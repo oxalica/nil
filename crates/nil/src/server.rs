@@ -206,6 +206,7 @@ impl Server {
             .on::<req::DocumentSymbolRequest>(handler::document_symbol)
             .on::<req::Formatting>(handler::formatting)
             .on::<req::DocumentLinkRequest>(handler::document_links)
+            .on::<req::CodeActionRequest>(handler::code_action)
             .finish();
     }
 

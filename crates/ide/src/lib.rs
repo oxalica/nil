@@ -9,9 +9,9 @@ mod ty;
 mod tests;
 
 pub use self::ide::{
-    Analysis, AnalysisHost, Cancelled, CompletionItem, CompletionItemKind, GotoDefinitionResult,
-    HlKeyword, HlOperator, HlPunct, HlRange, HlTag, HoverResult, Link, LinkTarget,
-    NavigationTarget, RenameResult, RootDatabase, SymbolTree,
+    Analysis, AnalysisHost, Assist, AssistKind, Cancelled, CompletionItem, CompletionItemKind,
+    GotoDefinitionResult, HlKeyword, HlOperator, HlPunct, HlRange, HlTag, HoverResult, Link,
+    LinkTarget, NavigationTarget, RenameResult, RootDatabase, SymbolTree,
 };
 pub use base::{
     Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,

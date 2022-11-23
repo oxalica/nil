@@ -1,7 +1,7 @@
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
-use crate::{Change, DefDatabase, FileId, FilePos, FileSet, SourceRoot, VfsPath};
+use crate::{Change, DefDatabase, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath};
 use anyhow::{ensure, Context, Result};
 use indexmap::IndexMap;
 use rowan::ast::AstNode;
@@ -167,5 +167,13 @@ impl Fixture {
 
     pub fn markers(&self) -> &[FilePos] {
         &self.markers
+    }
+
+    pub fn marker_single_range(&self) -> FileRange {
+        match *self.markers() {
+            [fpos] => FileRange::empty(fpos),
+            [start, end] => FileRange::span(start, end),
+            _ => panic!("Must have either 1 or 2 markers"),
+        }
     }
 }

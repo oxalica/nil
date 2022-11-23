@@ -1,14 +1,14 @@
 use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
-    CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange, HlRange,
-    HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
+    Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
+    HlRange, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
 use lsp_server::ErrorCode;
 use lsp_types::{
-    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, DocumentSymbol,
-    Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position,
-    PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
-    TextDocumentPositionParams,
+    self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
+    DiagnosticSeverity, DiagnosticTag, DocumentSymbol, Documentation, Hover, Location,
+    MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse, Range,
+    SemanticToken, SymbolKind, TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
@@ -299,4 +299,19 @@ fn to_document_symbol(line_map: &LineMap, sym: SymbolTree) -> DocumentSymbol {
         selection_range: to_range(line_map, sym.focus_range),
         children: Some(to_document_symbols(line_map, sym.children)),
     }
+}
+
+pub(crate) fn to_code_action(vfs: &Vfs, assist: Assist) -> CodeActionOrCommand {
+    CodeActionOrCommand::CodeAction(CodeAction {
+        title: assist.label,
+        kind: Some(match assist.kind {
+            AssistKind::RefactorRewrite => CodeActionKind::REFACTOR_REWRITE,
+        }),
+        diagnostics: None,
+        edit: Some(to_workspace_edit(vfs, assist.edits)),
+        command: None,
+        is_preferred: None,
+        disabled: None,
+        data: None,
+    })
 }
