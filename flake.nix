@@ -58,10 +58,13 @@
           };
 
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; with rustPkgs; [
+            packages = with pkgs; [
               # Override the stable rustfmt.
-              rust-nightly_2022-10-01.availableComponents.rustfmt
-              rust
+              rustPkgs.rust-nightly_2022-10-01.availableComponents.rustfmt
+              # Follows nixpkgs's version of rustc.
+              (let vers = lib.splitVersion rustc.version; in
+                rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}")
+
               nix.out # For generation of builtins.
               gdb
               jq

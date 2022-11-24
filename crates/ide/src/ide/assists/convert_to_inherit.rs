@@ -15,8 +15,9 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     }
 
     // RHS should be a single identifier.
-    let ast::Expr::Ref(rhs) = binding.value()?.flatten_paren()? else {
-        return None;
+    let rhs = match binding.value()?.flatten_paren()? {
+        ast::Expr::Ref(rhs) => rhs,
+        _ => return None,
     };
 
     // LHS should be a single static name.
@@ -25,8 +26,9 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     if attrs.next().is_some() {
         return None;
     }
-    let AttrKind::Static(Some(key)) = AttrKind::of(attr) else {
-        return None;
+    let key = match AttrKind::of(attr) {
+        AttrKind::Static(Some(key)) => key,
+        _ => return None,
     };
 
     // LHS should match RHS.
