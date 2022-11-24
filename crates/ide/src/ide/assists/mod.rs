@@ -11,6 +11,7 @@ macro_rules! define_check_assist {
 }
 
 mod convert_to_inherit;
+mod pack_bindings;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
 use rowan::ast::AstNode;
@@ -32,7 +33,10 @@ pub enum AssistKind {
 }
 
 pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
-    let handlers = [convert_to_inherit::convert_to_inherit];
+    let handlers = [
+        convert_to_inherit::convert_to_inherit,
+        pack_bindings::pack_bindings,
+    ];
 
     let mut ctx = AssistsCtx::new(db, frange);
     for h in handlers {
@@ -41,8 +45,6 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
     ctx.assists
 }
 
-// TODO
-#[allow(unused)]
 pub(crate) struct AssistsCtx<'a> {
     db: &'a dyn DefDatabase,
     frange: FileRange,
@@ -113,6 +115,14 @@ mod tests {
         // Reverse apply.
         for edit in assist.edits.content_edits[&f[0].file_id].iter().rev() {
             edit.apply(&mut src);
+        }
+        // Don't count spaces at the end of lines.
+        let mut src = src
+            .lines()
+            .flat_map(|line| [line.trim_end(), "\n"])
+            .collect::<String>();
+        if !src[..src.len() - 1].contains('\n') {
+            src.pop();
         }
         Some(src)
     }

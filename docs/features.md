@@ -16,6 +16,9 @@ This incomplete list tracks noteble features currently implemented or planned.
 
 - [x] Code actions. `textDocument/codeAction`
   - [x] Convert `name = name;` bindings to `inherit`.
+  - [x] Pack multiple bindings into one Attrset binding.
+
+    `{ foo.bar = 1; foo.baz = 2; }` => `{ foo = { bar = 1; baz = 2; }; }`
 
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
