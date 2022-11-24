@@ -11,6 +11,7 @@ macro_rules! define_check_assist {
 }
 
 mod convert_to_inherit;
+mod flatten_attrset;
 mod pack_bindings;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
@@ -35,6 +36,7 @@ pub enum AssistKind {
 pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
     let handlers = [
         convert_to_inherit::convert_to_inherit,
+        flatten_attrset::flatten_attrset,
         pack_bindings::pack_bindings,
     ];
 

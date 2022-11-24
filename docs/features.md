@@ -20,6 +20,10 @@ This incomplete list tracks noteble features currently implemented or planned.
 
     `{ foo.bar = 1; foo.baz = 2; }` => `{ foo = { bar = 1; baz = 2; }; }`
 
+  - [x] Flatten Attrset into outer level bindings.
+
+    `{ foo = { bar = 1; baz = 2; }; }` => `{ foo.bar = 1; foo.baz = 2; }` 
+
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
     - With documentations.
