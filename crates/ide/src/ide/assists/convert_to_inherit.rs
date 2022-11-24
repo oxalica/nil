@@ -52,39 +52,39 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::*;
-    use super::*;
+    use expect_test::expect;
+
+    define_check_assist!(super::convert_to_inherit);
 
     #[test]
     fn simple() {
-        check_assist(convert_to_inherit, "{ $0foo = foo; }", "{ inherit foo; }");
-        check_assist(convert_to_inherit, "{ f$0oo = foo; }", "{ inherit foo; }");
-        check_assist(convert_to_inherit, "{ foo $0= foo; }", "{ inherit foo; }");
-        check_assist(convert_to_inherit, "{ foo = f$0oo; }", "{ inherit foo; }");
-        check_assist(convert_to_inherit, "{ fo$0o = fo$1o; }", "{ inherit foo; }");
+        check("{ $0foo = foo; }", expect!["{ inherit foo; }"]);
+        check("{ f$0oo = foo; }", expect!["{ inherit foo; }"]);
+        check("{ foo $0= foo; }", expect!["{ inherit foo; }"]);
+        check("{ foo = f$0oo; }", expect!["{ inherit foo; }"]);
+        check("{ fo$0o = fo$1o; }", expect!["{ inherit foo; }"]);
 
-        check_assist_no(convert_to_inherit, "$0{ foo = foo; }");
+        check_no("$0{ foo = foo; }");
     }
 
     #[test]
     fn nested() {
-        check_assist(
-            convert_to_inherit,
+        check(
             r#"{ ${("foo")} = (($0foo)); }"#,
-            "{ inherit foo; }",
+            expect!["{ inherit foo; }"],
         );
     }
 
     #[test]
     fn simple_no() {
-        check_assist_no(convert_to_inherit, "{ foo $0= bar; }");
-        check_assist_no(convert_to_inherit, "{ foo.foo $0= foo; }");
+        check_no("{ foo $0= bar; }");
+        check_no("{ foo.foo $0= foo; }");
     }
 
     #[test]
     fn rec_attrset() {
-        check_assist_no(convert_to_inherit, "rec { foo $0= foo; }");
-        check_assist_no(convert_to_inherit, "let { foo $0= foo; }");
-        check_assist_no(convert_to_inherit, "let foo $0= foo; in foo");
+        check_no("rec { foo $0= foo; }");
+        check_no("let { foo $0= foo; }");
+        check_no("let foo $0= foo; in foo");
     }
 }

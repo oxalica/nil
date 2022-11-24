@@ -1,3 +1,15 @@
+#[cfg(test)]
+macro_rules! define_check_assist {
+    ($handler:path) => {
+        fn check(fixture: &str, expect: ::expect_test::Expect) {
+            crate::ide::assists::tests::check_assist($handler, fixture, expect);
+        }
+        fn check_no(fixture: &str) {
+            crate::ide::assists::tests::check_assist_no($handler, fixture);
+        }
+    };
+}
+
 mod convert_to_inherit;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
@@ -84,37 +96,41 @@ mod tests {
     use super::*;
     use crate::tests::TestDB;
     use crate::SourceDatabase;
+    use expect_test::Expect;
 
-    #[track_caller]
-    fn check(handler: fn(&mut AssistsCtx) -> Option<()>, fixture: &str, expect: Option<&str>) {
+    fn try_apply_assist(
+        handler: fn(&mut AssistsCtx) -> Option<()>,
+        fixture: &str,
+    ) -> Option<String> {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.files().len(), 1);
         let frange = f.marker_single_range();
         let mut ctx = AssistsCtx::new(&db, frange);
         handler(&mut ctx);
 
-        if ctx.assists.is_empty() {
-            assert!(expect.is_none(), "No assists found");
-            return;
-        }
+        let assist = ctx.assists.pop()?;
         let mut src = db.file_content(f[0].file_id).to_string();
-        for edit in &ctx.assists[0].edits.content_edits[&f[0].file_id] {
+        // Reverse apply.
+        for edit in assist.edits.content_edits[&f[0].file_id].iter().rev() {
             edit.apply(&mut src);
         }
-        assert_eq!(Some(&*src), expect);
+        Some(src)
     }
 
     #[track_caller]
     pub(crate) fn check_assist(
         handler: fn(&mut AssistsCtx) -> Option<()>,
         fixture: &str,
-        expect: &str,
+        expect: Expect,
     ) {
-        check(handler, fixture, Some(expect));
+        let got = try_apply_assist(handler, fixture).expect("Not applicatable");
+        expect.assert_eq(&got);
     }
 
     #[track_caller]
     pub(crate) fn check_assist_no(handler: fn(&mut AssistsCtx) -> Option<()>, fixture: &str) {
-        check(handler, fixture, None);
+        if let Some(got) = try_apply_assist(handler, fixture) {
+            panic!("Unexpected applicatable:\n{got}");
+        }
     }
 }
