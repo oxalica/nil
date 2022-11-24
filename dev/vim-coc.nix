@@ -11,11 +11,14 @@ let
     let g:coc_node_path = '${pkgs.nodejs}/bin/node'
     let g:coc_config_home = '${cocConfigHome}'
     let g:coc_data_home = (empty($TMPDIR) ? '/tmp' : $TMPDIR) . '/coc-data'
-    let $PATH = '${wrapper}/bin:' . $PATH
     let leader = '\\'
 
     set updatetime=300
-    syntax off " Disable the builtin regex-based highlighting for semantic tokens.
+    " Color encoding.
+    let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+    let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+    set termguicolors
+    syntax on
 
     " Semantic highlighting.
     autocmd CursorHold * silent call CocActionAsync('highlight')
@@ -30,6 +33,7 @@ let
     nmap <silent> gy <Plug>(coc-type-definition)
     nmap <silent> gi <Plug>(coc-implementation)
     nmap <silent> gr <Plug>(coc-references)
+    nmap <silent> gl <Plug>(coc-openlink)
 
     nmap <silent> <C-s> <Plug>(coc-range-select)
     xmap <silent> <C-s> <Plug>(coc-range-select)
@@ -38,16 +42,12 @@ let
     nnoremap <silent> <Space>s       <Cmd>call CocActionAsync('showSignatureHelp')<CR>
 
     nmap <silent> <Leader>r <Plug>(coc-rename)
+    nmap <silent> <Leader>a <Plug>(coc-codeaction-cursor)
     xmap <silent> <Leader>a <Plug>(coc-codeaction-selected)
-    nmap <silent> <Leader>a <Plug>(coc-codeaction-selected)
     nmap <silent> <Leader>qf <Plug>(coc-fix-current)
 
     command -nargs=0 CocShowOutput CocCommand workspace.showOutput languageserver.nix
     command -nargs=0 CocSemanticHighlightInfo call CocActionAsync('showSemanticHighlightInfo')
-
-    let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
-    let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
-    set termguicolors
 
     " Workaround: https://github.com/EdenEast/nightfox.nvim/issues/236
     lua vim.treesitter = { highlighter = { hl_map = {} } }
@@ -58,7 +58,6 @@ let
       require("nightfox").setup({
         options = {
           modules = {
-            native_lsp = { enable = false },
             treesitter = true,
           },
         },
@@ -84,21 +83,21 @@ let
 
   cocSetting = {
     "coc.preferences.formatOnSaveFiletypes" = [ "nix" ];
+    "links.tooltip" = true;
+    semanticTokens.filetypes = [ "nix" ];
     languageserver.nix = {
-      command = "nil";
+      command = pkgs.writeShellScript "nil" ''
+        exec "$NIL_PATH" "$@"
+      '';
       filetypes = [ "nix" ];
       rootPatterns =  [ "flake.nix" ];
       settings.nil = {
         testSetting = 42;
-        formatting.command = [ "nixpkgs-fmt" ];
+        formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
       };
     };
-    semanticTokens.filetypes = [ "nix" ];
   };
 
-  wrapper = pkgs.writeShellScriptBin "nil" ''
-    exec "$NIL_PATH" "$@"
-  '';
 
   cocConfigHome = pkgs.writeTextFile {
     name = "coc-config";
@@ -112,6 +111,7 @@ pkgs.vim_configurable.customize {
   vimrcConfig = {
     inherit customRC;
     packages.myPlugins.start = with pkgs.vimPlugins; [
+      vim-nix # File type and syntax highlighting.
       coc-nvim
       nightfox-nvim
     ];
