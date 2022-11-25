@@ -94,6 +94,7 @@ let
       settings.nil = {
         testSetting = 42;
         formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
+        diagnostics.excludedFiles = [ "generated.nix" ];
       };
     };
   };

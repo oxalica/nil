@@ -1,4 +1,5 @@
 mod capabilities;
+mod config;
 mod convert;
 mod handler;
 mod semantic_tokens;
@@ -36,7 +37,16 @@ pub fn main_loop(conn: Connection) -> Result<()> {
 
     let init_params = serde_json::from_value::<InitializeParams>(init_params)?;
 
-    let mut server = Server::new(conn.sender.clone());
+    let root_path = match init_params
+        .root_uri
+        .as_ref()
+        .and_then(|uri| uri.to_file_path().ok())
+    {
+        Some(path) => path,
+        None => std::env::current_dir()?,
+    };
+
+    let mut server = Server::new(conn.sender.clone(), root_path);
     server.run(conn.receiver, init_params)?;
 
     tracing::info!("Leaving main loop");

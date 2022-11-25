@@ -78,7 +78,13 @@ Merge this setting into your `coc-settings.json`, which can be opened by `:CocCo
     "nix": {
       "command": "nil",
       "filetypes": ["nix"],
-      "rootPatterns":  ["flake.nix"]
+      "rootPatterns":  ["flake.nix"],
+      // Uncomment these to tweak settings.
+      // "settings": {
+      //   "nil": {
+      //     "formatting": { "command": ["nixpkgs-fmt"] }
+      //   }
+      // }
     }
   }
 }
@@ -127,9 +133,15 @@ Modify the extension's settings in your `settings.json`.
 
 ```jsonc
 {
-  // ...
   "nix.enableLanguageServer": true, // Enable LSP.
   "nix.serverPath": "nil" // The path to the LSP server executable.
+
+  // Uncomment these to tweak settings.
+  // "nix.serverSettings": {
+  //   "nil": {
+  //     "formatting": { "command": ["nixpkgs-fmt"] }
+  //   }
+  // }
 }
 ```
 

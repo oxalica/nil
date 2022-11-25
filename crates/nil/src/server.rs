@@ -1,3 +1,4 @@
+use crate::config::{Config, CONFIG_KEY};
 use crate::{convert, handler, Result, Vfs};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled};
@@ -8,20 +9,12 @@ use lsp_types::{
     InitializeParams, MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams,
     Url,
 };
-use serde::Deserialize;
 use std::cell::Cell;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::panic::UnwindSafe;
+use std::path::PathBuf;
 use std::sync::{Arc, Once, RwLock};
 use std::{panic, thread};
-
-const CONFIG_KEY: &str = "nil";
-
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct Config {
-    pub(crate) diagnostics_ignored: HashSet<String>,
-    pub(crate) formatting_command: Option<Vec<String>>,
-}
 
 type ReqHandler = fn(&mut Server, Response);
 
@@ -29,7 +22,11 @@ type Task = Box<dyn FnOnce() -> Event + Send>;
 
 enum Event {
     Response(Response),
-    Diagnostics(Url, Vec<Diagnostic>),
+    Diagnostics {
+        uri: Url,
+        version: u64,
+        diagnostics: Vec<Diagnostic>,
+    },
     ClientExited,
 }
 
@@ -38,9 +35,11 @@ pub struct Server {
     /// This contains an internal RWLock and must not lock together with `vfs`.
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
-    opened_files: HashSet<Url>,
+    opened_files: HashMap<Url, FileData>,
     config: Arc<Config>,
     is_shutdown: bool,
+    /// Monotonic version counter for diagnostics calculation ordering.
+    version_counter: u64,
 
     // Message passing.
     req_queue: ReqQueue<(), ReqHandler>,
@@ -50,8 +49,14 @@ pub struct Server {
     event_rx: Receiver<Event>,
 }
 
+#[derive(Debug, Default)]
+struct FileData {
+    diagnostics_version: u64,
+    diagnostics: Vec<Diagnostic>,
+}
+
 impl Server {
-    pub fn new(lsp_tx: Sender<Message>) -> Self {
+    pub fn new(lsp_tx: Sender<Message>, root_path: PathBuf) -> Self {
         let (task_tx, task_rx) = crossbeam_channel::unbounded();
         let (event_tx, event_rx) = crossbeam_channel::unbounded();
         let worker_cnt = thread::available_parallelism().map_or(1, |n| n.get());
@@ -69,8 +74,9 @@ impl Server {
             host: Default::default(),
             vfs: Arc::new(RwLock::new(Vfs::new())),
             opened_files: Default::default(),
-            config: Arc::new(Config::default()),
+            config: Arc::new(Config::new(root_path)),
             is_shutdown: false,
+            version_counter: 0,
 
             req_queue: ReqQueue::default(),
             lsp_tx,
@@ -164,13 +170,26 @@ impl Server {
                     self.lsp_tx.send(resp.into()).unwrap();
                 }
             }
-            Event::Diagnostics(uri, diagnostics) => {
-                self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                    uri,
-                    diagnostics,
-                    version: None,
-                });
-            }
+            Event::Diagnostics {
+                uri,
+                version,
+                diagnostics,
+            } => match self.opened_files.get_mut(&uri) {
+                Some(f) if f.diagnostics_version < version => {
+                    f.diagnostics_version = version;
+                    f.diagnostics = diagnostics.clone();
+                    tracing::trace!(
+                        "Push {} diagnostics of {uri}, version {version}",
+                        diagnostics.len(),
+                    );
+                    self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
+                        uri,
+                        diagnostics,
+                        version: None,
+                    });
+                }
+                _ => tracing::debug!("Ignore raced diagnostics of {uri}, version {version}"),
+            },
             Event::ClientExited => {
                 return Err("The process initializing this server is exited. Stopping.".into());
             }
@@ -224,7 +243,7 @@ impl Server {
             })?
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
                 let uri = &params.text_document.uri;
-                st.opened_files.insert(uri.clone());
+                st.opened_files.insert(uri.clone(), FileData::default());
                 st.set_vfs_file_content(uri, params.text_document.text)?;
                 Ok(())
             })?
@@ -315,34 +334,9 @@ impl Server {
         });
     }
 
-    fn update_config(&mut self, mut v: serde_json::Value) {
-        let mut updated_diagnostics = false;
+    fn update_config(&mut self, value: serde_json::Value) {
         let mut config = Config::clone(&self.config);
-        let mut errors = Vec::new();
-        if let Some(v) = v.pointer_mut("/diagnostics/ignored") {
-            match serde_json::from_value(v.take()) {
-                Ok(v) => {
-                    config.diagnostics_ignored = v;
-                    updated_diagnostics = true;
-                }
-                Err(e) => {
-                    errors.push(format!("Invalid value of `diagnostics.ignored`: {e}"));
-                }
-            }
-        }
-        if let Some(v) = v.pointer_mut("/formatting/command") {
-            match serde_json::from_value::<Option<Vec<String>>>(v.take()) {
-                Ok(Some(v)) if v.is_empty() => {
-                    errors.push("`formatting.command` must not be an empty list".into());
-                }
-                Ok(v) => {
-                    config.formatting_command = v;
-                }
-                Err(e) => {
-                    errors.push(format!("Invalid value of `formatting.command`: {e}"));
-                }
-            }
-        }
+        let (errors, updated_diagnostics) = config.update(value);
         tracing::debug!("Updated config, errors: {errors:?}, config: {config:?}");
         self.config = Arc::new(config);
 
@@ -356,24 +350,39 @@ impl Server {
 
         // Refresh all diagnostics since the filter may be changed.
         if updated_diagnostics {
-            for uri in &self.opened_files {
-                tracing::debug!("Recalculate diagnostics of {uri}");
-                self.update_diagnostics(uri.clone());
+            let version = self.next_version();
+            for uri in self.opened_files.keys() {
+                tracing::trace!("Recalculate diagnostics of {uri}, version {version}");
+                self.update_diagnostics(uri.clone(), version);
             }
         }
     }
 
-    fn update_diagnostics(&self, uri: Url) {
+    fn update_diagnostics(&self, uri: Url, version: u64) {
         let snap = self.snapshot();
         let task = move || {
-            let diags = with_catch_unwind("diagnostics", || handler::diagnostics(snap, &uri))
-                .unwrap_or_else(|err| {
-                    tracing::error!("Failed to calculate diagnostics: {err}");
-                    Vec::new()
-                });
-            Event::Diagnostics(uri, diags)
+            // Return empty diagnostics for ignored files.
+            let diagnostics = (!snap.config.diagnostics_excluded_files.contains(&uri))
+                .then(|| {
+                    with_catch_unwind("diagnostics", || handler::diagnostics(snap, &uri))
+                        .unwrap_or_else(|err| {
+                            tracing::error!("Failed to calculate diagnostics: {err}");
+                            Vec::new()
+                        })
+                })
+                .unwrap_or_default();
+            Event::Diagnostics {
+                uri,
+                version,
+                diagnostics,
+            }
         };
         self.task_tx.send(Box::new(task)).unwrap();
+    }
+
+    fn next_version(&mut self) -> u64 {
+        self.version_counter += 1;
+        self.version_counter
     }
 
     fn snapshot(&self) -> StateSnapshot {
@@ -399,20 +408,25 @@ impl Server {
         // Must be called without holding the lock of `vfs`.
         self.host.apply_change(changes);
 
+        let version = self.next_version();
         let vfs = self.vfs.read().unwrap();
         for (file, text) in file_changes {
             let uri = vfs.uri_for_file(file);
-            if !self.opened_files.contains(&uri) {
+            if !self.opened_files.contains_key(&uri) {
                 continue;
             }
 
             // FIXME: Removed or closed files are indistinguishable from empty files.
             if !text.is_empty() {
-                self.update_diagnostics(uri);
+                self.update_diagnostics(uri, version);
             } else {
                 // Clear diagnostics.
                 self.event_tx
-                    .send(Event::Diagnostics(uri, Vec::new()))
+                    .send(Event::Diagnostics {
+                        uri,
+                        version,
+                        diagnostics: Vec::new(),
+                    })
                     .unwrap();
             }
         }

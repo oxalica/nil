@@ -32,6 +32,7 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [ ] Attrset fields.
 
 - [x] Diagnostics. `textDocument/publishDiagnostics`
+
   - [x] Syntax errors. 
   - [x] Hard semantic errors reported as parse errors by Nix, like duplicated keys in attrsets.
   - [x] Undefiend names.
@@ -39,13 +40,11 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Warnings of unnecessary syntax.
   - [x] Warnings of unused bindings, `with` and `rec`.
   - [ ] Client pulled diagnostics.
-  - [x] Custom filter
-    - You can disable some diagnostic messages via LSP setting `diagnostics.ignored`,
-      which accepts an array of ignored diagnostic code strings,
-      eg. `["unused_binding","unused_with"]`.
-      The code of diagnostics is usually shows in parentheses together with the message.
+  - [x] Custom filter on kinds.
+  - [x] Exclude files.
 
-      See documentations of your editor about how to set LSP settings.
+  You can disable some diagnostic kinds or for some (generated) files via LSP configuration.
+  See [docs/configuration.md](./configuration.md) for more information.
 
 - [x] Expand selection. `textDocument/selectionRange`
 - [x] Renaming. `textDocument/renamme`, `textDocument/prepareRename`
@@ -80,22 +79,18 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [ ] Range formatting.
   - [ ] On-type formatting.
   - [x] External formatter.
-    - Currently, an external formatter must be configured via LSP setting
-      `formatting.command` to enable this functionality.
-      It accepts `null` for disabled, or an non-empty array for the formatting command,
-      eg. `["nixpkgs-fmt"]` for [nixpkgs-fmt].
-      The command must read Nix code from stdin and print the formatted code to stdout.
 
-      [nixpkgs-fmt]: https://github.com/nix-community/nixpkgs-fmt
+  External formatter must be manually configured to work.
+  See [docs/configuration.md](./configuration.md) for more information.
 
-      You might need to set other editor settings to enable format-on-save.
-      Like, for [`coc.nvim`],
-      ```jsonc
-      // coc-settings.json
-      {
-        "coc.preferences.formatOnSaveFiletypes": ["nix"]
-      }
-      ```
+  When formatter is configured, you can also enable format-on-save in your editor.
+  Like, for [`coc.nvim`],
+  ```jsonc
+  // coc-settings.json
+  {
+    "coc.preferences.formatOnSaveFiletypes": ["nix"]
+  }
+  ```
 
 - [ ] Cross-file analysis.
 - [x] Multi-threaded.
