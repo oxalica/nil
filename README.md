@@ -6,12 +6,14 @@
 
 Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and completes with no delay!
 
-## Features
+## Feature list & references
 
 See [release notes][releases] for change log between tagged unstable versions.
 
 See [`docs/features.md`](docs/features.md) for an incomplete list of notable features currently
 implemented or planned.
+
+See [`docs/configuration.md`](docs/configuration.md) for all tunable configuration options.
 
 [releases]: https://github.com/oxalica/nil/releases
 
@@ -72,7 +74,7 @@ See also [the example config for testing](dev/neovim-lsp.nix).
 
 Merge this setting into your `coc-settings.json`, which can be opened by `:CocConfig`.
 
-```json
+```jsonc
 {
   "languageserver": {
     "nix": {
