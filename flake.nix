@@ -12,18 +12,15 @@
   outputs = { self, flake-utils, nixpkgs, rust-overlay }:
     let
       rustVersion = "1.65.0";
-      mkNil = { makeRustPlatform, pkgs, lib, nix, ... }:
+      mkNil = { makeRustPlatform, rust-bin, nix, ... }:
         let
           inherit (builtins) substring;
           mtime = self.lastModifiedDate;
           date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
           rev = self.shortRev or (throw "Git changes are not committed");
-          rustPkgs = rust-overlay.packages.${pkgs.targetPlatform.system};
-          vers = lib.splitVersion rustVersion;
-          rustPkg = rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}";
           rustPlatform = makeRustPlatform {
-            rustc = rustPkg;
-            cargo = rustPkg;
+            rustc = rust-bin.stable."${rustVersion}".minimal;
+            cargo = rust-bin.stable."${rustVersion}".minimal;
           };
         in
         rustPlatform.buildRustPackage {
@@ -43,7 +40,7 @@
         let
           inherit (nixpkgs) lib;
 
-          pkgs = nixpkgs.legacyPackages.${system};
+          pkgs = (import nixpkgs { inherit system; overlays = [ rust-overlay.overlay ]; });
           rustPkgs = rust-overlay.packages.${system};
 
           pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
@@ -70,10 +67,7 @@
               # Override the stable rustfmt.
               rustPkgs.rust-nightly_2022-10-01.availableComponents.rustfmt
               # Follows nixpkgs's version of rustc.
-              (
-                let vers = lib.splitVersion rustc.version; in
-                rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}"
-              )
+              rust-bin.stable."${rustc.version}".minimal
 
               nix.out # For generation of builtins.
               gdb
