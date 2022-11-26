@@ -1,7 +1,7 @@
 use crate::def::AstPtr;
 use crate::{DefDatabase, FilePos, FileRange};
-use rowan::ast::AstNode;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, T};
+use syntax::ast::{self, AstNode};
+use syntax::{best_token_at_offset, match_ast, SyntaxKind, T};
 
 pub(crate) fn references(
     db: &dyn DefDatabase,

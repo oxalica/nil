@@ -1,11 +1,10 @@
 use crate::def::{AstPtr, Expr, ResolveResult};
 use crate::{FilePos, NameKind, TyDatabase};
 use builtin::ALL_BUILTINS;
-use rowan::ast::AstNode;
-use rowan::TextRange;
 use std::fmt::Write;
+use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
-use syntax::{ast, best_token_at_offset, match_ast};
+use syntax::{best_token_at_offset, match_ast, TextRange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HoverResult {

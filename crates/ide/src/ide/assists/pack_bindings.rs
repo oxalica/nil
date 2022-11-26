@@ -19,9 +19,8 @@
 use super::{AssistKind, AssistsCtx};
 use crate::def::AstPtr;
 use crate::TextEdit;
-use rowan::ast::AstNode;
-use rowan::TextRange;
-use syntax::ast;
+use syntax::ast::{self, AstNode};
+use syntax::TextRange;
 
 pub(super) fn pack_bindings(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     // Only match Attr in `attr.path = value;`.

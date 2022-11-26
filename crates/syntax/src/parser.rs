@@ -1,7 +1,6 @@
-use crate::ast::SourceFile;
+use crate::ast::{AstNode, SourceFile};
 use crate::SyntaxKind::{self, *};
 use crate::{lexer, Error, ErrorKind, SyntaxNode};
-use rowan::ast::AstNode;
 use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 const MAX_STEPS: usize = 100_000_000;

@@ -1,8 +1,9 @@
 use crate::SyntaxKind::{self, *};
 use crate::{NixLanguage, SyntaxElementChildren, SyntaxNode, SyntaxToken};
 use rowan::ast::support::{child, children, token};
-use rowan::ast::{AstChildren, AstNode};
 use rowan::NodeOrToken;
+
+pub use rowan::ast::{AstChildren, AstNode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BinaryOpKind {

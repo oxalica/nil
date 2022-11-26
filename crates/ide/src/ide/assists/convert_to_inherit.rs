@@ -1,8 +1,7 @@
 //! Convert `key = key;` into `inherit key;` in non-rec attrset.
 use super::{AssistKind, AssistsCtx};
 use crate::TextEdit;
-use rowan::ast::AstNode;
-use syntax::ast;
+use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
 
 pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {

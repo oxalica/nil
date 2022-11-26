@@ -15,8 +15,8 @@ mod flatten_attrset;
 mod pack_bindings;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
-use rowan::ast::AstNode;
-use syntax::{ast, best_token_at_offset, NixLanguage};
+use syntax::ast::{self, AstNode};
+use syntax::{best_token_at_offset, NixLanguage};
 
 #[derive(Debug, Clone)]
 pub struct Assist {

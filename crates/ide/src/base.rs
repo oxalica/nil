@@ -1,9 +1,9 @@
-use rowan::{TextRange, TextSize};
 use salsa::Durability;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Component, Path};
 use std::sync::Arc;
+use syntax::{TextRange, TextSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileId(pub u32);

@@ -163,7 +163,7 @@ impl Module {
     }
 }
 
-pub type AstPtr = rowan::ast::SyntaxNodePtr<syntax::NixLanguage>;
+pub type AstPtr = syntax::SyntaxNodePtr;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct ModuleSourceMap {

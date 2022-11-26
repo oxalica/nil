@@ -1,9 +1,8 @@
 //! Auxiliary functions for semantics of AST nodes.
 //! Mostly about syntax desugaring.
-use crate::ast::{self, Attr, Expr, HasStringParts, StringPart};
+use crate::ast::{self, AstChildren, AstNode, Attr, Expr, HasStringParts, StringPart};
 use crate::lexer::KEYWORDS;
 use crate::{SyntaxNode, SyntaxToken};
-use rowan::ast::{AstChildren, AstNode};
 use std::borrow::Cow;
 use std::str;
 

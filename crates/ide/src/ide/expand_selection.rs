@@ -1,6 +1,5 @@
 use crate::{DefDatabase, FileRange};
-use rowan::{NodeOrToken, TextRange};
-use syntax::{best_token_at_offset, SyntaxKind, SyntaxNode, T};
+use syntax::{best_token_at_offset, NodeOrToken, SyntaxKind, SyntaxNode, TextRange, T};
 
 /// Interesting parent ranges covering the given range.
 /// Returns all ranges from the smallest to the largest.

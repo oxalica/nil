@@ -19,9 +19,8 @@
 use super::{AssistKind, AssistsCtx};
 use crate::TextEdit;
 use itertools::Itertools;
-use rowan::ast::AstNode;
-use rowan::TextRange;
-use syntax::ast::{self, HasBindings};
+use syntax::ast::{self, AstNode, HasBindings};
+use syntax::TextRange;
 
 pub(super) fn flatten_attrset(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     // Matches `attr.path = { ... };`.

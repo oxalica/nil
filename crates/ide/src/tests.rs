@@ -4,10 +4,9 @@ use crate::ty::TyDatabaseStorage;
 use crate::{Change, DefDatabase, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath};
 use anyhow::{ensure, Context, Result};
 use indexmap::IndexMap;
-use rowan::ast::AstNode;
-use rowan::TextSize;
 use std::{mem, ops};
-use syntax::{NixLanguage, SyntaxNode};
+use syntax::ast::AstNode;
+use syntax::{NixLanguage, SyntaxNode, TextSize};
 
 pub const MARKER_INDICATOR: char = '$';
 

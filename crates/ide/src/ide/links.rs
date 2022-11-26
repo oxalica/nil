@@ -1,6 +1,6 @@
 use crate::def::{Expr, ExprId, Literal};
 use crate::{DefDatabase, FileId, VfsPath};
-use rowan::TextRange;
+use syntax::TextRange;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

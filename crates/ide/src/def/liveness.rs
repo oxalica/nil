@@ -19,11 +19,10 @@
 use super::{BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use la_arena::ArenaMap;
-use rowan::ast::AstNode;
-use rowan::TextRange;
 use std::collections::HashMap;
 use std::sync::Arc;
-use syntax::ast;
+use syntax::ast::{self, AstNode};
+use syntax::TextRange;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct LivenessCheckResult {

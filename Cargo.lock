@@ -120,7 +120,6 @@ dependencies = [
  "itertools",
  "la-arena",
  "ordered-float",
- "rowan",
  "salsa",
  "smol_str",
  "syntax",

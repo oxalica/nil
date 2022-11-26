@@ -10,9 +10,16 @@ pub mod semantic;
 mod tests;
 
 use core::fmt;
-
 use rowan::TokenAtOffset;
-pub use rowan::{self, TextRange, TextSize};
+
+pub use rowan::{self, NodeOrToken, TextRange, TextSize};
+pub type SyntaxNode = rowan::SyntaxNode<NixLanguage>;
+pub type SyntaxToken = rowan::SyntaxToken<NixLanguage>;
+pub type SyntaxElement = rowan::SyntaxElement<NixLanguage>;
+pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<NixLanguage>;
+pub type SyntaxElementChildren = rowan::SyntaxElementChildren<NixLanguage>;
+pub type PreorderWithTokens = rowan::api::PreorderWithTokens<NixLanguage>;
+pub type SyntaxNodePtr = rowan::ast::SyntaxNodePtr<NixLanguage>;
 
 pub use self::kind::SyntaxKind;
 pub use self::parser::{parse_file, Parse};
@@ -89,13 +96,6 @@ impl rowan::Language for NixLanguage {
         kind.into()
     }
 }
-
-pub type SyntaxNode = rowan::SyntaxNode<NixLanguage>;
-pub type SyntaxToken = rowan::SyntaxToken<NixLanguage>;
-pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
-pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<NixLanguage>;
-pub type SyntaxElementChildren = rowan::SyntaxElementChildren<NixLanguage>;
-pub type PreorderWithTokens = rowan::api::PreorderWithTokens<NixLanguage>;
 
 /// Matches a `SyntaxNode` against an `ast` type.
 ///

@@ -14,10 +14,10 @@ use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
 use crate::{Change, Diagnostic, FileId, FilePos, FileRange, WorkspaceEdit};
-use rowan::TextRange;
 use salsa::{Database, Durability, ParallelDatabase};
 use smol_str::SmolStr;
 use std::fmt;
+use syntax::TextRange;
 
 pub use assists::{Assist, AssistKind};
 pub use completion::{CompletionItem, CompletionItemKind};

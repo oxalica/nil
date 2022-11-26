@@ -1,9 +1,8 @@
 use crate::def::{BindingValue, Expr, ExprId};
 use crate::{DefDatabase, FileId, Module, ModuleSourceMap, NameKind};
-use rowan::ast::AstNode;
-use rowan::TextRange;
 use smol_str::SmolStr;
-use syntax::{ast, SyntaxNode};
+use syntax::ast::{self, AstNode};
+use syntax::{SyntaxNode, TextRange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolTree {

@@ -3,8 +3,8 @@
 use crate::def::{AstPtr, Expr, NameKind, ResolveResult};
 use crate::{DefDatabase, FileId};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use rowan::{NodeOrToken, TextRange, WalkEvent};
-use syntax::{SyntaxKind, SyntaxToken, T};
+use syntax::rowan::WalkEvent;
+use syntax::{NodeOrToken, SyntaxKind, SyntaxToken, TextRange, T};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlRange {

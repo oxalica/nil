@@ -5,10 +5,9 @@ use super::{
 use crate::{Diagnostic, DiagnosticKind, FileId, FileRange};
 use indexmap::IndexMap;
 use la_arena::Arena;
-use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::collections::HashMap;
-use syntax::ast::{self, HasStringParts, LiteralKind};
+use syntax::ast::{self, AstNode, HasStringParts, LiteralKind};
 use syntax::semantic::{
     unescape_string_literal, AttrKind, BindingDesugar, BindingValueKind, HasBindingsDesugar,
 };

@@ -1,10 +1,10 @@
 use crate::def::{AstPtr, NameId, ResolveResult};
 use crate::{DefDatabase, FilePos, TextEdit, WorkspaceEdit};
-use rowan::ast::AstNode;
 use smol_str::SmolStr;
 use std::borrow::Cow;
+use syntax::ast::{self, AstNode};
 use syntax::semantic::escape_literal_attr;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, TextRange};
+use syntax::{best_token_at_offset, match_ast, SyntaxKind, TextRange};
 
 pub type RenameResult<T> = Result<T, String>;
 

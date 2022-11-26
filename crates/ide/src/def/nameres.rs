@@ -299,8 +299,8 @@ mod tests {
     use super::ScopeKind;
     use crate::def::{AstPtr, DefDatabase, ResolveResult};
     use crate::tests::TestDB;
-    use rowan::ast::AstNode;
-    use syntax::{ast, match_ast};
+    use syntax::ast::{self, AstNode};
+    use syntax::match_ast;
 
     #[track_caller]
     fn check_scopes(fixture: &str) {

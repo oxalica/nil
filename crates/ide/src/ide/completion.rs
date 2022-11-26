@@ -3,11 +3,10 @@ use crate::ty::AttrSource;
 use crate::{FileId, FilePos, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
-use rowan::ast::AstNode;
 use smol_str::SmolStr;
-use syntax::ast::Attr;
+use syntax::ast::{self, AstNode, Attr};
 use syntax::semantic::AttrKind;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
+use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[

@@ -1,8 +1,8 @@
 use super::NavigationTarget;
 use crate::def::{AstPtr, Expr, Literal, ResolveResult};
 use crate::{DefDatabase, FilePos, VfsPath};
-use rowan::ast::AstNode;
-use syntax::{ast, best_token_at_offset, match_ast, SyntaxKind, T};
+use syntax::ast::{self, AstNode};
+use syntax::{best_token_at_offset, match_ast, SyntaxKind, T};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GotoDefinitionResult {
