@@ -78,10 +78,10 @@ pub(crate) fn highlight(
             SyntaxKind::PATH | SyntaxKind::SEARCH_PATH => HlTag::Path,
             SyntaxKind::FLOAT => HlTag::FloatLiteral,
             SyntaxKind::INT => HlTag::IntLiteral,
-            T!["''"] | T!['"'] | SyntaxKind::URI | SyntaxKind::STRING_FRAGMENT => {
-                HlTag::StringLiteral
-            }
+            T!["''"] | T!['"'] | SyntaxKind::URI => HlTag::StringLiteral,
             SyntaxKind::STRING_ESCAPE => HlTag::StringEscape,
+            // Don't color the string content. They are subjects to injection of other languages.
+            SyntaxKind::STRING_FRAGMENT => return None,
 
             T![&&] | T![||] | T![->] | T![!] => HlTag::Operator(HlOperator::Logical),
             T![==] | T![!=] | T![<] | T![>] | T![<=] | T![>=] => {
