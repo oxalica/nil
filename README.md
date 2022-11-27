@@ -127,6 +127,21 @@ Add the following elisp code to your configuration. (using `use-package`)
   (nix-mode . eglot-ensure))
 ```
 
+### Emacs with [`lsp-mode`]
+
+[`lsp-mode`]: https://github.com/emacs-lsp/lsp-mode
+
+```elisp
+(use-package nix-mode)
+(use-package lsp-mode
+  :config
+  (add-to-list 'lsp-language-id-configuration '(nix-mode . "nix"))
+  (lsp-register-client
+   (make-lsp-client :new-connection (lsp-stdio-connection '("nil"))
+                    :major-modes '(nix-mode)
+                    :server-id 'nix)))
+```
+
 ### Vscode/Vscodium with [Nix IDE]
 
 [Nix IDE]: https://github.com/nix-community/vscode-nix-ide
