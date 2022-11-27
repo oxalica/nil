@@ -6,9 +6,10 @@ use ide::{
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
-    DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentSymbol, Documentation, Hover,
-    Location, MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse, Range,
-    SemanticToken, SymbolKind, TextDocumentIdentifier, TextDocumentPositionParams,
+    DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentSymbol,
+    Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position,
+    PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
+    TextDocumentPositionParams,
 };
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
@@ -323,7 +324,11 @@ pub(crate) fn to_document_highlight(
     hls.iter()
         .map(|hl| DocumentHighlight {
             range: to_range(line_map, hl.range),
-            kind: None,
+            kind: Some(if hl.is_definition {
+                DocumentHighlightKind::WRITE
+            } else {
+                DocumentHighlightKind::READ
+            }),
         })
         .collect()
 }
