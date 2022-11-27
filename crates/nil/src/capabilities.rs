@@ -48,6 +48,7 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
             work_done_progress_options: WorkDoneProgressOptions::default(),
         }),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+        document_highlight_provider: Some(OneOf::Left(true)),
         ..Default::default()
     }
 }

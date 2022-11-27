@@ -3,6 +3,7 @@ mod completion;
 mod diagnostics;
 mod expand_selection;
 mod goto_definition;
+mod highlight_related;
 mod hover;
 mod links;
 mod references;
@@ -22,6 +23,7 @@ use syntax::TextRange;
 pub use assists::{Assist, AssistKind};
 pub use completion::{CompletionItem, CompletionItemKind};
 pub use goto_definition::GotoDefinitionResult;
+pub use highlight_related::HlRelated;
 pub use hover::HoverResult;
 pub use links::{Link, LinkTarget};
 pub use rename::RenameResult;
@@ -158,5 +160,9 @@ impl Analysis {
 
     pub fn assists(&self, frange: FileRange) -> Cancellable<Vec<Assist>> {
         self.with_db(|db| assists::assists(db, frange))
+    }
+
+    pub fn highlight_related(&self, fpos: FilePos) -> Cancellable<Vec<HlRelated>> {
+        self.with_db(|db| highlight_related::highlight_related(db, fpos).unwrap_or_default())
     }
 }

@@ -170,10 +170,15 @@ impl ModuleScopes {
     }
 }
 
+/// The resolve result of a name reference.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveResult {
+    /// Reference to a Name.
     Definition(NameId),
+    /// Reference to a builtin value.
     Builtin(&'static str),
+    /// Attr of one of some `with` expressions, from innermost to outermost.
+    /// It must not be empty.
     WithExprs(Vec<ExprId>),
 }
 

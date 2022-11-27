@@ -2,12 +2,12 @@ use crate::{convert, Result, StateSnapshot};
 use ide::{FileRange, GotoDefinitionResult, LinkTarget};
 use lsp_types::{
     CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse, Diagnostic,
-    DocumentFormattingParams, DocumentLink, DocumentLinkParams, DocumentSymbolParams,
-    DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
-    Location, Position, PrepareRenameResponse, Range, ReferenceParams, RenameParams,
-    SelectionRange, SelectionRangeParams, SemanticTokens, SemanticTokensParams,
-    SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
-    TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
+    DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentLink,
+    DocumentLinkParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverParams, Location, Position, PrepareRenameResponse, Range,
+    ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens,
+    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
 use std::path::Path;
 use std::process;
@@ -316,4 +316,15 @@ pub(crate) fn code_action(
         .map(|assist| convert::to_code_action(&vfs, assist))
         .collect();
     Ok(Some(actions))
+}
+
+pub(crate) fn document_highlight(
+    snap: StateSnapshot,
+    params: DocumentHighlightParams,
+) -> Result<Option<Vec<DocumentHighlight>>> {
+    let (fpos, line_map) =
+        convert::from_file_pos(&snap.vfs(), &params.text_document_position_params)?;
+    let ret = snap.analysis.highlight_related(fpos)?;
+    let ret = convert::to_document_highlight(&line_map, &ret);
+    Ok(Some(ret))
 }

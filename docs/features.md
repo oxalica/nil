@@ -8,6 +8,10 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Find references. `textDocument/reference`
   - [x] Parameters, `let` and `rec {}` bindings.
   - [x] With expression.
+- [x] Highlight related. `textDocument/documentHighlight`.
+  - [x] Highlight definitions and references when cursor's on identifiers.
+  - [x] Highlight all (attribute) references when cursor's on `with`.
+  - [x] Highlight all effective `with`s when cursor's on attributes from `with`.
 - [x] Links. `textDocument/documentLink`
   - [x] Links for relative and absolute paths.
   - [ ] Links for search paths like `<nixpkgs>`.

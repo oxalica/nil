@@ -1,13 +1,13 @@
 use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
-    HlRange, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
+    HlRange, HlRelated, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
-    DiagnosticSeverity, DiagnosticTag, DocumentSymbol, Documentation, Hover, Location,
-    MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse, Range,
+    DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentSymbol, Documentation, Hover,
+    Location, MarkupContent, MarkupKind, NumberOrString, Position, PrepareRenameResponse, Range,
     SemanticToken, SymbolKind, TextDocumentIdentifier, TextDocumentPositionParams,
 };
 use std::sync::Arc;
@@ -314,4 +314,16 @@ pub(crate) fn to_code_action(vfs: &Vfs, assist: Assist) -> CodeActionOrCommand {
         disabled: None,
         data: None,
     })
+}
+
+pub(crate) fn to_document_highlight(
+    line_map: &LineMap,
+    hls: &[HlRelated],
+) -> Vec<DocumentHighlight> {
+    hls.iter()
+        .map(|hl| DocumentHighlight {
+            range: to_range(line_map, hl.range),
+            kind: None,
+        })
+        .collect()
 }
