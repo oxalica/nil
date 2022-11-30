@@ -18,6 +18,12 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Links for URLs like `"https://..."`, `"http://..."` and etc.
   - [x] Links for [flake references][flake-ref] like `"github:NixOS/nixpkgs"`.
 
+  :warning: Due to an issue in `coc.nvim`, a lot of links
+  can cause performance issue for `coc.nvim`, especially when editing `all-packages.nix`.
+  You could apply [this patch][coc-links-fix] to mitigate.
+
+  [coc-links-fix]: https://github.com/neoclide/coc.nvim/pull/4401
+
 - [x] Code actions. `textDocument/codeAction`
   - [x] Convert `name = name;` bindings to `inherit`.
   - [x] Pack multiple bindings into one Attrset binding.
@@ -61,17 +67,15 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Rename to string literals.
 - [x] Semantic highlighting. `textDocument/semanticTokens/{range,full}`
   - [ ] Delta response. `textDocument/semanticTokens/full/delta`
-  - :warning: Currently it has performance issue for large files.
-    It may be slow to respond when editing `all-packages.nix`.
 
-    [`coc.nvim`] doesn't enable semantic highlighting by default.
-    You need to manually enable it in settings.
-    ```jsonc
-    // coc-settings.json
-    {
-      "semanticTokens": { "filetypes": ["nix"] }
-    }
-    ```
+  Note: [`coc.nvim`] doesn't enable semantic highlighting by default.
+  You need to manually enable it in settings.
+  ```jsonc
+  // coc-settings.json
+  {
+    "semanticTokens": { "filetypes": ["nix"] }
+  }
+  ```
 
 - [x] Hover text. `textDocument/hover`.
   - [x] Show kind of names.

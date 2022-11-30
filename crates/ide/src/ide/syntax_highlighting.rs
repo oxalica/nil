@@ -3,8 +3,7 @@
 use crate::def::{AstPtr, Expr, NameKind, ResolveResult};
 use crate::{DefDatabase, FileId};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use syntax::rowan::WalkEvent;
-use syntax::{NodeOrToken, SyntaxKind, SyntaxToken, TextRange, T};
+use syntax::{SyntaxKind, SyntaxToken, TextRange, T};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlRange {
@@ -66,7 +65,7 @@ pub(crate) fn highlight(
     file: FileId,
     range: Option<TextRange>,
 ) -> Vec<HlRange> {
-    let mut node = db.parse(file).syntax_node();
+    let root_node = db.parse(file).syntax_node();
     let source_map = db.source_map(file);
     let nameres = db.name_resolution(file);
     let module = db.module(file);
@@ -145,19 +144,16 @@ pub(crate) fn highlight(
         })
     };
 
-    // TODO: Range query is suboptimal.
-    if let Some(range) = range {
-        match node.covering_element(range) {
-            NodeOrToken::Node(n) => node = n,
-            NodeOrToken::Token(tok) => return highlight_token(&tok).into_iter().collect(),
-        }
-    }
+    let (first_tok, end_pos) = match range {
+        None => (root_node.first_token(), u32::MAX.into()),
+        Some(range) => (
+            root_node.token_at_offset(range.start()).right_biased(),
+            range.end(),
+        ),
+    };
 
-    node.preorder_with_tokens()
-        .filter_map(|event| match event {
-            WalkEvent::Enter(NodeOrToken::Token(tok)) => Some(tok),
-            _ => None,
-        })
+    std::iter::successors(first_tok, |tok| tok.next_token())
+        .take_while(|tok| tok.text_range().start() < end_pos)
         .filter_map(|tok| highlight_token(&tok))
         .collect()
 }
