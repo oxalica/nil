@@ -114,7 +114,15 @@ pkgs.vim_configurable.customize {
     packages.myPlugins.start = with pkgs.vimPlugins; [
       vim-nix # File type and syntax highlighting.
       coc-nvim
-      nightfox-nvim
+      # FIXME
+      (nightfox-nvim.overrideAttrs (old: {
+        src = pkgs.fetchFromGitHub {
+          owner = "EdenEast";
+          repo = "nightfox.nvim";
+          rev = "15f3b5837a8d07f45cbe16753fbf13630bc167a3";
+          hash = "sha256-Uq+Rp4uoI+AUEUoSWXInB49bCldPz5f9KtinFMKF8iM=";
+        };
+      }))
     ];
   };
 }
