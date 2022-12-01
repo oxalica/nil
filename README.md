@@ -1,12 +1,8 @@
-# nil: Yet another language server for Nix
+# nil: NIx Language server
 
 [![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
 
-🚧 *This project is under development, but be happy to try it out!*
-
-Super fast incremental analysis! Scans `all-packages.nix` in less than 0.1s and completes with no delay!
-
-## Feature list & references
+An incremental analysis assistent for writing in Nix.
 
 See [release notes][releases] for change log between tagged unstable versions.
 
@@ -23,9 +19,6 @@ This program is already included in [NixOS/nixpkgs][nixpkgs] under attribute `ni
 and are regularly updated.
 
 [nixpkgs]: https://github.com/NixOS/nixpkgs
-
-Note: This package requires a relatively new version of Rust to compile.
-You need at least `nixpkgs-unstable` to build it.
 
 - If you use `nix-env`, run `nix-env -iA nixpkgs.nil`
 - If you use `nix profile`, run `nix profile install nixpkgs#nil`
@@ -44,7 +37,10 @@ run `nix profile install github:oxalica/nil` to get `nil` installed.
 You can also use this repository as a flake input and add its output to your own flake-managed
 systemwide or home configuration.
 
-Flake output structure:
+*Disclamer: We ship `flake.lock` which is tested in CI to be working. If you use `follows` to
+override flake inputs, we provides no guarentee of whether it would still build.*
+
+Flake output structure (not necessary up-to-date):
 ```
 ├───devShells
 │   └───(...)
