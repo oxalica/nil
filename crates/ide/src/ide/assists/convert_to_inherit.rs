@@ -1,6 +1,7 @@
 //! Convert `key = key;` into `inherit key;` in non-rec attrset.
 use super::{AssistKind, AssistsCtx};
 use crate::TextEdit;
+use itertools::Itertools;
 use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
 
@@ -19,12 +20,8 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         _ => return None,
     };
 
-    // LHS should be a single static name.
-    let mut attrs = binding.attrpath()?.attrs();
-    let attr = attrs.next()?;
-    if attrs.next().is_some() {
-        return None;
-    }
+    let mut attrs = binding.attrpath()?.attrs().collect::<Vec<_>>();
+    let attr = attrs.pop()?;
     let key = match AttrKind::of(attr) {
         AttrKind::Static(Some(key)) => key,
         _ => return None,
@@ -35,6 +32,15 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         return None;
     }
 
+    let insert = if attrs.is_empty() {
+        format!("inherit {key};")
+    } else {
+        format!(
+            "{} = {{ inherit {key}; }};",
+            attrs.into_iter().map(|x| x.syntax().to_string()).join(".")
+        )
+    };
+
     // Since RHS is already a valid identifier. Not escaping is required.
     ctx.add(
         "convert_to_inherit",
@@ -42,7 +48,7 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: binding.syntax().text_range(),
-            insert: format!("inherit {key};").into(),
+            insert: insert.into(),
         }],
     );
 
@@ -67,6 +73,18 @@ mod tests {
     }
 
     #[test]
+    fn multiple_lhs() {
+        check(
+            "{ foo.bar$0 = bar; }",
+            expect!["{ foo = { inherit bar; }; }"],
+        );
+        check(
+            r#"{ foo.${"bar"}.baz = baz$0; }"#,
+            expect![r#"{ foo.${"bar"} = { inherit baz; }; }"#],
+        );
+    }
+
+    #[test]
     fn nested() {
         check(
             r#"{ ${("foo")} = (($0foo)); }"#,
@@ -77,7 +95,7 @@ mod tests {
     #[test]
     fn simple_no() {
         check_no("{ foo $0= bar; }");
-        check_no("{ foo.foo $0= foo; }");
+        check_no("{ foo.bar $0= foo; }");
     }
 
     #[test]
