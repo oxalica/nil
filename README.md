@@ -62,7 +62,7 @@ Flake output structure (not necessary up-to-date):
 
 We are officially supported by `nvim-lspconfig`, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/0fafc3ef648bd612757630097c96b725a36a0476/doc/server_configurations.txt#nil_ls).
 
-See also [the example config for testing](dev/neovim-lsp.nix).
+See also [the example config for testing](dev/nvim-lsp.nix).
 
 ### Vim/Neovim with [`coc.nvim`]
 
