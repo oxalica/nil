@@ -10,6 +10,7 @@ macro_rules! define_check_assist {
     };
 }
 
+mod add_to_top_level_lambda_param;
 mod convert_to_inherit;
 mod flatten_attrset;
 mod pack_bindings;
@@ -30,11 +31,13 @@ pub struct Assist {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssistKind {
+    QuickFix,
     RefactorRewrite,
 }
 
 pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
     let handlers = [
+        add_to_top_level_lambda_param::add_to_top_level_lambda_param,
         convert_to_inherit::convert_to_inherit,
         flatten_attrset::flatten_attrset,
         pack_bindings::pack_bindings,
