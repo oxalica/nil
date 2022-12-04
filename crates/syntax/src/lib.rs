@@ -51,7 +51,7 @@ impl fmt::Display for ErrorKind {
             Self::NestTooDeep => "Nest too deep",
             Self::MultipleRoots => "Multiple top-level expressions are not allowed",
             Self::MultipleNoAssoc => "No-associative operators cannot be chained",
-            Self::ExpectToken(tok) => return write!(f, "Expecting {}", tok),
+            Self::ExpectToken(tok) => return write!(f, "Expecting {tok}"),
             Self::ExpectExpr => "Expecting an expression",
             Self::ExpectElemExpr => "Expecting a list element expression. Forget parentheses?",
             Self::ExpectAttr => {

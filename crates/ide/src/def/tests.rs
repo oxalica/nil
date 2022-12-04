@@ -60,7 +60,7 @@ baz/../../bar.nix + ../default.nix
     for (src, refs) in asserts {
         let got = &*db.module_references(f[src]);
         let expect = refs.iter().map(|path| f[*path]).collect::<HashSet<_>>();
-        assert_eq!(got, &expect, "Module {:?} should reference {:?}", src, refs);
+        assert_eq!(got, &expect, "Module {src:?} should reference {refs:?}");
     }
 }
 

@@ -32,7 +32,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn main_loop(conn: Connection) -> Result<()> {
     let init_params =
-        conn.initialize(serde_json::to_value(&capabilities::server_capabilities()).unwrap())?;
+        conn.initialize(serde_json::to_value(capabilities::server_capabilities()).unwrap())?;
     tracing::info!("Init params: {}", init_params);
 
     let init_params = serde_json::from_value::<InitializeParams>(init_params)?;

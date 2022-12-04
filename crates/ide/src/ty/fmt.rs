@@ -41,7 +41,7 @@ impl fmt::Display for TyDisplay<'_> {
                         depth: self.depth - 1,
                         in_param: false,
                     };
-                    write!(f, "[{}]", elem)
+                    write!(f, "[{elem}]")
                 }
             }
             &TyKind::Lambda(param, ret) => {
@@ -65,7 +65,7 @@ impl fmt::Display for TyDisplay<'_> {
                         depth: self.depth,
                         in_param: false,
                     };
-                    write!(f, "{} → {}", param, ret)?;
+                    write!(f, "{param} → {ret}")?;
                 }
                 if self.in_param {
                     ")".fmt(f)?;
@@ -91,7 +91,7 @@ impl fmt::Display for TyDisplay<'_> {
                             depth: self.depth - 1,
                             in_param: false,
                         };
-                        write!(f, " {}: {}", name, value)?;
+                        write!(f, " {name}: {value}")?;
                     }
                     if set.len() > MAX_FIELD_CNT {
                         ", … }".fmt(f)

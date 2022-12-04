@@ -142,7 +142,7 @@ impl Fixture {
             .into_iter()
             .take(marker_len)
             .enumerate()
-            .map(|(i, p)| p.with_context(|| format!("Discontinuous marker: {}", i)))
+            .map(|(i, p)| p.with_context(|| format!("Discontinuous marker: {i}")))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(this)

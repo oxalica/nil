@@ -94,8 +94,8 @@ pub enum UnescapedStringPart<'a> {
 /// Or returns `usize::MAX` if all lines are empty.
 ///
 /// See:
-/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/parser.y#L195
-/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/lexer.l#L204
+/// - <https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/parser.y#L195>
+/// - <https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/lexer.l#L204>
 pub fn common_indent_of(n: &ast::IndentString) -> usize {
     let mut ret = usize::MAX;
     let mut counter = Some(0usize);

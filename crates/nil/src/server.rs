@@ -547,7 +547,7 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
             if loc.is_empty() {
                 loc = "unknown".into();
             }
-            let msg = format!("In {}, panicked at {}: {}", ctx, loc, reason);
+            let msg = format!("In {ctx}, panicked at {loc}: {reason}");
             Err(msg.into())
         }
     }

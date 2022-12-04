@@ -41,7 +41,7 @@ fn run_test(dir: &Path, ok: bool) {
         write!(got, "{:#?}", ast.syntax_node()).unwrap();
 
         if ok != ast.errors().is_empty() {
-            println!("--------\n{}\n--------", got);
+            println!("--------\n{got}\n--------");
             panic!("Unexpected test result for {}", path.display());
         }
 

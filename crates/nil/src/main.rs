@@ -19,7 +19,7 @@ fn main() {
     if env::args().any(|arg| arg == "--version") {
         let date = option_env!("CFG_DATE").unwrap_or("unknown");
         let rev = option_env!("CFG_REV").unwrap_or("unknown");
-        println!("nil {} {}", date, rev);
+        println!("nil {date} {rev}");
         return;
     }
 
@@ -28,7 +28,7 @@ fn main() {
         Ok(()) => {}
         Err(err) => {
             tracing::error!("Unexpected error: {}", err);
-            eprintln!("{}", err);
+            eprintln!("{err}");
             process::exit(101);
         }
     }

@@ -40,7 +40,7 @@ impl Vfs {
     fn uri_to_vpath(&self, uri: &Url) -> Result<VfsPath> {
         let path = uri
             .to_file_path()
-            .map_err(|_| format!("Non-file URI: {}", uri))?;
+            .map_err(|_| format!("Non-file URI: {uri}"))?;
         Ok(VfsPath::from_path(&path).expect("URI is UTF-8"))
     }
 
@@ -89,11 +89,10 @@ impl Vfs {
         let new_text = {
             let text = &*self.files[file.0 as usize].0;
             if TextSize::of(text) < del_range.end() {
-                return Err(format!("Invalid range {:?}", del_range).into());
+                return Err(format!("Invalid range {del_range:?}").into());
             }
-            let mut buf = String::with_capacity(
-                text.len() - usize::from(del_range.len()) + ins_text.len() as usize,
-            );
+            let mut buf =
+                String::with_capacity(text.len() - usize::from(del_range.len()) + ins_text.len());
             buf += &text[..usize::from(del_range.start())];
             buf += ins_text;
             buf += &text[usize::from(del_range.end())..];
@@ -112,7 +111,7 @@ impl Vfs {
         let vpath = self.uri_to_vpath(uri)?;
         self.local_file_set
             .file_for_path(&vpath)
-            .ok_or_else(|| format!("URI not found: {}", uri).into())
+            .ok_or_else(|| format!("URI not found: {uri}").into())
     }
 
     pub fn uri_for_file(&self, file: FileId) -> Url {
