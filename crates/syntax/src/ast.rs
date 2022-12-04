@@ -423,8 +423,10 @@ asts! {
         }
     },
     PAT = Pat {
+        l_curly_token: T!['{'],
         fields: [PatField],
         ellipsis_token: T![...],
+        r_curly_token: T!['}'],
     },
     PAT_FIELD = PatField {
         name: Name,
@@ -756,6 +758,8 @@ mod tests {
     #[test]
     fn pat_exhaustive() {
         let e = parse::<Pat>("{ a, b }: 1");
+        e.l_curly_token().unwrap().should_eq("{");
+        e.r_curly_token().unwrap().should_eq("}");
         assert!(e.ellipsis_token().is_none());
 
         let mut iter = e.fields();
