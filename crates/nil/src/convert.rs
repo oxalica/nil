@@ -306,6 +306,7 @@ pub(crate) fn to_code_action(vfs: &Vfs, assist: Assist) -> CodeActionOrCommand {
     CodeActionOrCommand::CodeAction(CodeAction {
         title: assist.label,
         kind: Some(match assist.kind {
+            AssistKind::QuickFix => CodeActionKind::QUICKFIX,
             AssistKind::RefactorRewrite => CodeActionKind::REFACTOR_REWRITE,
         }),
         diagnostics: None,
