@@ -14,9 +14,31 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         return None;
     }
 
-    // RHS should be a single identifier.
-    let rhs = match binding.value()?.flatten_paren()? {
-        ast::Expr::Ref(rhs) => rhs,
+    // RHS should be either:
+    // - A single identifier.
+    // - Or a select expression ending with a single (static) identifier.
+    let (from_expr, rhs) = match binding.value()?.flatten_paren()? {
+        ast::Expr::Ref(rhs) => ("".into(), rhs.token()?.text().into()),
+        ast::Expr::Select(rhs) if rhs.or_token().is_none() => {
+            let mut attrs = rhs.attrpath()?.attrs().collect::<Vec<_>>();
+            let src = ctx.db.file_content(ctx.frange.file_id);
+            let attr = attrs.pop()?;
+
+            let set_range = rhs.set()?.syntax().text_range();
+            let end = attrs
+                .last()
+                .map_or(set_range, |attr| attr.syntax().text_range())
+                .end()
+                .into();
+            let from_expr = format!(" ({})", &src[set_range.start().into()..end]);
+
+            let rhs = match AttrKind::of(attr) {
+                AttrKind::Static(Some(rhs)) => rhs,
+                _ => return None,
+            };
+
+            (from_expr, rhs)
+        }
         _ => return None,
     };
 
@@ -28,15 +50,15 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     };
 
     // LHS should match RHS.
-    if key != rhs.token()?.text() {
+    if key != rhs {
         return None;
     }
 
     let insert = if attrs.is_empty() {
-        format!("inherit {key};")
+        format!("inherit{from_expr} {key};")
     } else {
         format!(
-            "{} = {{ inherit {key}; }};",
+            "{} = {{ inherit{from_expr} {key}; }};",
             attrs.into_iter().map(|x| x.syntax().to_string()).join(".")
         )
     };
@@ -44,7 +66,7 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     // Since RHS is already a valid identifier. Not escaping is required.
     ctx.add(
         "convert_to_inherit",
-        format!("Convert to `inherit {key}`"),
+        format!("Convert to `inherit{from_expr} {key}`"),
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: binding.syntax().text_range(),
@@ -81,6 +103,23 @@ mod tests {
         check(
             r#"{ foo.${"bar"}.baz = baz$0; }"#,
             expect![r#"{ foo.${"bar"} = { inherit baz; }; }"#],
+        );
+    }
+
+    #[test]
+    fn multiple_rhs() {
+        check("{ foo = bar.foo$0; }", expect!["{ inherit (bar) foo; }"]);
+        check(
+            "{ foo.bar = ba$0z.bar; }",
+            expect!["{ foo = { inherit (baz) bar; }; }"],
+        );
+        check(
+            "{ foo.bar.baz $0= qux.foo.baz; }",
+            expect!["{ foo.bar = { inherit (qux.foo) baz; }; }"],
+        );
+        check(
+            r#"{ $0foo = bar.${let baz = "qux"; in baz}.foo; }"#,
+            expect![r#"{ inherit (bar.${let baz = "qux"; in baz}) foo; }"#],
         );
     }
 
