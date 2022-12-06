@@ -14,6 +14,7 @@ mod add_to_top_level_lambda_param;
 mod convert_to_inherit;
 mod flatten_attrset;
 mod pack_bindings;
+mod remove_empty_inherit;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
 use syntax::ast::{self, AstNode};
@@ -41,6 +42,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         convert_to_inherit::convert_to_inherit,
         flatten_attrset::flatten_attrset,
         pack_bindings::pack_bindings,
+        remove_empty_inherit::remove_empty_inherit,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);
