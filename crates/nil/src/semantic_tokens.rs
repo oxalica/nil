@@ -19,6 +19,7 @@ def_index! {
     SemanticTokenType, SEMANTIC_TOKEN_TYPES, TokenTypeIdx;
 
     Comment => SemanticTokenType::COMMENT,
+    Constant => SemanticTokenType::new("constant"),
     Function => SemanticTokenType::FUNCTION,
     Keyword => SemanticTokenType::KEYWORD,
     Number => SemanticTokenType::NUMBER,
@@ -35,8 +36,8 @@ def_index! {
 def_index! {
     SemanticTokenModifier, SEMANTIC_TOKEN_MODIFIERS, TokenModIdx;
 
+    Builtin => SemanticTokenModifier::new("builtin"),
     Conditional => SemanticTokenModifier::new("conditional"),
-    DefaultLibrary => SemanticTokenModifier::DEFAULT_LIBRARY,
     Definition => SemanticTokenModifier::DEFINITION,
     Delimiter => SemanticTokenModifier::new("delimiter"),
     Escape => SemanticTokenModifier::new("escape"),
@@ -80,11 +81,11 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
         }
         HlTag::AttrField => TokenTypeIdx::Property,
         HlTag::Builtin(kind) => {
-            mods.insert(TokenModIdx::DefaultLibrary);
+            mods.insert(TokenModIdx::Builtin);
             match kind {
                 BuiltinKind::Const => {
                     mods.insert(TokenModIdx::Readonly);
-                    TokenTypeIdx::Variable
+                    TokenTypeIdx::Constant
                 }
                 BuiltinKind::Function => TokenTypeIdx::Function,
                 BuiltinKind::Attrset => TokenTypeIdx::Struct,
