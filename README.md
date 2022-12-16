@@ -1,4 +1,4 @@
-# nil: NIx Language server
+# nil: Nix Language server
 
 [![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
 
@@ -140,6 +140,24 @@ Modify the extension's settings in your `settings.json`.
   //     "formatting": { "command": ["nixpkgs-fmt"] }
   //   }
   // }
+}
+```
+
+### Kate with [LSP Client Plugin]
+
+[LSP Client Plugin]: https://docs.kde.org/stable5/en/kate/kate/kate-application-plugin-lspclient.html
+
+Add this to your "User Server Settings" in LSP Client configuration:
+
+```json
+{
+  "servers": {
+    "nix": {
+      "command": ["nil"],
+      "url": "https://github.com/oxalica/nil",
+      "highlightingModeRegex": "^Nix$"
+    }
+  }
 }
 ```
 
