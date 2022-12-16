@@ -143,6 +143,24 @@ Modify the extension's settings in your `settings.json`.
 }
 ```
 
+### Kate with [LSP Client Plugin]
+
+[LSP Client Plugin]: https://docs.kde.org/stable5/en/kate/kate/kate-application-plugin-lspclient.html
+
+Add this to your "User Server Settings" in LSP Client configuration:
+
+```json
+{
+  "servers": {
+    "nix": {
+      "command": ["nil"],
+      "url": "https://github.com/oxalica/nil",
+      "highlightingModeRegex": "^Nix$"
+    }
+  }
+}
+```
+
 ## License
 
 "nil" is primarily distributed under the terms of both the MIT
