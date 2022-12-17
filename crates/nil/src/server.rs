@@ -227,6 +227,7 @@ impl Server {
             .on::<req::DocumentLinkRequest>(handler::document_links)
             .on::<req::CodeActionRequest>(handler::code_action)
             .on::<req::DocumentHighlightRequest>(handler::document_highlight)
+            .on::<req::InlayHintRequest>(handler::inlay_hints)
             .finish();
     }
 

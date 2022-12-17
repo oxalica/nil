@@ -4,10 +4,11 @@ use lsp_types::{
     CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse, Diagnostic,
     DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentLink,
     DocumentLinkParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, Location, Position, PrepareRenameResponse, Range,
-    ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens,
-    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
+    GotoDefinitionResponse, Hover, HoverParams, InlayHint, InlayHintParams, Location, Position,
+    PrepareRenameResponse, Range, ReferenceParams, RenameParams, SelectionRange,
+    SelectionRangeParams, SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url,
+    WorkspaceEdit,
 };
 use std::path::Path;
 use std::process;
@@ -327,4 +328,18 @@ pub(crate) fn document_highlight(
     let ret = snap.analysis.highlight_related(fpos)?;
     let ret = convert::to_document_highlight(&line_map, &ret);
     Ok(Some(ret))
+}
+
+pub(crate) fn inlay_hints(
+    snap: StateSnapshot,
+    params: InlayHintParams,
+) -> Result<Option<Vec<InlayHint>>> {
+    let (file, line_map) = convert::from_file(&snap.vfs(), &params.text_document)?;
+    let (_, range) = convert::from_range(&snap.vfs(), file, params.range)?;
+    let hints = snap.analysis.inlay_hints(FileRange::new(file, range))?;
+    let hints = hints
+        .into_iter()
+        .map(|hint| convert::to_inlay_hint(&line_map, hint))
+        .collect();
+    Ok(Some(hints))
 }

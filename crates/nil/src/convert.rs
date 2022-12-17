@@ -1,8 +1,10 @@
 use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
-    HlRange, HlRelated, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
+    HlRange, HlRelated, HoverResult, InlayHint, InlayKind, NameKind, Severity, SymbolTree,
+    TextEdit, WorkspaceEdit,
 };
+use lsp::{InlayHintLabel, InlayHintTooltip};
 use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
@@ -50,10 +52,15 @@ pub(crate) fn to_location(vfs: &Vfs, frange: FileRange) -> Location {
     Location::new(uri, to_range(&line_map, frange.range))
 }
 
+pub(crate) fn to_pos(line_map: &LineMap, pos: TextSize) -> Position {
+    let (line, col) = line_map.line_col_for_pos(pos);
+    Position::new(line, col)
+}
+
 pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
-    let (line1, col1) = line_map.line_col_for_pos(range.start());
-    let (line2, col2) = line_map.line_col_for_pos(range.end());
-    Range::new(Position::new(line1, col1), Position::new(line2, col2))
+    let start = to_pos(line_map, range.start());
+    let end = to_pos(line_map, range.end());
+    Range::new(start, end)
 }
 
 pub(crate) fn to_diagnostics(
@@ -166,6 +173,7 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
         commit_characters: None,
         data: None,
         tags: None,
+        label_details: None,
     }
 }
 
@@ -332,4 +340,22 @@ pub(crate) fn to_document_highlight(
             }),
         })
         .collect()
+}
+
+pub(crate) fn to_inlay_hint(line_map: &LineMap, hint: InlayHint) -> lsp::InlayHint {
+    lsp::InlayHint {
+        position: to_pos(line_map, hint.pos),
+        label: InlayHintLabel::String(hint.label),
+        kind: match hint.kind {
+            InlayKind::WithHint => None,
+        },
+        text_edits: None,
+        tooltip: Some(InlayHintTooltip::MarkupContent(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: hint.tooltip,
+        })),
+        padding_left: None,
+        padding_right: None,
+        data: None,
+    }
 }
