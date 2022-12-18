@@ -17,7 +17,7 @@ pub enum HlTag {
     NameRef(NameKind),
     UnresolvedRef,
 
-    AttrField,
+    AttrField(HlAttrField),
     Builtin(BuiltinKind),
     Comment,
     FloatLiteral,
@@ -28,6 +28,12 @@ pub enum HlTag {
     Punct(HlPunct),
     StringEscape,
     StringLiteral,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HlAttrField {
+    Select,
+    With,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -112,7 +118,7 @@ pub(crate) fn highlight(
                     match nameres.get(expr) {
                         None => HlTag::UnresolvedRef,
                         Some(ResolveResult::Definition(def)) => HlTag::NameRef(module[*def].kind),
-                        Some(ResolveResult::WithExprs(_)) => HlTag::NameRef(NameKind::PlainAttrset),
+                        Some(ResolveResult::WithExprs(_)) => HlTag::AttrField(HlAttrField::With),
                         Some(ResolveResult::Builtin(name)) => {
                             HlTag::Builtin(ALL_BUILTINS[*name].kind)
                         }
@@ -124,9 +130,9 @@ pub(crate) fn highlight(
                         Some(name) => HlTag::NameDef(module[name].kind),
                         None => {
                             match source_map.expr_for_node(ptr) {
-                                // `Attr`s are converted into string literals.
+                                // Attrs in select-expression are converted into string literals.
                                 Some(expr) if matches!(&module[expr], Expr::Literal(_)) => {
-                                    HlTag::AttrField
+                                    HlTag::AttrField(HlAttrField::Select)
                                 }
                                 _ => return None,
                             }
@@ -254,14 +260,14 @@ mod tests {
 
         check("let true = 1; in $0true", expect!["NameRef(LetIn)"]);
 
-        check("with {}; $0a", expect!["NameRef(PlainAttrset)"]);
+        check("with {}; $0a", expect!["AttrField(With)"]);
 
         check("$0not_found", expect!["UnresolvedRef"]);
     }
 
     #[test]
     fn attr() {
-        check("{}.$0a", expect!["AttrField"]);
-        check("{} ? $0a", expect!["AttrField"]);
+        check("{}.$0a", expect!["AttrField(Select)"]);
+        check("{} ? $0a", expect!["AttrField(Select)"]);
     }
 }

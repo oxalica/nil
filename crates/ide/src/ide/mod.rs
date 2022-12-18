@@ -28,7 +28,7 @@ pub use hover::HoverResult;
 pub use links::{Link, LinkTarget};
 pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
-pub use syntax_highlighting::{HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
+pub use syntax_highlighting::{HlAttrField, HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationTarget {

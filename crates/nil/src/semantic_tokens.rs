@@ -1,4 +1,4 @@
-use ide::{BuiltinKind, HlKeyword, HlPunct, HlTag, NameKind};
+use ide::{BuiltinKind, HlAttrField, HlKeyword, HlPunct, HlTag, NameKind};
 use lsp_types::{SemanticTokenModifier, SemanticTokenType};
 
 macro_rules! def_index {
@@ -44,6 +44,7 @@ def_index! {
     Parenthesis => SemanticTokenModifier::new("parenthesis"),
     Readonly => SemanticTokenModifier::READONLY,
     Unresolved => SemanticTokenModifier::new("unresolved"),
+    WithAttribute => SemanticTokenModifier::new("withAttribute"),
 }
 
 impl TokenModIdx {
@@ -79,7 +80,12 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
             mods.insert(TokenModIdx::Unresolved);
             TokenTypeIdx::Variable
         }
-        HlTag::AttrField => TokenTypeIdx::Property,
+        HlTag::AttrField(kind) => {
+            if kind == HlAttrField::With {
+                mods.insert(TokenModIdx::WithAttribute)
+            }
+            TokenTypeIdx::Property
+        }
         HlTag::Builtin(kind) => {
             mods.insert(TokenModIdx::Builtin);
             match kind {
