@@ -107,6 +107,31 @@ if executable('nil')
 endif
 ```
 
+### Emacs with [`lsp-mode`]
+
+[`lsp-mode`]: https://github.com/emacs-lsp/lsp-mode
+
+Add the following elisp code to your configuration. (using `use-package`)
+
+```elisp
+(use-package lsp-mode
+  :ensure t)
+
+(use-package lsp-nix
+  :ensure lsp-mode
+  :after (lsp-mode)
+  :demand t
+  :custom
+  (lsp-nix-nil-formatter ["nixpkgs-fmt"]))
+
+(use-package nix-mode
+  :hook (nix-mode . lsp-deferred)
+  :ensure t)
+```
+
+There are various other configurations to tweak it. Refer the
+[specific manual page](https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/ "https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/") for more details.
+
 ### Emacs with [`eglot`]
 
 [`eglot`]: https://github.com/joaotavora/eglot
