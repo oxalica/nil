@@ -1,7 +1,7 @@
 ## LSP Configuration
 
 There are some tunable options and settings for `nil`.
-They are retrieved via LSP and support runtine modification.
+They are retrieved via LSP and support runtime modification.
 
 All settings are nested under a key `"nil"`.
 For example, `formatting.command` means to write
@@ -24,7 +24,7 @@ The values shown here are the default values.
       // It should accepts file content in stdin and print the formatted code into stdout.
       // Type: [string] | null
       // Example: ["nixpkgs-fmt"]
-      "command": null, 
+      "command": null,
     },
     "diagnostics": {
       // Ignored diagnostic kinds.
