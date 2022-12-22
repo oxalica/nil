@@ -1,4 +1,4 @@
-# nil: Nix Language server
+# nil: NIx Language server
 
 [![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
 
