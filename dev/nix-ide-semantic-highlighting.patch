@@ -1,0 +1,21 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -100,7 +100,15 @@
+         "editor.insertSpaces": true,
+         "editor.tabSize": 2
+       }
+-    }
++    },
++    "semanticTokenScopes": [
++      {
++        "language": "nix",
++        "scopes": {
++          "*.withAttribute": ["markup.underline"]
++        }
++      }
++    ]
+   },
+   "devDependencies": {
+     "@commitlint/cli": "*",
+

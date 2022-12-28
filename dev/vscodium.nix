@@ -3,7 +3,13 @@ with pkgs;
 let
   codium = vscode-with-extensions.override {
     vscode = vscodium;
-    vscodeExtensions = [ vscode-extensions.jnoortheen.nix-ide ];
+    vscodeExtensions = [
+      (vscode-extensions.jnoortheen.nix-ide.overrideAttrs (old: {
+        patches = old.patches or [] ++ [
+          ./nix-ide-semantic-highlighting.patch
+        ];
+      }))
+    ];
   };
 in writeShellScriptBin "codium-test" ''
   set -e

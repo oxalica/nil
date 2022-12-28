@@ -73,6 +73,7 @@ let
 
     highlight link CocSemEscape     TSStringEscape
     highlight link CocSemUnresolved Error
+    highlight link CocSemWithAttribute Underlined
 
     highlight link CocSemDelimiterPunctuation   TSPunctDelimiter
     highlight link CocSemConditionalKeyword     Conditional
