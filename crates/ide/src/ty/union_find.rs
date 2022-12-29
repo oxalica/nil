@@ -43,7 +43,7 @@ impl<T> UnionFind<T> {
         let (a, b) = (a as usize, b as usize);
         let lhs = self.0[a].0.take().unwrap();
         let rhs = self.0[b].0.take().unwrap();
-        let final_idx = match Ord::cmp(&self.0[a].2, &self.0[b as usize].2) {
+        let final_idx = match Ord::cmp(&self.0[a].2, &self.0[b].2) {
             Ordering::Less => {
                 self.0[a].1 = b as u32;
                 self.0[b].0 = Some(lhs);
