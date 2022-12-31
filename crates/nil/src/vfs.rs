@@ -91,9 +91,8 @@ impl Vfs {
             if TextSize::of(text) < del_range.end() {
                 return Err(format!("Invalid range {:?}", del_range).into());
             }
-            let mut buf = String::with_capacity(
-                text.len() - usize::from(del_range.len()) + ins_text.len(),
-            );
+            let mut buf =
+                String::with_capacity(text.len() - usize::from(del_range.len()) + ins_text.len());
             buf += &text[..usize::from(del_range.start())];
             buf += ins_text;
             buf += &text[usize::from(del_range.end())..];
