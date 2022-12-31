@@ -38,15 +38,22 @@
           pkgs = nixpkgs.legacyPackages.${system};
           rustPkgs = rust-overlay.packages.${system};
 
+          clippyFlags = lib.concatStringsSep " " [
+            "-D" "warnings"
+            "-D" "clippy::dbg_macro"
+          ];
+
           pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
             set -e
             die() { echo "$*" >&2; exit 1; }
 
-            cd "$(git rev-parse --show-toplevel)"
-            rg --fixed-strings 'dbg!' --glob '*.rs' \
-              && die 'Found dbg!()'
-            cargo fmt --quiet --check >/dev/null \
+            if git_dir="$(git rev-parse --show-toplevel)"; then
+              cd "$git_dir"
+            fi
+            cargo fmt --all --check \
               || die 'Format failed'
+            cargo clippy --all --all-targets -- ${clippyFlags} \
+              || die 'Clippy failed'
           '';
 
           nil = pkgs.callPackage mkNil { };
@@ -79,6 +86,7 @@
 
             RUST_BACKTRACE = "short";
             NIXPKGS = nixpkgs;
+            CLIPPY_FLAGS = clippyFlags;
 
             # bash
             shellHook = ''
