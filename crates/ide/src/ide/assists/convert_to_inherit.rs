@@ -1,6 +1,14 @@
-//! Convert `key = key;` into `inherit key;` in non-rec attrset.
+//! Convert `path = value;` into `inherit key;`.
+//! This covers,
+//! - `prefix.key = key;` => `prefix = { inherit key; };`
+//!   Here the `prefix` set mut not be `rec`. The code before is actually
+//!   an infinite recursion while the code after is not.
+//! - `prefix.key = from.key;` => `prefix = [rec] { inherit (from) key; };`
+//!   Since the `from` is resolved in the `prefix` scope thus
+//!   it is allowed to have recursive references (but may not be infinite recursion).
 use super::{AssistKind, AssistsCtx};
-use crate::TextEdit;
+use crate::def::AstPtr;
+use crate::{NameKind, TextEdit};
 use itertools::Itertools;
 use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
@@ -8,57 +16,60 @@ use syntax::semantic::AttrKind;
 pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let binding = ctx.covering_node::<ast::AttrpathValue>()?;
 
-    // Must be in non-rec attrset.
-    let set = ast::AttrSet::cast(binding.syntax().parent()?)?;
-    if set.rec_token().is_some() || set.let_token().is_some() {
-        return None;
-    }
+    let src = ctx.db.file_content(ctx.frange.file_id);
 
     // RHS should be either:
     // - A single identifier.
     // - Or a select expression ending with a single (static) identifier.
-    let (from_expr, rhs) = match binding.value()?.flatten_paren()? {
-        ast::Expr::Ref(rhs) => ("".into(), rhs.token()?.text().into()),
+    let (from_frag, rhs_name) = match binding.value()?.flatten_paren()? {
+        ast::Expr::Ref(rhs) => (String::new(), rhs.token()?.text().to_owned()),
         ast::Expr::Select(rhs) if rhs.or_token().is_none() => {
             let mut attrs = rhs.attrpath()?.attrs().collect::<Vec<_>>();
-            let src = ctx.db.file_content(ctx.frange.file_id);
-            let attr = attrs.pop()?;
+            let last_attr = attrs.pop()?;
 
             let set_range = rhs.set()?.syntax().text_range();
-            let end = attrs
-                .last()
-                .map_or(set_range, |attr| attr.syntax().text_range())
-                .end()
-                .into();
-            let from_expr = format!(" ({})", &src[set_range.start().into()..end]);
+            let from_expr_range = attrs.last().map_or(set_range, |attr| {
+                set_range.cover(attr.syntax().text_range())
+            });
+            let from_expr = format!(" ({})", &src[from_expr_range]);
 
-            let rhs = match AttrKind::of(attr) {
+            let ident = match AttrKind::of(last_attr) {
                 AttrKind::Static(Some(rhs)) => rhs,
                 _ => return None,
             };
 
-            (from_expr, rhs)
+            (from_expr, ident)
         }
         _ => return None,
     };
 
+    let module = ctx.db.module(ctx.frange.file_id);
+    let source_map = ctx.db.source_map(ctx.frange.file_id);
+
     let mut attrs = binding.attrpath()?.attrs().collect::<Vec<_>>();
-    let attr = attrs.pop()?;
-    let key = match AttrKind::of(attr) {
-        AttrKind::Static(Some(key)) => key,
+    let last_attr = attrs.pop()?;
+    let lhs_name = source_map.name_for_node(AstPtr::new(last_attr.syntax()))?;
+    let is_rec = match module[lhs_name].kind {
+        NameKind::LetIn | NameKind::RecAttrset => true,
+        NameKind::PlainAttrset => false,
         _ => return None,
     };
 
     // LHS should match RHS.
-    if key != rhs {
+    if module[lhs_name].text != rhs_name {
+        return None;
+    }
+
+    // Ignore direct recursion `rec { foo = foo; }`.
+    if is_rec && from_frag.is_empty() {
         return None;
     }
 
     let insert = if attrs.is_empty() {
-        format!("inherit{from_expr} {key};")
+        format!("inherit{from_frag} {rhs_name};")
     } else {
         format!(
-            "{} = {{ inherit{from_expr} {key}; }};",
+            "{} = {{ inherit{from_frag} {rhs_name}; }};",
             attrs.into_iter().map(|x| x.syntax().to_string()).join(".")
         )
     };
@@ -66,7 +77,7 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     // Since RHS is already a valid identifier. Not escaping is required.
     ctx.add(
         "convert_to_inherit",
-        format!("Convert to `inherit{from_expr} {key}`"),
+        format!("Convert to `inherit{from_frag} {rhs_name}`"),
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: binding.syntax().text_range(),
@@ -107,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_rhs() {
+    fn multiple_rhs_plain() {
         check("{ foo = bar.foo$0; }", expect!["{ inherit (bar) foo; }"]);
         check(
             "{ foo.bar = ba$0z.bar; }",
@@ -120,6 +131,16 @@ mod tests {
         check(
             r#"{ $0foo = bar.${let baz = "qux"; in baz}.foo; }"#,
             expect![r#"{ inherit (bar.${let baz = "qux"; in baz}) foo; }"#],
+        );
+
+        // Actually not rec.
+        check(
+            "rec { bar = { }; foo.bar $0= bar; }",
+            expect!["rec { bar = { }; foo = { inherit bar; }; }"],
+        );
+        check(
+            "let bar = { }; foo.bar $0= bar; in foo",
+            expect!["let bar = { }; foo = { inherit bar; }; in foo"],
         );
     }
 
@@ -138,9 +159,27 @@ mod tests {
     }
 
     #[test]
-    fn rec_attrset() {
+    fn no_direct_recursion() {
         check_no("rec { foo $0= foo; }");
         check_no("let { foo $0= foo; }");
         check_no("let foo $0= foo; in foo");
+        check_no("{ foo = rec { }; foo.bar $0= bar; }");
+    }
+
+    #[test]
+    fn multiple_rhs_rec() {
+        check(
+            "let bar = { }; foo $0= bar.foo; in foo",
+            expect!["let bar = { }; inherit (bar) foo; in foo"],
+        );
+        check(
+            "rec { bar = { }; foo $0= bar.foo; }",
+            expect!["rec { bar = { }; inherit (bar) foo; }"],
+        );
+
+        check(
+            "let foo $0= foo.foo; in foo",
+            expect!["let inherit (foo) foo; in foo"],
+        );
     }
 }
