@@ -168,7 +168,8 @@ impl Fixture {
         &self.markers
     }
 
-    pub fn marker_single_range(&self) -> FileRange {
+    #[track_caller]
+    pub fn unwrap_single_range_marker(&self) -> FileRange {
         match *self.markers() {
             [fpos] => FileRange::empty(fpos),
             [start, end] => FileRange::span(start, end),

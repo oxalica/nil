@@ -90,7 +90,7 @@ mod tests {
 
     fn check(fixture: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        let frange = f.marker_single_range();
+        let frange = f.unwrap_single_range_marker();
         let src = db.file_content(f[0].file_id);
         let got = super::expand_selection(&db, frange)
             .into_iter()

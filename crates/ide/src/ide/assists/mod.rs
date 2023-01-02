@@ -1,9 +1,11 @@
 #[cfg(test)]
 macro_rules! define_check_assist {
     ($handler:path) => {
+        #[track_caller]
         fn check(fixture: &str, expect: ::expect_test::Expect) {
             crate::ide::assists::tests::check_assist($handler, fixture, expect);
         }
+        #[track_caller]
         fn check_no(fixture: &str) {
             crate::ide::assists::tests::check_assist_no($handler, fixture);
         }
@@ -107,13 +109,14 @@ mod tests {
     use crate::SourceDatabase;
     use expect_test::Expect;
 
+    #[track_caller]
     fn try_apply_assist(
         handler: fn(&mut AssistsCtx) -> Option<()>,
         fixture: &str,
     ) -> Option<String> {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.files().len(), 1);
-        let frange = f.marker_single_range();
+        let frange = f.unwrap_single_range_marker();
         let mut ctx = AssistsCtx::new(&db, frange);
         handler(&mut ctx);
 
