@@ -73,7 +73,6 @@
                 rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}")
 
               nix.out # For generation of builtins.
-              gdb
               jq
               pre-commit
               nixpkgs-fmt
@@ -82,6 +81,8 @@
               (import ./dev/vim-lsp.nix { inherit pkgs; })
             ] ++ lib.optionals (lib.meta.availableOn stdenv.hostPlatform vscodium) [
               (import ./dev/vscodium.nix { inherit pkgs; })
+            ] ++ lib.optionals (lib.meta.availableOn stdenv.hostPlatform gdb) [
+              gdb
             ];
 
             RUST_BACKTRACE = "short";
