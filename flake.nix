@@ -67,7 +67,7 @@
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               # Override the stable rustfmt.
-              rustPkgs.rust-nightly_2022-10-01.availableComponents.rustfmt
+              rustPkgs.rust-nightly_2023-01-01.availableComponents.rustfmt
               # Follows nixpkgs's version of rustc.
               (let vers = lib.splitVersion rustc.version; in
                 rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}")
