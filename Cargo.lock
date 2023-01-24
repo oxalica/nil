@@ -119,6 +119,7 @@ dependencies = [
  "indexmap",
  "itertools",
  "la-arena",
+ "nix-interop",
  "ordered-float",
  "salsa",
  "smol_str",
@@ -268,12 +269,17 @@ dependencies = [
  "log",
  "lsp-server",
  "lsp-types",
+ "nix-interop",
  "serde",
  "serde_json",
  "text-size",
  "tracing",
  "tracing-subscriber",
 ]
+
+[[package]]
+name = "nix-interop"
+version = "0.0.0"
 
 [[package]]
 name = "num-traits"

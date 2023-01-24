@@ -9,6 +9,7 @@ mod tests;
 use crate::base::SourceDatabase;
 use crate::{Diagnostic, FileId, SourceRootId, VfsPath};
 use la_arena::{Arena, ArenaMap, Idx};
+use nix_interop::DEFAULT_IMPORT_FILE;
 use ordered_float::OrderedFloat;
 use smol_str::SmolStr;
 use std::collections::{HashMap, HashSet};
@@ -154,7 +155,7 @@ impl Module {
                 };
                 let mut vpath = path.resolve(db)?;
                 source_root.file_for_path(&vpath).or_else(|| {
-                    vpath.push_segment("default.nix");
+                    vpath.push_segment(DEFAULT_IMPORT_FILE);
                     source_root.file_for_path(&vpath)
                 })
             })

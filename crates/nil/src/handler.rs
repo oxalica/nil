@@ -10,12 +10,12 @@ use lsp_types::{
     SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
     SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
+use nix_interop::DEFAULT_IMPORT_FILE;
 use std::path::Path;
 use std::process;
 use std::sync::Arc;
 use text_size::TextRange;
 
-const DEFAULT_CHILD: &str = "default.nix";
 const MAX_DIAGNOSTICS_CNT: usize = 128;
 
 pub(crate) fn diagnostics(snap: StateSnapshot, uri: &Url) -> Result<Vec<Diagnostic>> {
@@ -37,7 +37,7 @@ pub(crate) fn goto_definition(
         None => return Ok(None),
         Some(GotoDefinitionResult::Path(vpath)) => {
             let path = Path::new(vpath.as_str());
-            let default_child = path.join(DEFAULT_CHILD);
+            let default_child = path.join(DEFAULT_IMPORT_FILE);
             let target_path = if path.is_file() {
                 path
             } else if default_child.is_file() {
@@ -280,7 +280,7 @@ pub(crate) fn document_links(
                 // FIXME: Duplicated with `goto_definition`.
                 LinkTarget::VfsPath(vpath) => {
                     let path = Path::new(vpath.as_str());
-                    let default_child = path.join(DEFAULT_CHILD);
+                    let default_child = path.join(DEFAULT_IMPORT_FILE);
                     let target_path = if path.is_file() {
                         path
                     } else if default_child.is_file() {

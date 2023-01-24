@@ -117,14 +117,10 @@ impl Vfs {
     pub fn take_change(&mut self) -> Change {
         let mut change = mem::take(&mut self.change);
         if mem::take(&mut self.root_changed) {
-            // TODO: Configurable.
-            let entry = ["/flake.nix", "/default.nix"].iter().find_map(|&path| {
-                let path = VfsPath::new(path).unwrap();
-                self.local_file_set.file_for_path(&path)
-            });
             change.set_roots(vec![SourceRoot::new_local(
                 self.local_file_set.clone(),
-                entry,
+                // TODO: Entry.
+                None,
             )]);
         }
         change

@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/builtin",
+    "crates/ide",
+    "crates/nil",
+    "crates/nix-interop",
+    "crates/syntax",
+]
 
 [profile.dev]
 debug = 1

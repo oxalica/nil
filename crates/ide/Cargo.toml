@@ -12,6 +12,7 @@ either = "1.8.0"
 indexmap = "1.9.1"
 itertools = "0.10.5"
 la-arena = "0.2.1"
+nix-interop = { path = "../nix-interop" }
 ordered-float = "3.4.0"
 salsa = "0.17.0-pre.2"
 smol_str = "0.1.23"

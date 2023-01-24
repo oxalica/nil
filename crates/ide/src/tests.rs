@@ -4,6 +4,7 @@ use crate::ty::TyDatabaseStorage;
 use crate::{Change, DefDatabase, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath};
 use anyhow::{ensure, Context, Result};
 use indexmap::IndexMap;
+use nix_interop::DEFAULT_IMPORT_FILE;
 use std::{mem, ops};
 use syntax::ast::AstNode;
 use syntax::{NixLanguage, SyntaxNode, TextSize};
@@ -37,7 +38,7 @@ impl TestDB {
             change.change_file(file, text.to_owned().into());
         }
         let entry = file_set
-            .file_for_path(&VfsPath::new("/default.nix").unwrap())
+            .file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap())
             .context("Missing entry file")?;
         change.set_roots(vec![SourceRoot::new_local(file_set, Some(entry))]);
         change.apply(&mut db);
@@ -109,7 +110,7 @@ impl Fixture {
             } else {
                 if cur_path.is_none() {
                     missing_header = true;
-                    cur_path = Some(VfsPath::new("/default.nix").unwrap());
+                    cur_path = Some(VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap());
                 }
 
                 let mut iter = line.chars().peekable();
