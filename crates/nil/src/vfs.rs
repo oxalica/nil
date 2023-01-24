@@ -1,4 +1,5 @@
-use anyhow::{anyhow, ensure, Context, Result};
+use crate::UrlExt;
+use anyhow::{ensure, Context, Result};
 use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use lsp_types::Url;
 use std::collections::HashMap;
@@ -37,15 +38,8 @@ impl Vfs {
         }
     }
 
-    fn uri_to_vpath(&self, uri: &Url) -> Result<VfsPath> {
-        let path = uri
-            .to_file_path()
-            .map_err(|()| anyhow!("Non-file URI: {uri}"))?;
-        Ok(VfsPath::from_path(&path).expect("URI is UTF-8"))
-    }
-
     pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {
-        let vpath = self.uri_to_vpath(uri)?;
+        let vpath = uri.to_vfs_path()?;
         self.set_path_content(vpath, text);
         Ok(())
     }
@@ -109,7 +103,7 @@ impl Vfs {
     }
 
     pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {
-        let vpath = self.uri_to_vpath(uri)?;
+        let vpath = uri.to_vfs_path()?;
         self.local_file_set
             .file_for_path(&vpath)
             .with_context(|| format!("URI not found: {uri}"))

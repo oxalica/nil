@@ -6,9 +6,10 @@ mod semantic_tokens;
 mod server;
 mod vfs;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use ide::VfsPath;
 use lsp_server::{Connection, ErrorCode};
-use lsp_types::InitializeParams;
+use lsp_types::{InitializeParams, Url};
 use std::fmt;
 
 pub(crate) use server::{Server, StateSnapshot};
@@ -28,6 +29,19 @@ impl fmt::Display for LspError {
 }
 
 impl std::error::Error for LspError {}
+
+pub(crate) trait UrlExt {
+    fn to_vfs_path(&self) -> Result<VfsPath>;
+}
+
+impl UrlExt for Url {
+    fn to_vfs_path(&self) -> Result<VfsPath> {
+        let path = self
+            .to_file_path()
+            .map_err(|()| anyhow!("Non-file URI: {self}"))?;
+        Ok(path.try_into()?)
+    }
+}
 
 pub fn main_loop(conn: Connection) -> Result<()> {
     let init_params =

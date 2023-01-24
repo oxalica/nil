@@ -1,7 +1,7 @@
 use salsa::Durability;
 use std::collections::HashMap;
 use std::fmt;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use syntax::{TextRange, TextSize};
 
@@ -35,20 +35,6 @@ impl VfsPath {
         Ok(Self(s))
     }
 
-    pub fn from_path(path: &Path) -> Result<Self, ParseVfsPathError> {
-        let mut ret = Self::root();
-        for comp in path.components() {
-            match comp {
-                Component::RootDir => {}
-                Component::Normal(seg) => {
-                    ret.push_segment(seg.to_str().ok_or(ParseVfsPathError)?);
-                }
-                _ => return Err(ParseVfsPathError),
-            }
-        }
-        Ok(ret)
-    }
-
     /// Assume another VfsPath as relative and append it to this one.
     pub fn append(&mut self, relative: &Self) {
         self.0.push_str(&relative.0);
@@ -76,6 +62,32 @@ impl VfsPath {
         } else {
             "/"
         }
+    }
+}
+
+impl TryFrom<PathBuf> for VfsPath {
+    type Error = ParseVfsPathError;
+
+    fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
+        (&*path).try_into()
+    }
+}
+
+impl TryFrom<&'_ Path> for VfsPath {
+    type Error = ParseVfsPathError;
+
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+        let mut ret = Self(String::with_capacity(path.as_os_str().len()));
+        for comp in path.components() {
+            match comp {
+                Component::RootDir => {}
+                Component::Normal(seg) => {
+                    ret.push_segment(seg.to_str().ok_or(ParseVfsPathError)?);
+                }
+                _ => return Err(ParseVfsPathError),
+            }
+        }
+        Ok(ret)
     }
 }
 
