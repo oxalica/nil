@@ -1,5 +1,6 @@
 use crate::config::{Config, CONFIG_KEY};
-use crate::{convert, handler, Result, Vfs};
+use crate::{convert, handler, LspError, Vfs};
+use anyhow::{bail, Context, Result};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
@@ -141,7 +142,7 @@ impl Server {
         loop {
             crossbeam_channel::select! {
                 recv(lsp_rx) -> msg => {
-                    match msg.map_err(|_| "Channel closed")? {
+                    match msg.context("Channel closed")? {
                         Message::Request(req) => self.dispatch_request(req),
                         Message::Notification(notif) => {
                             if notif.method == notif::Exit::METHOD {
@@ -157,7 +158,7 @@ impl Server {
                     }
                 }
                 recv(self.event_rx) -> event => {
-                    self.dispatch_event(event.map_err(|_| "Worker panicked")?)?;
+                    self.dispatch_event(event.context("Worker panicked")?)?;
                 }
             }
         }
@@ -191,7 +192,7 @@ impl Server {
                 _ => tracing::debug!("Ignore raced diagnostics of {uri}, version {version}"),
             },
             Event::ClientExited => {
-                return Err("The process initializing this server is exited. Stopping.".into());
+                bail!("The process initializing this server is exited. Exit now")
             }
         }
         Ok(())
@@ -547,8 +548,7 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
             if loc.is_empty() {
                 loc = "unknown".into();
             }
-            let msg = format!("In {}, panicked at {}: {}", ctx, loc, reason);
-            Err(msg.into())
+            bail!("Panicked in {ctx} at {loc}: {reason}");
         }
     }
 }
@@ -567,8 +567,11 @@ fn result_to_response(id: RequestId, ret: Result<serde_json::Value>) -> Response
 
     if err.is::<Cancelled>() {
         // When client cancelled a request, a response is immediately sent back,
-        // and this will be ignored.
+        // and the response will be ignored.
         return Response::new_err(id, ErrorCode::ServerCancelled as i32, "Cancelled".into());
+    }
+    if let Some(err) = err.downcast_ref::<LspError>() {
+        return Response::new_err(id, err.code as i32, err.to_string());
     }
     if let Some(err) = err.downcast_ref::<serde_json::Error>() {
         return Response::new_err(id, ErrorCode::InvalidParams as i32, err.to_string());

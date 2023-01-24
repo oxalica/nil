@@ -6,6 +6,7 @@ mod semantic_tokens;
 mod server;
 mod vfs;
 
+use anyhow::Result;
 use lsp_server::{Connection, ErrorCode};
 use lsp_types::InitializeParams;
 use std::fmt;
@@ -21,14 +22,12 @@ pub(crate) struct LspError {
 
 impl fmt::Display for LspError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {}", self.code, self.message)
+        // NB. This will be displayed in the editor.
+        self.message.fmt(f)
     }
 }
 
 impl std::error::Error for LspError {}
-
-pub type Error = Box<dyn std::error::Error + Send + Sync>;
-pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn main_loop(conn: Connection) -> Result<()> {
     let init_params =

@@ -1,4 +1,4 @@
-use crate::Result;
+use anyhow::{anyhow, ensure, Context, Result};
 use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
 use lsp_types::Url;
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ impl Vfs {
     fn uri_to_vpath(&self, uri: &Url) -> Result<VfsPath> {
         let path = uri
             .to_file_path()
-            .map_err(|_| format!("Non-file URI: {}", uri))?;
+            .map_err(|()| anyhow!("Non-file URI: {uri}"))?;
         Ok(VfsPath::from_path(&path).expect("URI is UTF-8"))
     }
 
@@ -88,9 +88,10 @@ impl Vfs {
     ) -> Result<()> {
         let new_text = {
             let text = &*self.files[file.0 as usize].0;
-            if TextSize::of(text) < del_range.end() {
-                return Err(format!("Invalid range {:?}", del_range).into());
-            }
+            ensure!(
+                del_range.end() <= TextSize::of(text),
+                "Invalid delete range {del_range:?}",
+            );
             let mut buf =
                 String::with_capacity(text.len() - usize::from(del_range.len()) + ins_text.len());
             buf += &text[..usize::from(del_range.start())];
@@ -99,7 +100,7 @@ impl Vfs {
             buf
         };
         // This is not quite efficient, but we already do many O(n) traversals.
-        let (new_text, line_map) = LineMap::normalize(new_text).ok_or("File too large")?;
+        let (new_text, line_map) = LineMap::normalize(new_text).context("File too large")?;
         let new_text = <Arc<str>>::from(new_text);
         log::trace!("File {:?} content changed: {:?}", file, new_text);
         self.files[file.0 as usize] = (new_text.clone(), Arc::new(line_map));
@@ -111,7 +112,7 @@ impl Vfs {
         let vpath = self.uri_to_vpath(uri)?;
         self.local_file_set
             .file_for_path(&vpath)
-            .ok_or_else(|| format!("URI not found: {}", uri).into())
+            .with_context(|| format!("URI not found: {uri}"))
     }
 
     pub fn uri_for_file(&self, file: FileId) -> Url {

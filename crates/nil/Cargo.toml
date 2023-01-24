@@ -6,6 +6,7 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.66"
 
 [dependencies]
+anyhow = "1.0.68"
 crossbeam-channel = "0.5.6"
 ide = { path = "../ide" }
 indexmap = "1.9.1"
