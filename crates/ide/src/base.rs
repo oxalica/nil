@@ -35,6 +35,17 @@ impl VfsPath {
         Ok(Self(s))
     }
 
+    /// Append a path segment at the end and return the new path.
+    /// Panic if it is empty or contains `/`.
+    pub fn join_segment(&self, segment: &str) -> Self {
+        assert!(!segment.is_empty() && !segment.contains('/'));
+        let mut buf = String::with_capacity(self.0.len() + 1 + segment.len());
+        buf += &self.0;
+        buf += "/";
+        buf += segment;
+        Self(buf)
+    }
+
     /// Assume another VfsPath as relative and append it to this one.
     pub fn append(&mut self, relative: &Self) {
         self.0.push_str(&relative.0);

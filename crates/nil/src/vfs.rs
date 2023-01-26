@@ -40,11 +40,11 @@ impl Vfs {
 
     pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {
         let vpath = uri.to_vfs_path()?;
-        self.set_path_content(vpath, text);
+        self.set_path_content(vpath, text)?;
         Ok(())
     }
 
-    pub fn set_path_content(&mut self, path: VfsPath, text: String) {
+    pub fn set_path_content(&mut self, path: VfsPath, text: String) -> Result<FileId> {
         // For invalid files (currently, too large), we store them as empty files in database,
         // but remove them from `local_file_set`. Thus any interactions on them would fail.
         let (text, line_map, is_valid) = LineMap::normalize(text)
@@ -60,18 +60,19 @@ impl Vfs {
                     self.local_file_set.remove_file(file);
                     self.root_changed = true;
                 }
+                Ok(file)
             }
             None => {
-                if !is_valid {
-                    return;
-                }
+                // FIXME: Somehow get rid of this validity check from Vfs.
+                ensure!(is_valid, "File is not valid");
                 let file = FileId(u32::try_from(self.files.len()).expect("Length overflow"));
                 self.local_file_set.insert(file, path);
                 self.root_changed = true;
                 self.files.push((text.clone(), line_map));
                 self.change.change_file(file, text);
+                Ok(file)
             }
-        };
+        }
     }
 
     pub fn change_file_content(
@@ -102,11 +103,14 @@ impl Vfs {
         Ok(())
     }
 
-    pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {
-        let vpath = uri.to_vfs_path()?;
+    pub fn file_for_path(&self, path: &VfsPath) -> Result<FileId> {
         self.local_file_set
-            .file_for_path(&vpath)
-            .with_context(|| format!("URI not found: {uri}"))
+            .file_for_path(path)
+            .with_context(|| format!("File not loaded: {path:?}"))
+    }
+
+    pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {
+        self.file_for_path(&uri.to_vfs_path()?)
     }
 
     pub fn uri_for_file(&self, file: FileId) -> Url {
