@@ -1,6 +1,6 @@
 use crate::config::{Config, CONFIG_KEY};
 use crate::{convert, handler, LspError, Vfs};
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
@@ -19,9 +19,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic, thread};
 
-type ReqHandler = fn(&mut Server, Response);
+type ReqHandler = Box<dyn FnOnce(&mut Server, Response) + 'static>;
 
-type Task = Box<dyn FnOnce() -> Event + Send>;
+type Task = Box<dyn FnOnce() -> Event + Send + 'static>;
 
 enum Event {
     Response(Response),
@@ -310,44 +310,16 @@ impl Server {
                 }
                 Ok(())
             })?
+            // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
+            // this notification's parameters should be ignored and the actual config queried separately.
             .on_sync_mut::<notif::DidChangeConfiguration>(|st, _params| {
-                // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
-                // this notification's parameters should be ignored and the actual config queried separately.
-                st.send_request::<req::WorkspaceConfiguration>(
-                    ConfigurationParams {
-                        items: vec![ConfigurationItem {
-                            scope_uri: None,
-                            section: Some(CONFIG_KEY.into()),
-                        }],
-                    },
-                    |st, resp| {
-                        let ret = match resp.error {
-                            None => Ok(resp
-                                .result
-                                .and_then(|mut v| Some(v.get_mut(0)?.take()))
-                                .unwrap_or_default()),
-                            Some(err) => Err(format!(
-                                "LSP error {}: {}, data: {:?}",
-                                err.code, err.message, err.data
-                            )),
-                        };
-                        match ret {
-                            Ok(v) => {
-                                tracing::debug!("Updating config: {:?}", v);
-                                st.update_config(v);
-                            }
-                            Err(err) => tracing::error!("Failed to update config: {}", err),
-                        }
-                    },
-                );
+                st.load_config(|_| {});
                 Ok(())
             })?
-            .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| {
-                // Workaround:
-                // > In former implementations clients pushed file events without the server actively asking for it.
-                // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
-                Ok(())
-            })?
+            // Workaround:
+            // > In former implementations clients pushed file events without the server actively asking for it.
+            // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
+            .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| Ok(()))?
             .finish()
     }
 
@@ -431,12 +403,24 @@ impl Server {
     fn send_request<R: req::Request>(
         &mut self,
         params: R::Params,
-        callback: fn(&mut Self, Response),
+        callback: impl FnOnce(&mut Self, Result<R::Result>) + 'static,
     ) {
+        let callback = |this: &mut Self, resp: Response| {
+            let ret = match resp.error {
+                None => serde_json::from_value(resp.result.unwrap_or_default()).map_err(Into::into),
+                Some(err) => Err(anyhow!(
+                    "Request failed with {}: {}, data: {:?}",
+                    err.code,
+                    err.message,
+                    err.data
+                )),
+            };
+            callback(this, ret);
+        };
         let req = self
             .req_queue
             .outgoing
-            .register(R::METHOD.into(), params, callback);
+            .register(R::METHOD.into(), params, Box::new(callback));
         self.lsp_tx.send(req.into()).unwrap();
     }
 
@@ -454,6 +438,27 @@ impl Server {
         }
 
         self.send_notification::<notif::ShowMessage>(ShowMessageParams { typ, message });
+    }
+
+    fn load_config(&mut self, callback: impl FnOnce(&mut Self) + 'static) {
+        self.send_request::<req::WorkspaceConfiguration>(
+            ConfigurationParams {
+                items: vec![ConfigurationItem {
+                    scope_uri: None,
+                    section: Some(CONFIG_KEY.into()),
+                }],
+            },
+            move |st, resp| {
+                match resp {
+                    Ok(mut v) => {
+                        tracing::debug!("Updating config: {:?}", v);
+                        st.update_config(v.pop().unwrap_or_default());
+                    }
+                    Err(err) => tracing::error!("Failed to update config: {}", err),
+                }
+                callback(st)
+            },
+        );
     }
 
     fn update_config(&mut self, value: serde_json::Value) {
