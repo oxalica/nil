@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::panic::UnwindSafe;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic, thread};
 
@@ -35,7 +35,10 @@ enum Event {
 }
 
 enum LoadFlakeResult {
-    IsFlake(FlakeInfo),
+    IsFlake {
+        flake_info: FlakeInfo,
+        missing_inputs: bool,
+    },
     NotFlake,
 }
 
@@ -212,9 +215,17 @@ impl Server {
                         format!("Failed to load flake workspace: {err:#}"),
                     );
                 }
-                Ok(LoadFlakeResult::IsFlake(flake)) => {
-                    tracing::info!("Workspace is a flake: {flake:?}");
-                    self.vfs.write().unwrap().set_flake_info(Some(flake));
+                Ok(LoadFlakeResult::IsFlake {
+                    flake_info,
+                    missing_inputs,
+                }) => {
+                    tracing::info!(
+                        "Workspace is a flake (missing_inputs = {missing_inputs}): {flake_info:?}"
+                    );
+                    if missing_inputs {
+                        self.show_message(MessageType::WARNING, "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs");
+                    }
+                    self.vfs.write().unwrap().set_flake_info(Some(flake_info));
                     self.apply_vfs_change();
                 }
                 Ok(LoadFlakeResult::NotFlake) => {
@@ -378,10 +389,13 @@ impl Server {
                 Ok(lock_src) => lock_src,
                 // Flake without inputs.
                 Err(err) if err.kind() == ErrorKind::NotFound => {
-                    return Ok(LoadFlakeResult::IsFlake(FlakeInfo {
-                        flake_file,
-                        input_store_paths: HashMap::new(),
-                    }))
+                    return Ok(LoadFlakeResult::IsFlake {
+                        missing_inputs: false,
+                        flake_info: FlakeInfo {
+                            flake_file,
+                            input_store_paths: HashMap::new(),
+                        },
+                    });
                 }
                 Err(err) => {
                     return Err(anyhow::Error::new(err)
@@ -394,15 +408,20 @@ impl Server {
                 .context("Failed to resolve flake inputs from lock file")?;
 
             // We only need the map for input -> store path.
+            let inputs_cnt = inputs.len();
             let input_store_paths = inputs
                 .into_iter()
+                .filter(|(_, input)| Path::new(&input.store_path).exists())
                 .map(|(key, input)| Ok((key, VfsPath::new(input.store_path)?)))
-                .collect::<Result<_>>()?;
+                .collect::<Result<HashMap<_, _>>>()?;
 
-            Ok(LoadFlakeResult::IsFlake(FlakeInfo {
-                flake_file,
-                input_store_paths,
-            }))
+            Ok(LoadFlakeResult::IsFlake {
+                missing_inputs: input_store_paths.len() != inputs_cnt,
+                flake_info: FlakeInfo {
+                    flake_file,
+                    input_store_paths,
+                },
+            })
         };
         self.task_tx
             .send(Box::new(move || Event::LoadFlake(task())))
