@@ -1,7 +1,9 @@
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
-use crate::{Change, DefDatabase, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath};
+use crate::{
+    Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, SourceRoot, VfsPath,
+};
 use anyhow::{ensure, Context, Result};
 use indexmap::IndexMap;
 use nix_interop::DEFAULT_IMPORT_FILE;
@@ -30,17 +32,17 @@ impl TestDB {
     pub fn from_fixture(fixture: &str) -> Result<(Self, Fixture)> {
         let f = Fixture::new(fixture)?;
         let mut db = Self::default();
-        let mut change = Change::new();
+        let mut change = Change::default();
         let mut file_set = FileSet::default();
         for (i, (path, text)) in (0u32..).zip(&f.files) {
             let file = FileId(i);
             file_set.insert(file, path.clone());
             change.change_file(file, text.to_owned().into());
         }
-        let entry = file_set
-            .file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap())
-            .context("Missing entry file")?;
-        change.set_roots(vec![SourceRoot::new_local(file_set, Some(entry))]);
+        let entry =
+            file_set.file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap());
+        change.set_roots(vec![SourceRoot::new_local(file_set, entry)]);
+        change.set_flake_graph(FlakeGraph::default());
         change.apply(&mut db);
         Ok((db, f))
     }

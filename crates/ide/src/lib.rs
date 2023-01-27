@@ -14,8 +14,8 @@ pub use self::ide::{
     HoverResult, Link, LinkTarget, NavigationTarget, RenameResult, RootDatabase, SymbolTree,
 };
 pub use base::{
-    Change, FileId, FilePos, FileRange, FileSet, InFile, SourceDatabase, SourceRoot, SourceRootId,
-    VfsPath,
+    Change, FileId, FilePos, FileRange, FileSet, FlakeGraph, FlakeInfo, InFile, SourceDatabase,
+    SourceRoot, SourceRootId, VfsPath,
 };
 pub use builtin::BuiltinKind;
 pub use def::{DefDatabase, Module, ModuleSourceMap, NameKind};

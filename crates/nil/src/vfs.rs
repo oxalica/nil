@@ -1,6 +1,6 @@
 use crate::UrlExt;
 use anyhow::{ensure, Context, Result};
-use ide::{Change, FileId, FileSet, SourceRoot, VfsPath};
+use ide::{Change, FileId, FileSet, FlakeGraph, FlakeInfo, SourceRoot, SourceRootId, VfsPath};
 use lsp_types::Url;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -36,6 +36,12 @@ impl Vfs {
             root_changed: false,
             change: Change::default(),
         }
+    }
+
+    pub fn set_flake_info(&mut self, flake_info: Option<FlakeInfo>) {
+        self.change.set_flake_graph(FlakeGraph {
+            nodes: HashMap::from_iter(flake_info.map(|info| (SourceRootId(0), info))),
+        });
     }
 
     pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {

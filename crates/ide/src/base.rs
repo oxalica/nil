@@ -181,6 +181,17 @@ impl SourceRoot {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct FlakeGraph {
+    pub nodes: HashMap<SourceRootId, FlakeInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlakeInfo {
+    pub flake_file: FileId,
+    pub input_store_paths: HashMap<String, VfsPath>,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct InFile<T> {
     pub file_id: FileId,
@@ -239,25 +250,35 @@ pub trait SourceDatabase {
     fn file_content(&self, file_id: FileId) -> Arc<str>;
 
     #[salsa::input]
-    fn source_root(&self, id: SourceRootId) -> Arc<SourceRoot>;
+    fn source_root(&self, sid: SourceRootId) -> Arc<SourceRoot>;
+
+    fn source_root_flake_info(&self, sid: SourceRootId) -> Option<Arc<FlakeInfo>>;
 
     #[salsa::input]
     fn file_source_root(&self, file_id: FileId) -> SourceRootId;
+
+    #[salsa::input]
+    fn flake_graph(&self) -> Arc<FlakeGraph>;
+}
+
+fn source_root_flake_info(db: &dyn SourceDatabase, sid: SourceRootId) -> Option<Arc<FlakeInfo>> {
+    db.flake_graph().nodes.get(&sid).cloned().map(Arc::new)
 }
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Change {
+    pub flake_graph: Option<FlakeGraph>,
     pub roots: Option<Vec<SourceRoot>>,
     pub file_changes: Vec<(FileId, Arc<str>)>,
 }
 
 impl Change {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn is_empty(&self) -> bool {
         self.roots.is_none() && self.file_changes.is_empty()
+    }
+
+    pub fn set_flake_graph(&mut self, graph: FlakeGraph) {
+        self.flake_graph = Some(graph);
     }
 
     pub fn set_roots(&mut self, roots: Vec<SourceRoot>) {
@@ -269,6 +290,9 @@ impl Change {
     }
 
     pub(crate) fn apply(self, db: &mut dyn SourceDatabase) {
+        if let Some(flake_graph) = self.flake_graph {
+            db.set_flake_graph_with_durability(Arc::new(flake_graph), Durability::MEDIUM);
+        }
         if let Some(roots) = self.roots {
             u32::try_from(roots.len()).expect("Length overflow");
             for (sid, root) in (0u32..).map(SourceRootId).zip(roots) {

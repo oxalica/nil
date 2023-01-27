@@ -1,8 +1,9 @@
 use super::DefDatabase;
 use crate::tests::TestDB;
-use crate::SourceDatabase;
+use crate::{Change, FlakeGraph, FlakeInfo, SourceDatabase, VfsPath};
 use expect_test::expect;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 #[test]
 fn source_map() {
@@ -89,4 +90,35 @@ baz/../../bar.nix + ../default.nix
             .into_iter()
             .collect::<HashSet<_>>(),
     );
+}
+
+#[test]
+fn source_root_flake() {
+    let (mut db, f) = TestDB::from_fixture(
+        "
+#- /flake.nix
+{ }
+    ",
+    )
+    .unwrap();
+
+    let flake_file = f["/flake.nix"];
+    let sid = db.file_source_root(flake_file);
+    assert_eq!(db.source_root_flake_info(sid), None);
+
+    let flake_info = FlakeInfo {
+        flake_file,
+        input_store_paths: HashMap::from_iter([(
+            "nixpkgs".into(),
+            VfsPath::new("/nix/store/eeee").unwrap(),
+        )]),
+    };
+
+    let mut change = Change::default();
+    change.set_flake_graph(FlakeGraph {
+        nodes: HashMap::from_iter([(sid, flake_info.clone())]),
+    });
+    change.apply(&mut db);
+
+    assert_eq!(db.source_root_flake_info(sid), Some(Arc::new(flake_info)));
 }

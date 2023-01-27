@@ -2,7 +2,7 @@ use crate::config::{Config, CONFIG_KEY};
 use crate::{convert, handler, LspError, Vfs};
 use anyhow::{bail, Context, Result};
 use crossbeam_channel::{Receiver, Sender};
-use ide::{Analysis, AnalysisHost, Cancelled, FileId, VfsPath};
+use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
 use lsp_server::{ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response};
 use lsp_types::notification::Notification as _;
 use lsp_types::{
@@ -13,6 +13,7 @@ use lsp_types::{
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::panic::UnwindSafe;
 use std::path::PathBuf;
 use std::sync::{Arc, Once, RwLock};
@@ -34,10 +35,7 @@ enum Event {
 }
 
 enum LoadFlakeResult {
-    IsFlake {
-        flake_file: FileId,
-        input_store_paths: HashMap<String, String>,
-    },
+    IsFlake(FlakeInfo),
     NotFlake,
 }
 
@@ -211,19 +209,18 @@ impl Server {
                 Err(err) => {
                     self.show_message(
                         MessageType::ERROR,
-                        format!("Failed to load workspace: {err}"),
+                        format!("Failed to load flake workspace: {err:#}"),
                     );
                 }
-                Ok(LoadFlakeResult::IsFlake {
-                    flake_file: _flake_file,
-                    input_store_paths,
-                }) => {
-                    tracing::info!("Workspace is a flake with inputs {input_store_paths:?}");
-                    // TODO
+                Ok(LoadFlakeResult::IsFlake(flake)) => {
+                    tracing::info!("Workspace is a flake: {flake:?}");
+                    self.vfs.write().unwrap().set_flake_info(Some(flake));
+                    self.apply_vfs_change();
                 }
                 Ok(LoadFlakeResult::NotFlake) => {
                     tracing::info!("Workspace is not a flake");
-                    // TODO
+                    self.vfs.write().unwrap().set_flake_info(None);
+                    self.apply_vfs_change();
                 }
             },
         }
@@ -351,14 +348,21 @@ impl Server {
         let lock_path = self.config.root_path.join(FLAKE_LOCK_FILE);
         let vfs = self.vfs.clone();
         let task = move || {
-            if !flake_path.exists() {
-                // No flake found.
-                return Ok(LoadFlakeResult::NotFlake);
-            }
-
             let flake_vpath = VfsPath::try_from(&*flake_path)?;
-            let flake_src = fs::read_to_string(&flake_path)
-                .with_context(|| format!("Failed to read flake root {flake_path:?}"))?;
+            let flake_src = match fs::read_to_string(&flake_path) {
+                Ok(src) => src,
+                // Not a flake.
+                Err(err) if err.kind() == ErrorKind::NotFound => {
+                    return Ok(LoadFlakeResult::NotFlake);
+                }
+                // Read failure.
+                Err(err) => {
+                    return Err(anyhow::Error::new(err)
+                        .context(format!("Failed to read flake root {flake_path:?}")));
+                }
+            };
+
+            // Load the flake file in Vfs.
             let flake_file = {
                 let mut vfs = vfs.write().unwrap();
                 match vfs.file_for_path(&flake_vpath) {
@@ -370,7 +374,20 @@ impl Server {
                 }
             };
 
-            let lock_src = fs::read(&lock_path)?;
+            let lock_src = match fs::read(&lock_path) {
+                Ok(lock_src) => lock_src,
+                // Flake without inputs.
+                Err(err) if err.kind() == ErrorKind::NotFound => {
+                    return Ok(LoadFlakeResult::IsFlake(FlakeInfo {
+                        flake_file,
+                        input_store_paths: HashMap::new(),
+                    }))
+                }
+                Err(err) => {
+                    return Err(anyhow::Error::new(err)
+                        .context(format!("Failed to read flake lock {lock_path:?}")));
+                }
+            };
 
             // TODO: Customize the command to Nix binary.
             let inputs = flake_lock::resolve_flake_locked_inputs("nix".as_ref(), &lock_src)
@@ -379,13 +396,13 @@ impl Server {
             // We only need the map for input -> store path.
             let input_store_paths = inputs
                 .into_iter()
-                .map(|(key, input)| (key, input.store_path))
-                .collect();
+                .map(|(key, input)| Ok((key, VfsPath::new(input.store_path)?)))
+                .collect::<Result<_>>()?;
 
-            Ok(LoadFlakeResult::IsFlake {
+            Ok(LoadFlakeResult::IsFlake(FlakeInfo {
                 flake_file,
                 input_store_paths,
-            })
+            }))
         };
         self.task_tx
             .send(Box::new(move || Event::LoadFlake(task())))
@@ -410,11 +427,14 @@ impl Server {
             .unwrap();
     }
 
-    fn show_message(&self, typ: MessageType, msg: impl Into<String>) {
-        self.send_notification::<notif::ShowMessage>(ShowMessageParams {
-            typ,
-            message: msg.into(),
-        });
+    // Maybe connect all tracing::* to LSP ShowMessage?
+    fn show_message(&self, typ: MessageType, message: impl Into<String>) {
+        let message = message.into();
+        if typ == MessageType::ERROR {
+            tracing::error!("{message}");
+        }
+
+        self.send_notification::<notif::ShowMessage>(ShowMessageParams { typ, message });
     }
 
     fn update_config(&mut self, value: serde_json::Value) {
