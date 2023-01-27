@@ -1,9 +1,8 @@
 use super::DefDatabase;
 use crate::tests::TestDB;
-use crate::{Change, FlakeGraph, FlakeInfo, SourceDatabase, VfsPath};
+use crate::{FlakeInfo, ModuleKind, SourceDatabase, VfsPath};
 use expect_test::expect;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 #[test]
 fn source_map() {
@@ -94,31 +93,60 @@ baz/../../bar.nix + ../default.nix
 
 #[test]
 fn source_root_flake() {
-    let (mut db, f) = TestDB::from_fixture(
+    let (db, file) = TestDB::single_file(
         "
 #- /flake.nix
 { }
     ",
     )
     .unwrap();
+    assert_eq!(db.source_root_flake_info(db.file_source_root(file)), None);
 
-    let flake_file = f["/flake.nix"];
-    let sid = db.file_source_root(flake_file);
-    assert_eq!(db.source_root_flake_info(sid), None);
+    let (db, file) = TestDB::single_file(
+        "
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{ }
+    ",
+    )
+    .unwrap();
+    assert_eq!(
+        db.source_root_flake_info(db.file_source_root(file))
+            .as_deref()
+            .unwrap(),
+        &FlakeInfo {
+            flake_file: file,
+            input_store_paths: HashMap::from_iter([(
+                "nixpkgs".into(),
+                VfsPath::new("/nix/store/eeee").unwrap(),
+            )]),
+        },
+    );
+}
 
-    let flake_info = FlakeInfo {
-        flake_file,
-        input_store_paths: HashMap::from_iter([(
-            "nixpkgs".into(),
-            VfsPath::new("/nix/store/eeee").unwrap(),
-        )]),
+#[test]
+fn module_kind() {
+    let (db, f) = TestDB::from_fixture(
+        r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    description = "Hello";
+    inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+    outputs = { self, nixpkgs, nix }@inputs: { };
+}
+        "#,
+    )
+    .unwrap();
+
+    let module_kind = db.module_kind(f["/flake.nix"]);
+    let ModuleKind::FlakeNix { explicit_inputs, param_inputs } = &*module_kind else {
+        panic!("Unexpected module kind: {module_kind:?}");
     };
-
-    let mut change = Change::default();
-    change.set_flake_graph(FlakeGraph {
-        nodes: HashMap::from_iter([(sid, flake_info.clone())]),
-    });
-    change.apply(&mut db);
-
-    assert_eq!(db.source_root_flake_info(sid), Some(Arc::new(flake_info)));
+    assert_eq!(
+        explicit_inputs.keys().cloned().collect::<HashSet<_>>(),
+        HashSet::from_iter(["nixpkgs".into()]),
+    );
+    assert_eq!(
+        param_inputs.keys().cloned().collect::<HashSet<_>>(),
+        HashSet::from_iter(["nixpkgs".into(), "nix".into()]),
+    );
 }

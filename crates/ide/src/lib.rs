@@ -18,7 +18,7 @@ pub use base::{
     SourceRoot, SourceRootId, VfsPath,
 };
 pub use builtin::BuiltinKind;
-pub use def::{DefDatabase, Module, ModuleSourceMap, NameKind};
+pub use def::{DefDatabase, Module, ModuleKind, ModuleSourceMap, NameKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, Severity};
 pub use text_edit::{TextEdit, WorkspaceEdit};
 pub use ty::{InferenceResult, TyDatabase};

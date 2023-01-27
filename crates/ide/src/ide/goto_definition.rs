@@ -1,7 +1,6 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, BindingValue, Expr, Literal, ResolveResult};
-use crate::{DefDatabase, FileId, FilePos, VfsPath};
-use if_chain::if_chain;
+use crate::def::{AstPtr, Expr, Literal, ResolveResult};
+use crate::{DefDatabase, FileId, FilePos, ModuleKind, VfsPath};
 use nix_interop::FLAKE_FILE;
 use syntax::ast::{self, AstNode};
 use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxToken};
@@ -105,10 +104,9 @@ fn goto_flake_input(
     file: FileId,
     tok: SyntaxToken,
 ) -> Option<GotoDefinitionResult> {
+    let module_kind = db.module_kind(file);
+    let ModuleKind::FlakeNix { explicit_inputs, param_inputs } = &*module_kind else { return None };
     let flake_info = db.source_root_flake_info(db.file_source_root(file))?;
-    if flake_info.flake_file != file {
-        return None;
-    }
 
     let ptr = tok.parent_ancestors().find_map(|node| {
         match_ast! {
@@ -124,36 +122,17 @@ fn goto_flake_input(
     let name_id = source_map.name_for_node(ptr)?;
     let name_str = &*module[name_id].text;
 
-    let target_path = flake_info
-        .input_store_paths
-        .get(name_str)?
-        .join_segment(FLAKE_FILE);
+    if explicit_inputs.get(name_str) == Some(&name_id)
+        || param_inputs.get(name_str) == Some(&name_id)
+    {
+        let target = flake_info
+            .input_store_paths
+            .get(name_str)?
+            .join_segment(FLAKE_FILE);
+        return Some(GotoDefinitionResult::Path(target));
+    }
 
-    // More reliable matching?
-    let is_flake_input = (|| {
-        if let Expr::Attrset(flake_set) = &module[module.entry_expr()] {
-            if_chain! {
-                if let Some(BindingValue::Expr(inputs_expr)) = flake_set.get("inputs", &module);
-                if let Expr::Attrset(inputs) = &module[inputs_expr];
-                if inputs.statics.iter().any(|&(input_name, _)| input_name == name_id);
-                then {
-                    return true;
-                }
-            }
-            if_chain! {
-                if name_str != "self";
-                if let Some(BindingValue::Expr(outputs_expr)) = flake_set.get("outputs", &module);
-                if let Expr::Lambda(_, Some(pat), _) = &module[outputs_expr];
-                if pat.fields.iter().any(|&(pat_param, _)| pat_param == Some(name_id));
-                then {
-                    return true;
-                }
-            }
-        }
-        false
-    })();
-
-    is_flake_input.then_some(GotoDefinitionResult::Path(target_path))
+    None
 }
 
 #[cfg(test)]
@@ -365,7 +344,7 @@ hello
             expect!["file:///nix/store/eeee/flake.nix"],
         );
 
-        // `self` in outputs is always the current flake, not the intput one.
+        // `self` in parameter is no an input.
         check_no(
             r#"
 #- /flake.nix input:self=/nix/store/eeee
