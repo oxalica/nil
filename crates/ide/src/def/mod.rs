@@ -341,4 +341,11 @@ impl Bindings {
             f(name, value);
         }
     }
+
+    // FIXME: This is currently O(n).
+    pub fn get(&self, name: &str, module: &Module) -> Option<BindingValue> {
+        self.statics
+            .iter()
+            .find_map(|&(name_id, value)| (module[name_id].text == name).then_some(value))
+    }
 }

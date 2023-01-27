@@ -5,6 +5,8 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Goto definition. `textDocument/definition`
   - [x] References to parameters, `let` and `rec {}` bindings.
   - [x] Relative paths.
+  - [x] Source of flake inputs, when cursor is on keys of `inputs` or
+    parameters of `outputs` lambda.
 - [x] Find references. `textDocument/reference`
   - [x] Parameters, `let` and `rec {}` bindings.
   - [x] With expression.

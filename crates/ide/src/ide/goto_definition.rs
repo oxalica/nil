@@ -1,8 +1,10 @@
 use super::NavigationTarget;
-use crate::def::{AstPtr, Expr, Literal, ResolveResult};
-use crate::{DefDatabase, FilePos, VfsPath};
+use crate::def::{AstPtr, BindingValue, Expr, Literal, ResolveResult};
+use crate::{DefDatabase, FileId, FilePos, VfsPath};
+use if_chain::if_chain;
+use nix_interop::FLAKE_FILE;
 use syntax::ast::{self, AstNode};
-use syntax::{best_token_at_offset, match_ast, SyntaxKind, T};
+use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxToken};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GotoDefinitionResult {
@@ -16,9 +18,12 @@ pub(crate) fn goto_definition(
 ) -> Option<GotoDefinitionResult> {
     let parse = db.parse(file_id);
     let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
-    if !matches!(tok.kind(), T![or] | SyntaxKind::IDENT | SyntaxKind::PATH) {
-        return None;
+
+    // Special case for goto flake inputs.
+    if let Some(ret) = goto_flake_input(db, file_id, tok.clone()) {
+        return Some(ret);
     }
+
     let ptr = tok.parent_ancestors().find_map(|node| {
         match_ast! {
             match node {
@@ -95,6 +100,62 @@ pub(crate) fn goto_definition(
     Some(GotoDefinitionResult::Targets(targets))
 }
 
+fn goto_flake_input(
+    db: &dyn DefDatabase,
+    file: FileId,
+    tok: SyntaxToken,
+) -> Option<GotoDefinitionResult> {
+    let flake_info = db.source_root_flake_info(db.file_source_root(file))?;
+    if flake_info.flake_file != file {
+        return None;
+    }
+
+    let ptr = tok.parent_ancestors().find_map(|node| {
+        match_ast! {
+            match node {
+                ast::Attr(n) => Some(AstPtr::new(n.syntax())),
+                _ => None,
+            }
+        }
+    })?;
+
+    let module = db.module(file);
+    let source_map = db.source_map(file);
+    let name_id = source_map.name_for_node(ptr)?;
+    let name_str = &*module[name_id].text;
+
+    let target_path = flake_info
+        .input_store_paths
+        .get(name_str)?
+        .join_segment(FLAKE_FILE);
+
+    // More reliable matching?
+    let is_flake_input = (|| {
+        if let Expr::Attrset(flake_set) = &module[module.entry_expr()] {
+            if_chain! {
+                if let Some(BindingValue::Expr(inputs_expr)) = flake_set.get("inputs", &module);
+                if let Expr::Attrset(inputs) = &module[inputs_expr];
+                if inputs.statics.iter().any(|&(input_name, _)| input_name == name_id);
+                then {
+                    return true;
+                }
+            }
+            if_chain! {
+                if name_str != "self";
+                if let Some(BindingValue::Expr(outputs_expr)) = flake_set.get("outputs", &module);
+                if let Expr::Lambda(_, Some(pat), _) = &module[outputs_expr];
+                if pat.fields.iter().any(|&(pat_param, _)| pat_param == Some(name_id));
+                then {
+                    return true;
+                }
+            }
+        }
+        false
+    })();
+
+    is_flake_input.then_some(GotoDefinitionResult::Path(target_path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,12 +166,14 @@ mod tests {
     #[track_caller]
     fn check_no(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(f.markers().len(), 1, "Missing markers");
         assert_eq!(goto_definition(&db, f[0]), None);
     }
 
     #[track_caller]
     fn check(fixture: &str, expect: Expect) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(f.markers().len(), 1, "Missing markers");
         let mut got = match goto_definition(&db, f[0]).expect("No definition") {
             GotoDefinitionResult::Path(path) => format!("file://{}", path.as_str()),
             GotoDefinitionResult::Targets(targets) => {
@@ -231,6 +294,85 @@ import $0./bar.nix
 hello
             ",
             expect!["file:///bar.nix"],
+        );
+    }
+
+    #[test]
+    fn flake_input() {
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee input:nix=/nix/store/oooo
+{
+    description = "Hello flake";
+    inputs.$0nixpkgs.url = "github:NixOS/nixpkgs";
+    inputs.nix.url = "github:NixOS/nix";
+    output = { ... }: { };
+}
+            "#,
+            expect!["file:///nix/store/eeee/flake.nix"],
+        );
+
+        // Flake input in string form.
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee input:nix=/nix/store/oooo
+{
+    description = "Hello flake";
+    inputs = {
+        nixpkgs = { url = "github:NixOS/nixpkgs"; };
+        "n$0ix" = { url = "github:NixOS/nix"; };
+    };
+    output = { ... }: { };
+}
+            "#,
+            expect!["file:///nix/store/oooo/flake.nix"],
+        );
+
+        // Not a flake input.
+        check_no(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    description = "Hello flake";
+    inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+    inputs'.$0nixpkgs.no = 42;
+}
+            "#,
+        );
+
+        // Not a flake input.
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    description = "Hello flake";
+    inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+    outputs = { nixpkgs, ... }: $0nixpkgs;
+            "#,
+            expect!["{ <nixpkgs>, ... }: nixpkgs"],
+        );
+    }
+
+    #[test]
+    fn flake_output_pat() {
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    outputs = { $0nixpkgs, ... }: nixpkgs;
+}
+            "#,
+            expect!["file:///nix/store/eeee/flake.nix"],
+        );
+
+        // `self` in outputs is always the current flake, not the intput one.
+        check_no(
+            r#"
+#- /flake.nix input:self=/nix/store/eeee
+{
+    outputs = { $0self, ... }: self;
+}
+            "#,
         );
     }
 }

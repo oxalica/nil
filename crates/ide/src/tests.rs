@@ -2,11 +2,13 @@ use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
 use crate::{
-    Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, SourceRoot, VfsPath,
+    Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, FlakeInfo, SourceRoot,
+    SourceRootId, VfsPath,
 };
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use indexmap::IndexMap;
 use nix_interop::DEFAULT_IMPORT_FILE;
+use std::collections::HashMap;
 use std::{mem, ops};
 use syntax::ast::AstNode;
 use syntax::{NixLanguage, SyntaxNode, TextSize};
@@ -42,7 +44,10 @@ impl TestDB {
         let entry =
             file_set.file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap());
         change.set_roots(vec![SourceRoot::new_local(file_set, entry)]);
-        change.set_flake_graph(FlakeGraph::default());
+        let flake_graph = FlakeGraph {
+            nodes: HashMap::from_iter(f.flake_info.clone().map(|info| (SourceRootId(0), info))),
+        };
+        change.set_flake_graph(flake_graph);
         change.apply(&mut db);
         Ok((db, f))
     }
@@ -66,6 +71,7 @@ pub struct Fixture {
     files: IndexMap<VfsPath, String>,
     file_ids: Vec<FileId>,
     markers: Vec<FilePos>,
+    flake_info: Option<FlakeInfo>,
 }
 
 impl ops::Index<usize> for Fixture {
@@ -101,10 +107,31 @@ impl Fixture {
         let mut cur_file = FileId(0);
         let mut markers = [None; 10];
         for line in fixture.lines().skip_while(|line| line.is_empty()) {
-            if let Some(path) = line.strip_prefix("#- ") {
+            if let Some(header) = line.strip_prefix("#- ") {
                 ensure!(!missing_header, "Missing path header at the first line");
 
+                let mut iter = header.split(' ');
+                let path = iter.next().context("Missing path")?;
                 let path = VfsPath::new(path)?;
+
+                for prop in iter {
+                    if let Some((name, target)) = prop
+                        .strip_prefix("input:")
+                        .and_then(|input| input.split_once('='))
+                    {
+                        let target = VfsPath::new(target)?;
+                        this.flake_info
+                            .get_or_insert_with(|| FlakeInfo {
+                                flake_file: cur_file,
+                                input_store_paths: HashMap::default(),
+                            })
+                            .input_store_paths
+                            .insert(name.into(), target);
+                    } else {
+                        bail!("Unknow property {prop}");
+                    }
+                }
+
                 if let Some(prev_path) = cur_path.replace(path) {
                     this.insert_file(prev_path, mem::take(&mut cur_text))?;
                     cur_file.0 += 1;
