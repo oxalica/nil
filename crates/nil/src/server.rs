@@ -150,8 +150,12 @@ impl Server {
             });
         }
 
-        // TODO: Register file watcher for flake.lock.
-        self.load_flake();
+        // Load configurations before loading flake.
+        // The latter depends on `nix.binary`.
+        self.load_config(|st| {
+            // TODO: Register file watcher for flake.lock.
+            st.load_flake();
+        });
 
         loop {
             crossbeam_channel::select! {
@@ -329,6 +333,8 @@ impl Server {
 
         let flake_path = self.config.root_path.join(FLAKE_FILE);
         let lock_path = self.config.root_path.join(FLAKE_LOCK_FILE);
+        let nix_bin_path = self.config.nix_binary.clone();
+
         let vfs = self.vfs.clone();
         let task = move || {
             let flake_vpath = VfsPath::try_from(&*flake_path)?;
@@ -375,8 +381,7 @@ impl Server {
                 }
             };
 
-            // TODO: Customize the command to Nix binary.
-            let inputs = flake_lock::resolve_flake_locked_inputs("nix".as_ref(), &lock_src)
+            let inputs = flake_lock::resolve_flake_locked_inputs(&nix_bin_path, &lock_src)
                 .context("Failed to resolve flake inputs from lock file")?;
 
             // We only need the map for input -> store path.

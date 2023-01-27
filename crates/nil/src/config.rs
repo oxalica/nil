@@ -11,6 +11,7 @@ pub struct Config {
     pub diagnostics_excluded_files: Vec<Url>,
     pub diagnostics_ignored: HashSet<String>,
     pub formatting_command: Option<Vec<String>>,
+    pub nix_binary: PathBuf,
 }
 
 impl Config {
@@ -21,9 +22,11 @@ impl Config {
             diagnostics_excluded_files: Vec::new(),
             diagnostics_ignored: HashSet::new(),
             formatting_command: None,
+            nix_binary: "nix".into(),
         }
     }
 
+    // TODO: Simplify.
     pub fn update(&mut self, mut value: serde_json::Value) -> (Vec<String>, bool) {
         let mut errors = Vec::new();
         let mut updated_diagnostics = false;
@@ -66,6 +69,17 @@ impl Config {
                 }
                 Err(e) => {
                     errors.push(format!("Invalid value of `formatting.command`: {e}"));
+                }
+            }
+        }
+
+        if let Some(v) = value.pointer_mut("/nix/binary") {
+            match serde_json::from_value::<PathBuf>(v.take()) {
+                Ok(path) => {
+                    self.nix_binary = path;
+                }
+                Err(e) => {
+                    errors.push(format!("Invalid value of `nix.binary`: {e}"));
                 }
             }
         }

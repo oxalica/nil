@@ -2,7 +2,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use serde::de::DeserializeOwned;
 
 pub fn nix_eval_expr_json<T: DeserializeOwned>(nix_command: &Path, expr: &str) -> Result<T> {
@@ -19,7 +19,8 @@ pub fn nix_eval_expr_json<T: DeserializeOwned>(nix_command: &Path, expr: &str) -
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()?;
+        .output()
+        .with_context(|| format!("Failed to spawn {nix_command:?}"))?;
 
     ensure!(
         output.status.success(),

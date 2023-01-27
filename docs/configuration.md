@@ -40,6 +40,12 @@ The values shown here are the default values.
       // Example: ["Cargo.nix"]
       "excludedFiles": [],
     },
+    "nix": {
+      // The path to the `nix` binary.
+      // Type: string
+      // Example: "/run/current-system/sw/bin/nix"
+      "binary": "nix",
+    },
   },
 }
 ```
