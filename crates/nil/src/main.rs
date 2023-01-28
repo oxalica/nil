@@ -1,3 +1,4 @@
+use argh::FromArgs;
 use lsp_server::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,19 +10,28 @@ const LOG_FILTER_ENV: &str = "NIL_LOG";
 const LOG_PATH_ENV: &str = "NIL_LOG_PATH";
 const BACKTRACE_ENV: &str = "RUST_BACKTRACE";
 
+#[derive(Debug, FromArgs)]
+/// LSP server for Nix Expression Language.
+/// Run without arguments to start the language server on stdin/stdout.
+struct Args {
+    /// print the version and exit
+    #[argh(switch)]
+    version: bool,
+}
+
 fn main() {
     if env::var(BACKTRACE_ENV).is_err() {
         env::set_var(BACKTRACE_ENV, "short");
     }
 
-    setup_logger();
-
-    if env::args().any(|arg| arg == "--version") {
-        let date = option_env!("CFG_DATE").unwrap_or("unknown");
-        let rev = option_env!("CFG_REV").unwrap_or("unknown");
-        println!("nil {} {}", date, rev);
+    let args = argh::from_env::<Args>();
+    if args.version {
+        let release = option_env!("CFG_RELEASE").unwrap_or("unknown");
+        println!("nil {release}");
         return;
     }
+
+    setup_logger();
 
     let (conn, io_threads) = Connection::stdio();
     match nil::main_loop(conn).and_then(|()| io_threads.join().map_err(Into::into)) {

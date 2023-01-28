@@ -16,7 +16,7 @@
           inherit (builtins) substring;
           mtime = self.lastModifiedDate;
           date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
-          rev = self.shortRev or (throw "Git changes are not committed");
+          rev = self.rev or (throw "Git changes are not committed");
         in
         rustPlatform.buildRustPackage {
           pname = "nil";
@@ -26,8 +26,7 @@
 
           nativeBuildInputs = [ nix.out ];
 
-          CFG_DATE = date;
-          CFG_REV = rev;
+          CFG_RELEASE = "git-${rev}";
         };
     in
     flake-utils.lib.eachDefaultSystem
