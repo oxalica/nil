@@ -1,8 +1,11 @@
+use anyhow::Context;
 use argh::FromArgs;
+use ide::AnalysisHost;
 use lsp_server::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{env, fs, io, process};
+use text_size::TextRange;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::EnvFilter;
 
@@ -17,6 +20,27 @@ struct Args {
     /// print the version and exit
     #[argh(switch)]
     version: bool,
+    #[argh(subcommand)]
+    subcommand: Option<Subcommand>,
+}
+
+#[derive(Debug, FromArgs)]
+#[argh(subcommand)]
+enum Subcommand {
+    Diagnostics(DiagnosticsArgs),
+}
+
+#[derive(Debug, FromArgs)]
+#[argh(subcommand, name = "diagnostics")]
+/// Check and print diagnostics for a file.
+/// Exit with non-zero code if there are any diagnostics.
+/// WARNING: The output format is for human and should not be relied on.
+struct DiagnosticsArgs {
+    /// nix file to check, or read from stdin for `-`.
+    /// NB. You need `--` before `-` for paths starting with `-`,
+    /// to disambiguous it from flags.
+    #[argh(positional)]
+    path: PathBuf,
 }
 
 fn main() {
@@ -31,6 +55,12 @@ fn main() {
         return;
     }
 
+    if let Some(subcommand) = args.subcommand {
+        return match subcommand {
+            Subcommand::Diagnostics(args) => main_diagnostics(args),
+        };
+    }
+
     setup_logger();
 
     let (conn, io_threads) = Connection::stdio();
@@ -40,6 +70,70 @@ fn main() {
             tracing::error!("Unexpected error: {}", err);
             eprintln!("{}", err);
             process::exit(101);
+        }
+    }
+}
+
+fn main_diagnostics(args: DiagnosticsArgs) {
+    use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
+    use codespan_reporting::files::SimpleFiles;
+    use codespan_reporting::term;
+    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+
+    let ret = (|| -> anyhow::Result<bool> {
+        let path = &*args.path;
+
+        let src = if path.as_os_str() == "-" {
+            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
+        } else {
+            fs::read_to_string(path).context("Failed to read file")?
+        };
+
+        let (analysis, file) = AnalysisHost::new_single_file(&src);
+        let diags = analysis
+            .snapshot()
+            .diagnostics(file)
+            .expect("No cancellation");
+        if diags.is_empty() {
+            return Ok(true);
+        }
+
+        let mut files = SimpleFiles::new();
+        let cr_file = files.add(path.display().to_string(), src);
+
+        let writer = StandardStream::stdout(ColorChoice::Auto);
+        let config = codespan_reporting::term::Config::default();
+
+        for diag in diags {
+            let severity = match diag.severity() {
+                ide::Severity::IncompleteSyntax | ide::Severity::Error => Severity::Error,
+                ide::Severity::Warning => Severity::Warning,
+            };
+
+            let to_range = |range: TextRange| usize::from(range.start())..usize::from(range.end());
+
+            let labels = std::iter::once(Label::primary(cr_file, to_range(diag.range)))
+                .chain(diag.notes.iter().map(|(frange, note)| {
+                    assert_eq!(frange.file_id, file, "Diagnostics are local");
+                    Label::secondary(cr_file, to_range(frange.range)).with_message(note)
+                }))
+                .collect();
+
+            let diag = Diagnostic::new(severity)
+                .with_code(diag.code())
+                .with_message(diag.message())
+                .with_labels(labels);
+
+            term::emit(&mut writer.lock(), &config, &files, &diag)?;
+        }
+        Ok(false)
+    })();
+    match ret {
+        Ok(true) => {}
+        Ok(false) => process::exit(1),
+        Err(err) => {
+            eprintln!("{err:#}");
+            process::exit(1);
         }
     }
 }

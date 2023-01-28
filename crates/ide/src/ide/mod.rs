@@ -14,7 +14,10 @@ mod syntax_highlighting;
 use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
-use crate::{Change, Diagnostic, FileId, FilePos, FileRange, WorkspaceEdit};
+use crate::{
+    Change, Diagnostic, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath, WorkspaceEdit,
+};
+use nix_interop::DEFAULT_IMPORT_FILE;
 use salsa::{Database, Durability, ParallelDatabase};
 use smol_str::SmolStr;
 use std::fmt;
@@ -71,6 +74,21 @@ pub struct AnalysisHost {
 impl AnalysisHost {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn new_single_file(src: &str) -> (Self, FileId) {
+        let mut change = Change::default();
+        let file = FileId(0);
+        change.change_file(file, src.into());
+        let mut file_set = FileSet::default();
+        file_set.insert(
+            file,
+            VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap(),
+        );
+        change.set_roots(vec![SourceRoot::new_local(file_set, Some(file))]);
+        let mut this = Self::new();
+        this.apply_change(change);
+        (this, file)
     }
 
     pub fn snapshot(&self) -> Analysis {
