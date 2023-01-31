@@ -7,7 +7,7 @@ fn check(src: &str, expect: Expect) {
     let module = db.module(file);
     let infer = db.infer(file);
     let ty = infer.ty_for_expr(module.entry_expr());
-    let got = infer.debug_ty(ty).to_string();
+    let got = ty.debug().to_string();
     expect.assert_eq(&got);
 }
 
@@ -17,10 +17,10 @@ fn check_all(src: &str, expect: Expect) {
     let infer = db.infer(file);
     let got = module
         .names()
-        .map(|(i, name)| format!("{}: {}\n", name.text, infer.debug_ty(infer.ty_for_name(i))))
+        .map(|(i, name)| format!("{}: {}\n", name.text, infer.ty_for_name(i).debug()))
         .chain([format!(
             ": {}\n",
-            infer.debug_ty(infer.ty_for_expr(module.entry_expr()))
+            infer.ty_for_expr(module.entry_expr()).debug(),
         )])
         .collect::<String>();
     expect.assert_eq(&got);

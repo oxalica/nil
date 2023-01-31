@@ -58,7 +58,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
                     Expr::Reference(text) => text,
                     _ => return None,
                 };
-                let ty = infer.display_ty(infer.ty_for_expr(expr)).to_string();
+                let ty = infer.ty_for_expr(expr).display().to_string();
                 let mut markup = format!("`with` attribute `{text}`: `{ty}`");
                 for (&expr, i) in withs.iter().zip(1..) {
                     let ptr = source_map.node_for_expr(expr)?;
@@ -77,7 +77,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
     }
 
     if let Some(name) = name.or_else(|| source_map.name_for_node(ptr.clone())) {
-        let ty = infer.display_ty(infer.ty_for_name(name)).to_string();
+        let ty = infer.ty_for_name(name).display().to_string();
         let text = &module[name].text;
         let kind = match module[name].kind {
             NameKind::LetIn => "Let binding",
@@ -107,10 +107,8 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
         let expr = source_map.expr_for_node(AstPtr::new(set_node.syntax()))?;
         let mut ty = infer.ty_for_expr(expr);
         for attr in path_node.attrs() {
-            ty = match AttrKind::of(attr.clone()) {
-                AttrKind::Static(Some(field)) => ty.kind(&infer).as_attrset()?.get(&field)?,
-                _ => return None,
-            };
+            let AttrKind::Static(Some(field)) = AttrKind::of(attr.clone()) else { return None };
+            ty = ty.as_attrset()?.get(&field)?.clone();
             if attr.syntax() == name_node.syntax() {
                 break;
             }
@@ -121,7 +119,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             name_node
                 .token()
                 .map_or_else(String::new, |t| t.text().into()),
-            infer.display_ty(ty),
+            ty.display(),
         );
         Some(HoverResult { range, markup })
     }) {

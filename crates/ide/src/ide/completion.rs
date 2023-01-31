@@ -325,14 +325,13 @@ fn complete_attrpath(
         // Resolve prefix paths, except for the current NAME.
         // foo.a.b.c|.d
         // ^-----^
-        let set = attrs
+        let ty = attrs
             .take_while(|attr| attr.syntax() != name_node.syntax())
             .try_fold(set_ty, |set_ty, attr| match AttrKind::of(attr) {
-                AttrKind::Static(Some(field)) => set_ty.kind(&infer).as_attrset()?.get(&field),
+                AttrKind::Static(Some(field)) => set_ty.as_attrset()?.get(&field).cloned(),
                 _ => None,
-            })?
-            .kind(&infer)
-            .as_attrset()?;
+            })?;
+        let set = ty.as_attrset()?;
 
         items.extend(
             set.iter()
@@ -347,7 +346,7 @@ fn complete_attrpath(
                         AttrSource::Unknown => CompletionItemKind::Field,
                         AttrSource::Name(name) => module[name].kind.into(),
                     },
-                    brief: Some(infer.display_ty(ty).to_string()),
+                    brief: Some(ty.display().to_string()),
                     doc: None,
                 }),
         );

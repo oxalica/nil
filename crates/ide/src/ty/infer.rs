@@ -1,5 +1,5 @@
 use super::union_find::UnionFind;
-use super::{TyDatabase, TyDisplay};
+use super::{AttrSource, TyDatabase};
 use crate::def::{
     BindingValue, Bindings, Expr, ExprId, Literal, NameId, NameResolution, ResolveResult,
 };
@@ -11,17 +11,19 @@ use std::mem;
 use std::sync::Arc;
 use syntax::ast::{BinaryOpKind, UnaryOpKind};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Ty(u32);
-
-impl Ty {
-    pub fn kind(self, infer: &InferenceResult) -> &TyKind {
-        infer.kind(self)
+impl AttrSource {
+    fn unify(&mut self, rhs: Self) {
+        if *self == Self::Unknown {
+            *self = rhs;
+        }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TyVar(u32);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TyKind {
+enum Ty {
     Unknown,
 
     // We won't wanna infer to `null` before supporting union types.
@@ -33,111 +35,47 @@ pub enum TyKind {
     String,
     Path,
 
-    List(Ty),
-    Lambda(Ty, Ty),
+    List(TyVar),
+    Lambda(TyVar, TyVar),
     Attrset(Attrset),
 }
 
-impl TyKind {
-    fn intern(self, ctx: &mut InferCtx<'_>) -> Ty {
-        Ty(ctx.table.push(self))
-    }
-
-    pub fn as_attrset(&self) -> Option<&Attrset> {
-        match self {
-            Self::Attrset(v) => Some(v),
-            _ => None,
-        }
+impl Ty {
+    fn intern(self, ctx: &mut InferCtx<'_>) -> TyVar {
+        TyVar(ctx.table.push(self))
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Attrset(BTreeMap<SmolStr, (Ty, AttrSource)>);
-
-impl Attrset {
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn get(&self, field: &str) -> Option<Ty> {
-        Some(self.0.get(field)?.0)
-    }
-
-    pub fn get_src(&self, field: &str) -> Option<AttrSource> {
-        Some(self.0.get(field)?.1)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&SmolStr, Ty, AttrSource)> + '_ {
-        self.0.iter().map(|(k, (ty, src))| (k, *ty, *src))
-    }
-}
-
-/// The source of an Attr.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AttrSource {
-    /// Unknown source, possibly generated or referenced.
-    Unknown,
-    /// Defined by a name.
-    Name(NameId),
-    // TODO: Builtins.
-}
-
-impl AttrSource {
-    fn unify(&mut self, rhs: Self) {
-        if *self == Self::Unknown {
-            *self = rhs;
-        }
-    }
-}
+struct Attrset(BTreeMap<SmolStr, (TyVar, AttrSource)>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferenceResult {
-    name_ty_map: ArenaMap<NameId, Ty>,
-    expr_ty_map: ArenaMap<ExprId, Ty>,
-    arena: Vec<TyKind>,
+    name_ty_map: ArenaMap<NameId, super::Ty>,
+    expr_ty_map: ArenaMap<ExprId, super::Ty>,
 }
 
 impl InferenceResult {
-    pub fn ty_for_name(&self, name: NameId) -> Ty {
-        self.name_ty_map[name]
+    pub fn ty_for_name(&self, name: NameId) -> super::Ty {
+        self.name_ty_map[name].clone()
     }
 
-    pub fn ty_for_expr(&self, expr: ExprId) -> Ty {
-        self.expr_ty_map[expr]
-    }
-
-    pub fn kind(&self, ty: Ty) -> &TyKind {
-        &self.arena[ty.0 as usize]
-    }
-
-    pub fn display_ty(&self, ty: Ty) -> TyDisplay<'_> {
-        TyDisplay::new(ty, self, 2)
-    }
-
-    pub fn debug_ty(&self, ty: Ty) -> TyDisplay<'_> {
-        TyDisplay::new(ty, self, usize::MAX)
+    pub fn ty_for_expr(&self, expr: ExprId) -> super::Ty {
+        self.expr_ty_map[expr].clone()
     }
 }
 
 pub(crate) fn infer_query(db: &dyn TyDatabase, file: FileId) -> Arc<InferenceResult> {
     let module = db.module(file);
     let nameres = db.name_resolution(file);
-    let table = UnionFind::new(module.names().len() + module.exprs().len(), |_| {
-        TyKind::Unknown
-    });
+    let table = UnionFind::new(module.names().len() + module.exprs().len(), |_| Ty::Unknown);
     let mut ctx = InferCtx {
         module: &module,
         nameres: &nameres,
         table,
     };
     ctx.infer_expr(module.entry_expr());
-    let mut ret = ctx.finish();
-    ret.arena.shrink_to_fit();
-    Arc::new(ret)
+    Arc::new(ctx.finish())
 }
 
 struct InferCtx<'db> {
@@ -147,30 +85,30 @@ struct InferCtx<'db> {
     /// The arena for both unification and interning.
     /// First `module.names().len() + module.exprs().len()` elements are types of each names and
     /// exprs, to allow recursive definition.
-    table: UnionFind<TyKind>,
+    table: UnionFind<Ty>,
 }
 
 impl<'db> InferCtx<'db> {
-    fn new_ty_var(&mut self) -> Ty {
-        Ty(self.table.push(TyKind::Unknown))
+    fn new_ty_var(&mut self) -> TyVar {
+        TyVar(self.table.push(Ty::Unknown))
     }
 
-    fn ty_for_name(&self, i: NameId) -> Ty {
-        Ty(u32::from(i.into_raw()))
+    fn ty_for_name(&self, i: NameId) -> TyVar {
+        TyVar(u32::from(i.into_raw()))
     }
 
-    fn ty_for_expr(&self, i: ExprId) -> Ty {
-        Ty(self.module.names().len() as u32 + u32::from(i.into_raw()))
+    fn ty_for_expr(&self, i: ExprId) -> TyVar {
+        TyVar(self.module.names().len() as u32 + u32::from(i.into_raw()))
     }
 
-    fn infer_expr(&mut self, e: ExprId) -> Ty {
+    fn infer_expr(&mut self, e: ExprId) -> TyVar {
         let ty = self.infer_expr_inner(e);
         let placeholder_ty = self.ty_for_expr(e);
         self.unify(placeholder_ty, ty);
         ty
     }
 
-    fn infer_expr_inner(&mut self, e: ExprId) -> Ty {
+    fn infer_expr_inner(&mut self, e: ExprId) -> TyVar {
         match &self.module[e] {
             Expr::Missing => self.new_ty_var(),
             Expr::Reference(_) => match self.nameres.get(e) {
@@ -186,10 +124,10 @@ impl<'db> InferCtx<'db> {
                 },
             },
             Expr::Literal(lit) => match lit {
-                Literal::Int(_) => TyKind::Int,
-                Literal::Float(_) => TyKind::Float,
-                Literal::String(_) => TyKind::String,
-                Literal::Path(_) => TyKind::Path,
+                Literal::Int(_) => Ty::Int,
+                Literal::Float(_) => Ty::Float,
+                Literal::String(_) => Ty::String,
+                Literal::Path(_) => Ty::Path,
             }
             .intern(self),
             Expr::Lambda(name, pat, body) => {
@@ -200,7 +138,7 @@ impl<'db> InferCtx<'db> {
                 }
 
                 if let Some(pat) = pat {
-                    self.unify_kind(param_ty, TyKind::Attrset(Attrset::default()));
+                    self.unify_kind(param_ty, Ty::Attrset(Attrset::default()));
                     for &(name, default_expr) in pat.fields.iter() {
                         // Always infer default_expr.
                         let default_ty = default_expr.map(|e| self.infer_expr(e));
@@ -220,7 +158,7 @@ impl<'db> InferCtx<'db> {
                 }
 
                 let body_ty = self.infer_expr(*body);
-                TyKind::Lambda(param_ty, body_ty).intern(self)
+                Ty::Lambda(param_ty, body_ty).intern(self)
             }
             &Expr::With(env, body) => {
                 self.infer_expr(env);
@@ -232,7 +170,7 @@ impl<'db> InferCtx<'db> {
             }
             &Expr::IfThenElse(cond, then, else_) => {
                 let cond_ty = self.infer_expr(cond);
-                self.unify_kind(cond_ty, TyKind::Bool);
+                self.unify_kind(cond_ty, Ty::Bool);
                 let then_ty = self.infer_expr(then);
                 let else_ty = self.infer_expr(else_);
                 self.unify(then_ty, else_ty);
@@ -248,18 +186,18 @@ impl<'db> InferCtx<'db> {
                 };
 
                 match op {
-                    BinaryOpKind::Equal | BinaryOpKind::NotEqual => TyKind::Bool.intern(self),
+                    BinaryOpKind::Equal | BinaryOpKind::NotEqual => Ty::Bool.intern(self),
                     BinaryOpKind::Imply | BinaryOpKind::Or | BinaryOpKind::And => {
-                        self.unify_kind(lhs_ty, TyKind::Bool);
-                        self.unify_kind(rhs_ty, TyKind::Bool);
-                        TyKind::Bool.intern(self)
+                        self.unify_kind(lhs_ty, Ty::Bool);
+                        self.unify_kind(rhs_ty, Ty::Bool);
+                        Ty::Bool.intern(self)
                     }
                     BinaryOpKind::Less
                     | BinaryOpKind::Greater
                     | BinaryOpKind::LessEqual
                     | BinaryOpKind::GreaterEqual => {
                         self.unify(lhs_ty, rhs_ty);
-                        TyKind::Bool.intern(self)
+                        Ty::Bool.intern(self)
                     }
                     // TODO: Polymorphism.
                     BinaryOpKind::Add
@@ -271,13 +209,13 @@ impl<'db> InferCtx<'db> {
                         lhs_ty
                     }
                     BinaryOpKind::Update => {
-                        self.unify_kind(lhs_ty, TyKind::Attrset(Attrset::default()));
-                        self.unify_kind(rhs_ty, TyKind::Attrset(Attrset::default()));
+                        self.unify_kind(lhs_ty, Ty::Attrset(Attrset::default()));
+                        self.unify_kind(rhs_ty, Ty::Attrset(Attrset::default()));
                         self.unify(lhs_ty, rhs_ty);
                         lhs_ty
                     }
                     BinaryOpKind::Concat => {
-                        let ret_ty = TyKind::List(self.new_ty_var()).intern(self);
+                        let ret_ty = Ty::List(self.new_ty_var()).intern(self);
                         self.unify(lhs_ty, ret_ty);
                         self.unify(rhs_ty, ret_ty);
                         ret_ty
@@ -289,8 +227,8 @@ impl<'db> InferCtx<'db> {
                 match op {
                     None => self.new_ty_var(),
                     Some(UnaryOpKind::Not) => {
-                        self.unify_kind(arg_ty, TyKind::Bool);
-                        TyKind::Bool.intern(self)
+                        self.unify_kind(arg_ty, Ty::Bool);
+                        Ty::Bool.intern(self)
                     }
                     // TODO: The argument is int | bool.
                     Some(UnaryOpKind::Negate) => arg_ty,
@@ -300,7 +238,7 @@ impl<'db> InferCtx<'db> {
                 let param_ty = self.new_ty_var();
                 let ret_ty = self.new_ty_var();
                 let lam_ty = self.infer_expr(lam);
-                self.unify_kind(lam_ty, TyKind::Lambda(param_ty, ret_ty));
+                self.unify_kind(lam_ty, Ty::Lambda(param_ty, ret_ty));
                 let arg_ty = self.infer_expr(arg);
                 self.unify(arg_ty, param_ty);
                 ret_ty
@@ -310,21 +248,21 @@ impl<'db> InferCtx<'db> {
                 self.infer_expr(*set_expr);
                 for &attr in path.iter() {
                     let attr_ty = self.infer_expr(attr);
-                    self.unify_kind(attr_ty, TyKind::String);
+                    self.unify_kind(attr_ty, Ty::String);
                 }
-                TyKind::Bool.intern(self)
+                Ty::Bool.intern(self)
             }
             Expr::Select(set_expr, path, default_expr) => {
                 let set_ty = self.infer_expr(*set_expr);
                 let ret_ty = path.iter().fold(set_ty, |set_ty, &attr| {
                     let attr_ty = self.infer_expr(attr);
-                    self.unify_kind(attr_ty, TyKind::String);
+                    self.unify_kind(attr_ty, Ty::String);
                     match &self.module[attr] {
                         Expr::Literal(Literal::String(key)) => {
                             self.infer_set_field(set_ty, key.clone(), AttrSource::Unknown)
                         }
                         _ => {
-                            self.unify_kind(set_ty, TyKind::Attrset(Attrset::default()));
+                            self.unify_kind(set_ty, Ty::Attrset(Attrset::default()));
                             self.new_ty_var()
                         }
                     }
@@ -339,21 +277,21 @@ impl<'db> InferCtx<'db> {
                 for &part in parts.iter() {
                     let ty = self.infer_expr(part);
                     // FIXME: Parts are coerce-able to string.
-                    self.unify_kind(ty, TyKind::String);
+                    self.unify_kind(ty, Ty::String);
                 }
-                TyKind::Path.intern(self)
+                Ty::Path.intern(self)
             }
             Expr::StringInterpolation(parts) => {
                 for &part in parts.iter() {
                     let ty = self.infer_expr(part);
                     // FIXME: Parts are coerce-able to string.
-                    self.unify_kind(ty, TyKind::String);
+                    self.unify_kind(ty, Ty::String);
                 }
-                TyKind::String.intern(self)
+                Ty::String.intern(self)
             }
             Expr::List(elems) => {
                 let expect_elem_ty = self.new_ty_var();
-                let ret_ty = TyKind::List(expect_elem_ty).intern(self);
+                let ret_ty = Ty::List(expect_elem_ty).intern(self);
                 for &elem in elems.iter() {
                     let elem_ty = self.infer_expr(elem);
                     self.unify(elem_ty, expect_elem_ty);
@@ -366,11 +304,11 @@ impl<'db> InferCtx<'db> {
             }
             Expr::Attrset(bindings) | Expr::RecAttrset(bindings) => {
                 let set = self.infer_bindings(bindings);
-                TyKind::Attrset(set).intern(self)
+                Ty::Attrset(set).intern(self)
             }
             Expr::LetAttrset(bindings) => {
                 let set = self.infer_bindings(bindings);
-                let set_ty = TyKind::Attrset(set).intern(self);
+                let set_ty = Ty::Attrset(set).intern(self);
                 self.infer_set_field(set_ty, "body".into(), AttrSource::Unknown)
             }
         }
@@ -399,17 +337,17 @@ impl<'db> InferCtx<'db> {
 
         for &(k, v) in bindings.dynamics.iter() {
             let name_ty = self.infer_expr(k);
-            self.unify_kind(name_ty, TyKind::String);
+            self.unify_kind(name_ty, Ty::String);
             self.infer_expr(v);
         }
 
         Attrset(fields)
     }
 
-    fn infer_set_field(&mut self, set_ty: Ty, field: SmolStr, src: AttrSource) -> Ty {
-        let next_ty = Ty(self.table.len() as u32);
+    fn infer_set_field(&mut self, set_ty: TyVar, field: SmolStr, src: AttrSource) -> TyVar {
+        let next_ty = TyVar(self.table.len() as u32);
         match self.table.get_mut(set_ty.0) {
-            TyKind::Attrset(set) => match set.0.entry(field) {
+            Ty::Attrset(set) => match set.0.entry(field) {
                 Entry::Occupied(mut ent) => {
                     let (ty, prev_src) = ent.get_mut();
                     prev_src.unify(src);
@@ -419,53 +357,53 @@ impl<'db> InferCtx<'db> {
                     ent.insert((next_ty, src));
                 }
             },
-            k @ TyKind::Unknown => {
-                *k = TyKind::Attrset(Attrset([(field, (next_ty, src))].into_iter().collect()));
+            k @ Ty::Unknown => {
+                *k = Ty::Attrset(Attrset([(field, (next_ty, src))].into_iter().collect()));
             }
-            TyKind::Bool
-            | TyKind::Int
-            | TyKind::Float
-            | TyKind::String
-            | TyKind::Path
-            | TyKind::List(_)
-            | TyKind::Lambda(_, _) => {}
+            Ty::Bool
+            | Ty::Int
+            | Ty::Float
+            | Ty::String
+            | Ty::Path
+            | Ty::List(_)
+            | Ty::Lambda(_, _) => {}
         }
         self.new_ty_var()
     }
 
     /// Unify a type in table with an expected kind.
-    fn unify_kind(&mut self, a: Ty, b: TyKind) {
+    fn unify_kind(&mut self, a: TyVar, b: Ty) {
         match (self.table.get_mut(a.0), b) {
-            (a @ TyKind::Unknown, b) => *a = b,
-            (&mut TyKind::List(a), TyKind::List(b)) => self.unify(a, b),
-            (&mut TyKind::Lambda(a1, a2), TyKind::Lambda(b1, b2)) => {
+            (a @ Ty::Unknown, b) => *a = b,
+            (&mut Ty::List(a), Ty::List(b)) => self.unify(a, b),
+            (&mut Ty::Lambda(a1, a2), Ty::Lambda(b1, b2)) => {
                 self.unify(a1, b1);
                 self.unify(a2, b2);
             }
-            (TyKind::Attrset(_), TyKind::Attrset(b)) => {
+            (Ty::Attrset(_), Ty::Attrset(b)) => {
                 assert!(b.0.is_empty(), "Never unify_kind an non-empty set");
             }
             _ => {}
         }
     }
 
-    fn unify(&mut self, a: Ty, b: Ty) {
+    fn unify(&mut self, a: TyVar, b: TyVar) {
         let (i, other) = self.table.unify(a.0, b.0);
         let other = match other {
             Some(other) => other,
             None => return,
         };
-        let mut a = mem::replace(self.table.get_mut(i), TyKind::Unknown);
+        let mut a = mem::replace(self.table.get_mut(i), Ty::Unknown);
         match (&mut a, other) {
-            (a @ TyKind::Unknown, b) => *a = b,
-            (&mut TyKind::List(a), TyKind::List(b)) => {
+            (a @ Ty::Unknown, b) => *a = b,
+            (&mut Ty::List(a), Ty::List(b)) => {
                 self.unify(a, b);
             }
-            (&mut TyKind::Lambda(a1, a2), TyKind::Lambda(b1, b2)) => {
+            (&mut Ty::Lambda(a1, a2), Ty::Lambda(b1, b2)) => {
                 self.unify(a1, b1);
                 self.unify(a2, b2);
             }
-            (TyKind::Attrset(a), TyKind::Attrset(b)) => {
+            (Ty::Attrset(a), Ty::Attrset(b)) => {
                 for (field, (ty2, src2)) in b.0 {
                     match a.0.entry(field) {
                         Entry::Vacant(ent) => {
@@ -485,91 +423,77 @@ impl<'db> InferCtx<'db> {
     }
 
     fn finish(mut self) -> InferenceResult {
-        let mut comp = TableCompresser::new(&mut self.table);
+        let mut i = Collector::new(&mut self.table);
 
         let name_cnt = self.module.names().len();
         let mut name_ty_map = ArenaMap::default();
         let mut expr_ty_map = ArenaMap::default();
         for (name, _) in self.module.names() {
-            let ty = Ty(u32::from(name.into_raw()));
-            name_ty_map.insert(name, comp.intern(ty));
+            let ty = TyVar(u32::from(name.into_raw()));
+            name_ty_map.insert(name, i.collect(ty));
         }
         for (expr, _) in self.module.exprs() {
-            let ty = Ty(name_cnt as u32 + u32::from(expr.into_raw()));
-            expr_ty_map.insert(expr, comp.intern(ty));
+            let ty = TyVar(name_cnt as u32 + u32::from(expr.into_raw()));
+            expr_ty_map.insert(expr, i.collect(ty));
         }
 
         InferenceResult {
             name_ty_map,
             expr_ty_map,
-            arena: comp.arena,
         }
     }
 }
 
-struct TableCompresser<'a> {
-    arena: Vec<TyKind>,
-    cache: Vec<Option<Ty>>,
-    table: &'a mut UnionFind<TyKind>,
+/// Traverse the table and freeze all `Ty`s into immutable ones.
+struct Collector<'a> {
+    cache: Vec<Option<super::Ty>>,
+    table: &'a mut UnionFind<Ty>,
 }
 
-impl<'a> TableCompresser<'a> {
-    fn new(table: &'a mut UnionFind<TyKind>) -> Self {
-        let mut arena = Vec::with_capacity(table.len());
-        // Primitives.
-        arena.extend([
-            TyKind::Unknown,
-            TyKind::Bool,
-            TyKind::Int,
-            TyKind::Float,
-            TyKind::String,
-            TyKind::Path,
-        ]);
+impl<'a> Collector<'a> {
+    fn new(table: &'a mut UnionFind<Ty>) -> Self {
         Self {
-            arena,
             cache: vec![None; table.len()],
             table,
         }
     }
 
-    fn intern(&mut self, ty: Ty) -> Ty {
+    fn collect(&mut self, ty: TyVar) -> super::Ty {
         let i = self.table.find(ty.0);
-        if let Some(ty) = self.cache[i as usize] {
+        if let Some(ty) = self.cache[i as usize].clone() {
             return ty;
         }
 
         // Prevent cycles.
-        self.cache[i as usize] = Some(Ty(0));
-        let ret = self.intern_uncached(i);
-        self.cache[i as usize] = Some(ret);
+        self.cache[i as usize] = Some(super::Ty::Unknown);
+        let ret = self.collect_uncached(i);
+        self.cache[i as usize] = Some(ret.clone());
         ret
     }
 
-    fn intern_uncached(&mut self, i: u32) -> Ty {
-        let mut k = mem::replace(self.table.get_mut(i), TyKind::Unknown);
-        match &mut k {
-            // Matches `Self::new`.
-            TyKind::Unknown => return Ty(0),
-            TyKind::Bool => return Ty(1),
-            TyKind::Int => return Ty(2),
-            TyKind::Float => return Ty(3),
-            TyKind::String => return Ty(4),
-            TyKind::Path => return Ty(5),
-            TyKind::List(ty) => {
-                *ty = self.intern(*ty);
+    fn collect_uncached(&mut self, i: u32) -> super::Ty {
+        let ty = mem::replace(self.table.get_mut(i), Ty::Unknown);
+        match ty {
+            Ty::Unknown => super::Ty::Unknown,
+            Ty::Bool => super::Ty::Bool,
+            Ty::Int => super::Ty::Int,
+            Ty::Float => super::Ty::Float,
+            Ty::String => super::Ty::String,
+            Ty::Path => super::Ty::Path,
+            Ty::List(a) => super::Ty::List(self.collect(a).into()),
+            Ty::Lambda(a, b) => {
+                let a = self.collect(a);
+                let b = self.collect(b);
+                super::Ty::Lambda(a.into(), b.into())
             }
-            TyKind::Lambda(a, b) => {
-                *a = self.intern(*a);
-                *b = self.intern(*b);
+            Ty::Attrset(set) => {
+                let set = set
+                    .0
+                    .into_iter()
+                    .map(|(name, (ty, src))| (name, self.collect(ty), src))
+                    .collect();
+                super::Ty::Attrset(super::Attrset(set).into())
             }
-            TyKind::Attrset(set) => {
-                for (ty, _) in set.0.values_mut() {
-                    *ty = self.intern(*ty);
-                }
-            }
-        };
-        let ret = Ty(self.arena.len() as u32);
-        self.arena.push(k);
-        ret
+        }
     }
 }

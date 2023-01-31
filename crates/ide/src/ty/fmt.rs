@@ -1,21 +1,20 @@
-use super::{InferenceResult, Ty, TyKind};
 use std::fmt;
+
+use super::Ty;
 
 const MAX_FIELD_CNT: usize = 8;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct TyDisplay<'a> {
-    ty: Ty,
-    infer: &'a InferenceResult,
+    ty: &'a Ty,
     depth: usize,
     in_param: bool,
 }
 
 impl<'a> TyDisplay<'a> {
-    pub fn new(ty: Ty, infer: &'a InferenceResult, depth: usize) -> Self {
+    pub fn new(ty: &'a Ty, depth: usize) -> Self {
         Self {
             ty,
-            infer,
             depth,
             in_param: false,
         }
@@ -24,27 +23,26 @@ impl<'a> TyDisplay<'a> {
 
 impl fmt::Display for TyDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.infer.kind(self.ty) {
-            TyKind::Unknown => "?".fmt(f),
-            TyKind::Bool => "bool".fmt(f),
-            TyKind::Int => "int".fmt(f),
-            TyKind::Float => "float".fmt(f),
-            TyKind::String => "string".fmt(f),
-            TyKind::Path => "path".fmt(f),
-            &TyKind::List(ty) => {
+        match self.ty {
+            Ty::Unknown => "?".fmt(f),
+            Ty::Bool => "bool".fmt(f),
+            Ty::Int => "int".fmt(f),
+            Ty::Float => "float".fmt(f),
+            Ty::String => "string".fmt(f),
+            Ty::Path => "path".fmt(f),
+            Ty::List(ty) => {
                 if self.depth == 0 {
                     "[…]".fmt(f)
                 } else {
                     let elem = Self {
                         ty,
-                        infer: self.infer,
                         depth: self.depth - 1,
                         in_param: false,
                     };
                     write!(f, "[{}]", elem)
                 }
             }
-            &TyKind::Lambda(param, ret) => {
+            Ty::Lambda(param, ret) => {
                 if self.in_param {
                     "(".fmt(f)?;
                 }
@@ -53,14 +51,12 @@ impl fmt::Display for TyDisplay<'_> {
                 } else {
                     let param = Self {
                         ty: param,
-                        infer: self.infer,
                         // Show full lambda type.
                         depth: self.depth,
                         in_param: true,
                     };
                     let ret = Self {
                         ty: ret,
-                        infer: self.infer,
                         // Show full lambda type.
                         depth: self.depth,
                         in_param: false,
@@ -72,7 +68,7 @@ impl fmt::Display for TyDisplay<'_> {
                 }
                 Ok(())
             }
-            TyKind::Attrset(set) => {
+            Ty::Attrset(set) => {
                 if self.depth == 0 {
                     "{ … }".fmt(f)
                 } else {
@@ -87,7 +83,6 @@ impl fmt::Display for TyDisplay<'_> {
                         // FIXME: Escape field names.
                         let value = Self {
                             ty,
-                            infer: self.infer,
                             depth: self.depth - 1,
                             in_param: false,
                         };
