@@ -1,5 +1,5 @@
 use crate::tests::TestDB;
-use crate::{DefDatabase, TyDatabase};
+use crate::{DefDatabase, InferenceResult, Module, TyDatabase};
 use expect_test::{expect, Expect};
 
 use super::Ty;
@@ -15,23 +15,46 @@ fn check(src: &str, expect: Expect) {
 }
 
 #[track_caller]
-fn check_all(src: &str, expect: Expect) {
-    check_all_expect(src, None, expect);
-}
-
-#[track_caller]
-fn check_all_expect(src: &str, expect_ty: impl Into<Option<Ty>>, expect: Expect) {
+fn check_name(name: &str, src: &str, expect: Expect) {
     let (db, file) = TestDB::single_file(src).unwrap();
     let module = db.module(file);
-    let infer = super::infer::infer_with(&db, file, expect_ty.into());
-    let got = module
+    let name = module
+        .names()
+        .find(|(_, n)| n.text == name)
+        .expect("Name not found")
+        .0;
+    let infer = db.infer(file);
+    let ty = infer.ty_for_name(name);
+    let got = ty.debug().to_string();
+    expect.assert_eq(&got);
+}
+
+fn all_types(module: &Module, infer: &InferenceResult) -> String {
+    module
         .names()
         .map(|(i, name)| format!("{}: {}\n", name.text, infer.ty_for_name(i).debug()))
         .chain([format!(
             ": {}\n",
             infer.ty_for_expr(module.entry_expr()).debug(),
         )])
-        .collect::<String>();
+        .collect()
+}
+
+#[track_caller]
+fn check_all(src: &str, expect: Expect) {
+    let (db, file) = TestDB::single_file(src).unwrap();
+    let module = db.module(file);
+    let infer = db.infer(file);
+    let got = all_types(&module, &infer);
+    expect.assert_eq(&got);
+}
+
+#[track_caller]
+fn check_all_expect(src: &str, expect_ty: Ty, expect: Expect) {
+    let (db, file) = TestDB::single_file(src).unwrap();
+    let module = db.module(file);
+    let infer = super::infer::infer_with(&db, file, Some(expect_ty));
+    let got = all_types(&module, &infer);
     expect.assert_eq(&got);
 }
 
@@ -175,5 +198,32 @@ fn external() {
             name: string
             : { stdenv: { mkDerivation: { name: string } → { } } } → { }
         "#]],
+    );
+}
+
+#[test]
+fn flake_file() {
+    // Not flake.
+    check_name(
+        "nixpkgs",
+        "
+#- /default.nix
+{
+    outputs = { self, nixpkgs }: { };
+}
+        ",
+        expect!["?"],
+    );
+
+    // Flake.
+    check_name(
+        "nixpkgs",
+        "
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    outputs = { self, nixpkgs }: { };
+}
+              ",
+        expect!["{ lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, rev: string, revCount: int }"],
     );
 }

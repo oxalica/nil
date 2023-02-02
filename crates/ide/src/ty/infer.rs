@@ -68,7 +68,8 @@ impl InferenceResult {
 }
 
 pub(crate) fn infer_query(db: &dyn TyDatabase, file: FileId) -> Arc<InferenceResult> {
-    infer_with(db, file, None)
+    let expect_ty = db.module_expected_ty(file);
+    infer_with(db, file, expect_ty)
 }
 
 pub(crate) fn infer_with(

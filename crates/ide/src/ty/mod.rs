@@ -7,13 +7,16 @@ macro_rules! ty {
     (float) => { $crate::ty::Ty::Float };
     (string) => { $crate::ty::Ty::String };
     (path) => { $crate::ty::Ty::Path };
+    (# $e:tt) => {{ $e }};
     // TODO: More precise type for derivations.
     (derivation) => {
         $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::default()))
     };
     (($($inner:tt)*)) => {{ ty!($($inner)*) }};
     ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::arc::Arc::new($ty!($($inner)*)))};
-    ({ $($key:literal : $ty:tt),* $(,)? }) => {{
+    ({ $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
+        // TODO: Rest type.
+        $(let _ = ty!($rest_ty);)?
         $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::from_internal([
             $(($key, ty!($ty)),)*
         ])))
@@ -28,6 +31,7 @@ macro_rules! ty {
 
 mod fmt;
 mod infer;
+mod known;
 mod union_find;
 
 #[cfg(test)]
@@ -43,6 +47,9 @@ use smol_str::SmolStr;
 
 #[salsa::query_group(TyDatabaseStorage)]
 pub trait TyDatabase: DefDatabase {
+    #[salsa::invoke(module_expected_ty)]
+    fn module_expected_ty(&self, file: FileId) -> Option<Ty>;
+
     #[salsa::invoke(infer::infer_query)]
     fn infer(&self, file: FileId) -> Arc<InferenceResult>;
 }
@@ -98,9 +105,7 @@ impl Attrset {
     /// # Panics
     /// The given iterator must have no duplicated fields, or it'll panic.
     #[track_caller]
-    // FIXME: Currently this is only used in tests.
-    #[cfg_attr(not(test), allow(dead_code))]
-    fn from_internal(iter: impl IntoIterator<Item = (&'static str, Ty)>) -> Self {
+    pub fn from_internal<'a>(iter: impl IntoIterator<Item = (&'a str, Ty)>) -> Self {
         let mut set = iter
             .into_iter()
             .map(|(name, ty)| (SmolStr::from(name), ty, AttrSource::Unknown))
@@ -147,4 +152,23 @@ pub enum AttrSource {
     /// Defined by a name.
     Name(NameId),
     // TODO: Builtins.
+}
+
+fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
+    match &*db.module_kind(file) {
+        crate::ModuleKind::Unknown => None,
+        crate::ModuleKind::FlakeNix {
+            explicit_inputs,
+            param_inputs,
+        } => {
+            let mut inputs = explicit_inputs
+                .keys()
+                .chain(param_inputs.keys())
+                .map(|s| &**s)
+                .collect::<Vec<_>>();
+            inputs.sort();
+            inputs.dedup();
+            Some(known::flake(&inputs))
+        }
+    }
 }
