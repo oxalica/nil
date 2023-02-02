@@ -78,11 +78,14 @@ pub(crate) fn liveness_check_query(
     // Unused let-bindings are eagerly collected into this.
     let mut unused_defs = Vec::new();
 
+    let name_cnt = module.names.len();
+    let expr_cnt = module.exprs.len();
+
     // For rec-attrset check.
-    let mut visited_defs: ArenaMap<NameId, ()> = ArenaMap::default();
+    let mut visited_defs = ArenaMap::<NameId, ()>::with_capacity(name_cnt);
     // For traversal of let-in bindings.
-    let mut visited_def_rhs = ArenaMap::default();
-    let mut visited_withs = ArenaMap::default();
+    let mut visited_def_rhs = ArenaMap::with_capacity(expr_cnt);
+    let mut visited_withs = ArenaMap::with_capacity(expr_cnt);
     let mut stack = vec![module.entry_expr];
 
     while !stack.is_empty() {

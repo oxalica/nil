@@ -25,7 +25,10 @@ impl ops::Index<ScopeId> for ModuleScopes {
 impl ModuleScopes {
     pub(crate) fn module_scopes_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
         let module = db.module(file_id);
-        let mut this = Self::default();
+        let mut this = Self {
+            scopes: Arena::new(),
+            scope_by_expr: ArenaMap::with_capacity(module.exprs.len()),
+        };
         let root_scope = this.scopes.alloc(ScopeData {
             parent: None,
             kind: ScopeKind::Definitions(Default::default()),
@@ -278,10 +281,9 @@ impl NameReference {
         for (expr, resolved) in name_res.iter() {
             match resolved {
                 ResolveResult::Builtin(_) => {}
-                &ResolveResult::Definition(name) => match this.def_refs.get_mut(name) {
-                    Some(refs) => refs.push(expr),
-                    None => this.def_refs.insert(name, vec![expr]),
-                },
+                &ResolveResult::Definition(name) => {
+                    this.def_refs.entry(name).or_default().push(expr)
+                }
                 ResolveResult::WithExprs(withs) => withs
                     .iter()
                     .for_each(|&with_expr| this.with_refs.entry(with_expr).or_default().push(expr)),

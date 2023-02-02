@@ -464,8 +464,9 @@ impl<'db> InferCtx<'db> {
         let mut i = Collector::new(&mut self.table);
 
         let name_cnt = self.module.names().len();
-        let mut name_ty_map = ArenaMap::default();
-        let mut expr_ty_map = ArenaMap::default();
+        let expr_cnt = self.module.exprs().len();
+        let mut name_ty_map = ArenaMap::with_capacity(name_cnt);
+        let mut expr_ty_map = ArenaMap::with_capacity(expr_cnt);
         for (name, _) in self.module.names() {
             let ty = TyVar(u32::from(name.into_raw()));
             name_ty_map.insert(name, i.collect(ty));
