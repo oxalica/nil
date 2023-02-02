@@ -70,7 +70,9 @@ fn module_with_source_map(
     file_id: FileId,
 ) -> (Arc<Module>, Arc<ModuleSourceMap>) {
     let parse = db.parse(file_id);
-    let (module, source_map) = lower::lower(db, file_id, parse);
+    let (mut module, mut source_map) = lower::lower(db, file_id, parse);
+    module.shrink_to_fit();
+    source_map.shrink_to_fit();
     (Arc::new(module), Arc::new(source_map))
 }
 
@@ -97,6 +99,7 @@ fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<Fi
             }
         }
     }
+    closure.shrink_to_fit();
     Arc::new(closure)
 }
 
@@ -126,6 +129,12 @@ impl ops::Index<NameId> for Module {
 }
 
 impl Module {
+    pub fn shrink_to_fit(&mut self) {
+        self.exprs.shrink_to_fit();
+        self.names.shrink_to_fit();
+        self.diagnostics.shrink_to_fit();
+    }
+
     pub fn entry_expr(&self) -> ExprId {
         self.entry_expr
     }
@@ -147,7 +156,7 @@ impl Module {
         file_id: FileId,
     ) -> Arc<HashSet<FileId>> {
         let source_root = db.source_root(db.file_source_root(file_id));
-        let refs = db
+        let mut refs = db
             .module(file_id)
             .exprs()
             .filter_map(|(_, kind)| {
@@ -161,7 +170,8 @@ impl Module {
                     source_root.file_for_path(&vpath)
                 })
             })
-            .collect();
+            .collect::<HashSet<_>>();
+        refs.shrink_to_fit();
         Arc::new(refs)
     }
 }
@@ -177,6 +187,13 @@ pub struct ModuleSourceMap {
 }
 
 impl ModuleSourceMap {
+    pub fn shrink_to_fit(&mut self) {
+        self.expr_map.shrink_to_fit();
+        self.expr_map_rev.shrink_to_fit();
+        self.name_map.shrink_to_fit();
+        self.name_map_rev.shrink_to_fit();
+    }
+
     pub fn expr_for_node(&self, node: AstPtr) -> Option<ExprId> {
         self.expr_map.get(&node).copied()
     }

@@ -34,7 +34,13 @@ impl ModuleScopes {
             kind: ScopeKind::Definitions(Default::default()),
         });
         this.traverse_expr(&module, module.entry_expr, root_scope);
+        this.shrink_to_fit();
         Arc::new(this)
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.scopes.shrink_to_fit();
+        // The size of `scope_by_expr` should be precise.
     }
 
     pub fn scope_for_expr(&self, expr_id: ExprId) -> Option<ScopeId> {
@@ -224,7 +230,7 @@ impl NameResolution {
     pub(crate) fn name_resolution_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<Self> {
         let module = db.module(file_id);
         let scopes = db.scopes(file_id);
-        let resolve_map = module
+        let mut resolve_map = module
             .exprs()
             .filter_map(|(e, kind)| {
                 match kind {
@@ -233,7 +239,8 @@ impl NameResolution {
                     _ => None,
                 }
             })
-            .collect();
+            .collect::<HashMap<_, _>>();
+        resolve_map.shrink_to_fit();
         Arc::new(Self { resolve_map })
     }
 
@@ -289,7 +296,13 @@ impl NameReference {
                     .for_each(|&with_expr| this.with_refs.entry(with_expr).or_default().push(expr)),
             }
         }
+        this.shrink_to_fit();
         Arc::new(this)
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        // The size of `def_refs` should be precise.
+        self.with_refs.shrink_to_fit();
     }
 
     pub fn name_references(&self, name: NameId) -> Option<&[ExprId]> {
