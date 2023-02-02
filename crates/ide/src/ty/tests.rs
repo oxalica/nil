@@ -224,6 +224,6 @@ fn flake_file() {
     outputs = { self, nixpkgs }: { };
 }
               ",
-        expect!["{ lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, rev: string, revCount: int }"],
+        expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, … }"],
     );
 }
