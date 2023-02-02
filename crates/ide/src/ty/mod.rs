@@ -10,16 +10,16 @@ macro_rules! ty {
     (# $e:tt) => {{ $e }};
     // TODO: More precise type for derivations.
     (derivation) => {
-        $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::default()))
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::default())
     };
     (($($inner:tt)*)) => {{ ty!($($inner)*) }};
     ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::arc::Arc::new($ty!($($inner)*)))};
     ({ $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
         // TODO: Rest type.
         $(let _ = ty!($rest_ty);)?
-        $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::from_internal([
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal([
             $(($key, ty!($ty)),)*
-        ])))
+        ]))
     }};
     ($arg:tt -> $($ret:tt)*) => {
         $crate::ty::Ty::Lambda(
@@ -69,7 +69,7 @@ pub enum Ty {
 
     List(Arc<Ty>),
     Lambda(Arc<Ty>, Arc<Ty>),
-    Attrset(Arc<Attrset>),
+    Attrset(Attrset),
 }
 
 impl Ty {
@@ -96,8 +96,14 @@ impl std::fmt::Debug for Ty {
 }
 
 // Invariant: sorted by names.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Attrset(Box<[(SmolStr, Ty, AttrSource)]>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attrset(Arc<[(SmolStr, Ty, AttrSource)]>);
+
+impl Default for Attrset {
+    fn default() -> Self {
+        Self(Arc::new([]))
+    }
+}
 
 impl Attrset {
     /// Build an Attrset for internal type schemas.
@@ -109,8 +115,10 @@ impl Attrset {
         let mut set = iter
             .into_iter()
             .map(|(name, ty)| (SmolStr::from(name), ty, AttrSource::Unknown))
-            .collect::<Box<[_]>>();
-        set.sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
+            .collect::<Arc<[_]>>();
+        Arc::get_mut(&mut set)
+            .unwrap()
+            .sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
         assert!(
             set.windows(2).all(|w| w[0].0 != w[1].0),
             "Duplicated fields",

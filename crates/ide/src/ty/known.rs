@@ -23,9 +23,9 @@ pub fn flake(inputs: &[&str]) -> Ty {
             }
         },
     });
-    let inputs_ty = Ty::Attrset(
-        Attrset::from_internal(inputs.iter().copied().map(|name| (name, input_ty.clone()))).into(),
-    );
+    let inputs_ty = Ty::Attrset(Attrset::from_internal(
+        inputs.iter().copied().map(|name| (name, input_ty.clone())),
+    ));
 
     let input_param_ty = ty!({
         "rev": string,
@@ -52,16 +52,13 @@ pub fn flake(inputs: &[&str]) -> Ty {
         "inputs": { },
         "outputs": { },
     });
-    let outputs_param_ty = Ty::Attrset(
-        Attrset::from_internal(
-            inputs
-                .iter()
-                .copied()
-                .chain(Some("self"))
-                .map(|name| (name, input_param_ty.clone())),
-        )
-        .into(),
-    );
+    let outputs_param_ty = Ty::Attrset(Attrset::from_internal(
+        inputs
+            .iter()
+            .copied()
+            .chain(Some("self"))
+            .map(|name| (name, input_param_ty.clone())),
+    ));
 
     ty!({
         "description": string,

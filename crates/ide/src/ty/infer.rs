@@ -530,7 +530,7 @@ impl<'a> Collector<'a> {
                     .into_iter()
                     .map(|(name, (ty, src))| (name, self.collect(ty), src))
                     .collect();
-                super::Ty::Attrset(super::Attrset(set).into())
+                super::Ty::Attrset(super::Attrset(set))
             }
             Ty::External(ty) => ty,
         }
