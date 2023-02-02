@@ -2,6 +2,9 @@ use crate::tests::TestDB;
 use crate::{DefDatabase, TyDatabase};
 use expect_test::{expect, Expect};
 
+use super::Ty;
+
+#[track_caller]
 fn check(src: &str, expect: Expect) {
     let (db, file) = TestDB::single_file(src).unwrap();
     let module = db.module(file);
@@ -11,10 +14,16 @@ fn check(src: &str, expect: Expect) {
     expect.assert_eq(&got);
 }
 
+#[track_caller]
 fn check_all(src: &str, expect: Expect) {
+    check_all_expect(src, None, expect);
+}
+
+#[track_caller]
+fn check_all_expect(src: &str, expect_ty: impl Into<Option<Ty>>, expect: Expect) {
     let (db, file) = TestDB::single_file(src).unwrap();
     let module = db.module(file);
-    let infer = db.infer(file);
+    let infer = super::infer::infer_with(&db, file, expect_ty.into());
     let got = module
         .names()
         .map(|(i, name)| format!("{}: {}\n", name.text, infer.ty_for_name(i).debug()))
@@ -137,6 +146,34 @@ fn select() {
             a: { }
             b: string
             : { } → string → ?
+        "#]],
+    );
+}
+
+#[test]
+fn external() {
+    check_all_expect(
+        "let a = a; in a",
+        ty!(int),
+        expect![[r#"
+            a: int
+            : int
+        "#]],
+    );
+
+    check_all_expect(
+        "{ stdenv }: stdenv.mkDerivation {
+            name = undefined;
+        }",
+        ty!({
+            "stdenv": {
+                "mkDerivation": ({ "name": string } -> derivation),
+            },
+        } -> derivation),
+        expect![[r#"
+            stdenv: { mkDerivation: { name: string } → { } }
+            name: string
+            : { stdenv: { mkDerivation: { name: string } → { } } } → { }
         "#]],
     );
 }

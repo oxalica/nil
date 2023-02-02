@@ -3,7 +3,7 @@ mod def;
 mod diagnostic;
 mod ide;
 mod text_edit;
-mod ty;
+pub(crate) mod ty;
 
 #[cfg(test)]
 mod tests;

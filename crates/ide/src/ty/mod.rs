@@ -1,3 +1,31 @@
+#[rustfmt::skip]
+#[macro_export]
+macro_rules! ty {
+    (?) => { $crate::ty::Ty::Unknown };
+    (bool) => { $crate::ty::Ty::Int };
+    (int) => { $crate::ty::Ty::Int };
+    (float) => { $crate::ty::Ty::Float };
+    (string) => { $crate::ty::Ty::String };
+    (path) => { $crate::ty::Ty::Path };
+    // TODO: More precise type for derivations.
+    (derivation) => {
+        $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::default()))
+    };
+    (($($inner:tt)*)) => {{ ty!($($inner)*) }};
+    ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::arc::Arc::new($ty!($($inner)*)))};
+    ({ $($key:literal : $ty:tt),* $(,)? }) => {{
+        $crate::ty::Ty::Attrset(::std::sync::Arc::new($crate::ty::Attrset::from_internal([
+            $(($key, ty!($ty)),)*
+        ])))
+    }};
+    ($arg:tt -> $($ret:tt)*) => {
+        $crate::ty::Ty::Lambda(
+            ::std::sync::Arc::new(ty!($arg)),
+            ::std::sync::Arc::new(ty!($($ret)*)),
+        )
+    };
+}
+
 mod fmt;
 mod infer;
 mod union_find;
@@ -65,6 +93,26 @@ impl std::fmt::Debug for Ty {
 pub struct Attrset(Box<[(SmolStr, Ty, AttrSource)]>);
 
 impl Attrset {
+    /// Build an Attrset for internal type schemas.
+    ///
+    /// # Panics
+    /// The given iterator must have no duplicated fields, or it'll panic.
+    #[track_caller]
+    // FIXME: Currently this is only used in tests.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn from_internal(iter: impl IntoIterator<Item = (&'static str, Ty)>) -> Self {
+        let mut set = iter
+            .into_iter()
+            .map(|(name, ty)| (SmolStr::from(name), ty, AttrSource::Unknown))
+            .collect::<Box<[_]>>();
+        set.sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
+        assert!(
+            set.windows(2).all(|w| w[0].0 != w[1].0),
+            "Duplicated fields",
+        );
+        Self(set)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
