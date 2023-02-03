@@ -11,6 +11,7 @@ use lsp_types::{
     Url,
 };
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
+use std::backtrace::Backtrace;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -666,11 +667,14 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
     INSTALL_PANIC_HOOK.call_once(|| {
         let old_hook = panic::take_hook();
         panic::set_hook(Box::new(move |info| {
-            if let Some(loc) = info.location() {
-                PANIC_LOCATION.with(|inner| {
-                    inner.set(loc.to_string());
-                });
-            }
+            let loc = info
+                .location()
+                .map(|loc| loc.to_string())
+                .unwrap_or_default();
+            let backtrace = Backtrace::force_capture();
+            PANIC_LOCATION.with(|inner| {
+                inner.set(format!("Location: {loc:#}\nBacktrace: {backtrace:#}"));
+            });
             old_hook(info);
         }))
     });
@@ -685,9 +689,10 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
                 .unwrap_or("unknown");
             let mut loc = PANIC_LOCATION.with(|inner| inner.take());
             if loc.is_empty() {
-                loc = "unknown".into();
+                loc = "Location: unknown".into();
             }
-            bail!("Panicked in {ctx} at {loc}: {reason}");
+            tracing::error!("Panicked in {ctx}: {reason}\n{loc}");
+            bail!("Panicked in {ctx}: {reason}\n{loc}");
         }
     }
 }
