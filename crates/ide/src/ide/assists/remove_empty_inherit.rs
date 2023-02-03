@@ -1,4 +1,4 @@
-//! Remove an empty `inherit`.
+//! Remove empty `inherit;` or `inherit (...);`.
 //!
 //! ```nix
 //! { foo = "bar"; inherit; }

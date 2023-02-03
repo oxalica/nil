@@ -1,4 +1,9 @@
-## Features
+## LSP Features
+
+When `nil` is invoked without arguments, it runs in the [LSP] mode.
+Stdin and stdout are used for jsonrpc.
+
+[LSP]: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification
 
 This incomplete list tracks noteble features currently implemented or planned.
 
@@ -20,21 +25,8 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Links for URLs like `"https://..."`, `"http://..."` and etc.
   - [x] Links for [flake references][flake-ref] like `"github:NixOS/nixpkgs"`.
 
-  :warning: Due to an issue in `coc.nvim`, a lot of links
-  can cause performance issue for `coc.nvim`, especially when editing `all-packages.nix`.
-  You could apply [this patch][coc-links-fix] to mitigate.
-
-  [coc-links-fix]: https://github.com/neoclide/coc.nvim/pull/4401
-
 - [x] Code actions. `textDocument/codeAction`
-  - [x] Convert `name = name;` bindings to `inherit`.
-  - [x] Pack multiple bindings into one Attrset binding.
-
-    `{ foo.bar = 1; foo.baz = 2; }` => `{ foo = { bar = 1; baz = 2; }; }`
-
-  - [x] Flatten Attrset into outer level bindings.
-
-    `{ foo = { bar = 1; baz = 2; }; }` => `{ foo.bar = 1; foo.baz = 2; }` 
+  See [`docs/code_actions.md`](docs/code_actions.md) for the list of supported code actions.
 
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
@@ -42,6 +34,12 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Local bindings and rec-attrset fields.
   - [x] Keywords.
   - [ ] Attrset fields.
+    - [x] If it can be inferenced in the local file.
+    - [x] Flake schema, including common inputs fields like `url` and
+          output fields like `outPath`.
+    - [ ] Real flake outputs from evaluation.
+  - [x] Pat-parameter definition.
+    - [x] Flake inputs in the parameter of `outputs`.
 
 - [x] Diagnostics. `textDocument/publishDiagnostics`
 
@@ -108,3 +106,13 @@ This incomplete list tracks noteble features currently implemented or planned.
 
 [`coc.nvim`]: https://github.com/neoclide/coc.nvim
 [flake-ref]: https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-flake.html#types
+
+## CLI Features
+
+`nil` could also be invoked in command line.
+You can run `nil --help` for usages of all available commands.
+
+- `nil diagnostics <PATH>`
+  Check and print diagnostics for a file.
+  Exit with non-zero code if there are any diagnostics.
+  :warning: **WARNING**: The output format is for human and should not be relied on.
