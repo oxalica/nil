@@ -1,6 +1,7 @@
 use crate::def::{AstPtr, Expr, ResolveResult};
 use crate::{FilePos, NameKind, TyDatabase};
 use builtin::ALL_BUILTINS;
+use if_chain::if_chain;
 use std::fmt::Write;
 use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
@@ -44,18 +45,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
         match nameres.get(expr) {
             None => {}
             Some(ResolveResult::Builtin(name)) => {
-                let b = &ALL_BUILTINS[*name];
-                let ty = crate::ty::known::BUILTINS
-                    .as_attrset()
-                    .unwrap()
-                    .get(name)
-                    .map_or(String::default(), |ty| ty.display().to_string());
-                let markup = format!(
-                    "`builtins.{name}`\n`{ty}`\n\n{}\n{}",
-                    b.summary,
-                    b.doc.unwrap_or("(No documentation from Nix)"),
-                );
-                return Some(HoverResult { range, markup });
+                return hover_builtin(name, range);
             }
             Some(ResolveResult::WithExprs(withs)) => {
                 let text = match &module[expr] {
@@ -109,6 +99,26 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             }
         }?;
         let expr = source_map.expr_for_node(AstPtr::new(set_node.syntax()))?;
+
+        // Special case for `builtins.xxx`
+        if_chain! {
+            if let Some(ResolveResult::Builtin("builtins")) = nameres.get(expr);
+            if let Some(attr) = path_node.attrs().next();
+            if let AttrKind::Static(Some(field)) = AttrKind::of(attr.clone());
+            if ALL_BUILTINS.contains_key(&field);
+            then {
+                // `builtins.xxx.other`
+                //  ^^^^^^^^^^^^
+                let range = set_node
+                    .syntax()
+                    .text_range()
+                    .cover(attr.syntax().text_range());
+                // NB. Returns None when the field is invalid,
+                // since it is known to be incorrect.
+                return hover_builtin(&field, range);
+            }
+        }
+
         let mut ty = infer.ty_for_expr(expr);
         for attr in path_node.attrs() {
             let AttrKind::Static(Some(field)) = AttrKind::of(attr.clone()) else { return None };
@@ -133,6 +143,21 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
     None
 }
 
+fn hover_builtin(name: &str, range: TextRange) -> Option<HoverResult> {
+    let b = ALL_BUILTINS.get(name)?;
+    let ty = crate::ty::known::BUILTINS
+        .as_attrset()
+        .unwrap()
+        .get(name)
+        .map_or(String::default(), |ty| ty.display().to_string());
+    let markup = format!(
+        "`builtins.{name}`\n`{ty}`\n\n{}\n{}",
+        b.summary,
+        b.doc.unwrap_or("(No documentation from Nix)"),
+    );
+    Some(HoverResult { range, markup })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::base::SourceDatabase;
@@ -151,6 +176,13 @@ mod tests {
             got += "\n";
         }
         expect.assert_eq(&got);
+    }
+
+    #[track_caller]
+    fn check_no(fixture: &str) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(f.markers().len(), 1);
+        assert_eq!(super::hover(&db, f[0]), None);
     }
 
     #[test]
@@ -275,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn builtin() {
+    fn global_builtin() {
         check(
             "$0true",
             "true",
@@ -303,6 +335,50 @@ mod tests {
                 ```
 
                 evaluates to `[ "foobar" "foobla" "fooabc" ]`.
+            "#]],
+        );
+    }
+
+    #[test]
+    fn builtin_attrpath() {
+        check(
+            "builtins.head$0",
+            "builtins.head",
+            expect![[r#"
+                `builtins.head`
+                `[?] → ?`
+
+                `builtins.head list`
+                Return the first element of a list; abort evaluation if the argument
+                isn’t a list or is an empty list. You can test whether a list is
+                empty by comparing it with `[]`.
+            "#]],
+        );
+
+        check(
+            "builtins.true$0.trailing",
+            "builtins.true",
+            expect![[r#"
+            `builtins.true`
+            `bool`
+
+            `builtins.true`
+            (No documentation from Nix)
+        "#]],
+        );
+
+        // Invalid builtins.
+        check_no("builtins.not_exist$0");
+        // But the first part still works.
+        check(
+            "builtins$0.not_exist",
+            "builtins",
+            expect![[r#"
+                `builtins.builtins`
+                `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, any: (? → bool) → [?] → bool, appendContext: (? → bool) → { }, attrNames: { } → [string], attrValues: { } → [?], … }`
+
+                `builtins.builtins`
+                (No documentation from Nix)
             "#]],
         );
     }
