@@ -9,7 +9,7 @@ use lsp_types::{
     DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentSymbol,
     Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position,
     PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
-    TextDocumentPositionParams,
+    TextDocumentPositionParams, Url,
 };
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
@@ -57,11 +57,11 @@ pub(crate) fn to_range(line_map: &LineMap, range: TextRange) -> Range {
 }
 
 pub(crate) fn to_diagnostics(
-    vfs: &Vfs,
+    uri: &Url,
     file: FileId,
+    line_map: &LineMap,
     diags: &[Diagnostic],
 ) -> Vec<lsp::Diagnostic> {
-    let line_map = vfs.line_map_for_file(file);
     let mut ret = Vec::with_capacity(diags.len() * 2);
     for diag in diags {
         let primary_diag = lsp::Diagnostic {
@@ -69,7 +69,7 @@ pub(crate) fn to_diagnostics(
                 Severity::Error | Severity::IncompleteSyntax => Some(DiagnosticSeverity::ERROR),
                 Severity::Warning => Some(DiagnosticSeverity::WARNING),
             },
-            range: to_range(&line_map, diag.range),
+            range: to_range(line_map, diag.range),
             code: Some(NumberOrString::String(diag.code().into())),
             code_description: None,
             source: None,
@@ -79,7 +79,7 @@ pub(crate) fn to_diagnostics(
                     diag.notes
                         .iter()
                         .map(|(frange, msg)| DiagnosticRelatedInformation {
-                            location: to_location(vfs, *frange),
+                            location: Location::new(uri.clone(), to_range(line_map, frange.range)),
                             message: msg.to_owned(),
                         })
                         .collect(),
@@ -107,13 +107,13 @@ pub(crate) fn to_diagnostics(
 
             ret.push(lsp::Diagnostic {
                 severity: Some(DiagnosticSeverity::HINT),
-                range: to_range(&line_map, frange.range),
+                range: to_range(line_map, frange.range),
                 code: primary_diag.code.clone(),
                 code_description: primary_diag.code_description.clone(),
                 source: primary_diag.source.clone(),
                 message: msg.into(),
                 related_information: Some(vec![DiagnosticRelatedInformation {
-                    location: to_location(vfs, FileRange::new(file, diag.range)),
+                    location: Location::new(uri.clone(), to_range(line_map, diag.range)),
                     message: "original diagnostic".into(),
                 }]),
                 tags: None,
