@@ -300,18 +300,27 @@ impl Server {
             })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 let mut vfs = st.vfs.write().unwrap();
-                if let Ok(file) = vfs.file_for_uri(&params.text_document.uri) {
-                    for change in params.content_changes {
-                        if let Some((_, range)) = change
-                            .range
-                            .and_then(|range| convert::from_range(&vfs, file, range).ok())
-                        {
-                            let _ = vfs.change_file_content(file, range, &change.text);
-                        }
+                // Ignore files not maintained in Vfs.
+                let Ok(file) = vfs.file_for_uri(&params.text_document.uri) else { return Ok(()) };
+                for change in params.content_changes {
+                    let del_range = match change.range {
+                        None => None,
+                        Some(range) => match convert::from_range(&vfs, file, range) {
+                            Ok((_, range)) => Some(range),
+                            Err(err) => {
+                                tracing::error!(
+                                    "File out of sync! Invalid change range {range:?}: {err}. Change: {change:?}",
+                                );
+                                continue;
+                            }
+                        },
+                    };
+                    if let Err(err) = vfs.change_file_content(file, del_range, &change.text) {
+                        tracing::error!("File is out of sync! Failed to apply change: {err}. Change: {change:?}");
                     }
-                    drop(vfs);
-                    st.apply_vfs_change();
                 }
+                drop(vfs);
+                st.apply_vfs_change();
                 Ok(())
             })?
             // As stated in https://github.com/microsoft/language-server-protocol/issues/676,

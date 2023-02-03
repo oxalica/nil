@@ -84,21 +84,25 @@ impl Vfs {
     pub fn change_file_content(
         &mut self,
         file: FileId,
-        del_range: TextRange,
+        del_range: Option<TextRange>,
         ins_text: &str,
     ) -> Result<()> {
-        let new_text = {
-            let text = &*self.files[file.0 as usize].0;
-            ensure!(
-                del_range.end() <= TextSize::of(text),
-                "Invalid delete range {del_range:?}",
-            );
-            let mut buf =
-                String::with_capacity(text.len() - usize::from(del_range.len()) + ins_text.len());
-            buf += &text[..usize::from(del_range.start())];
-            buf += ins_text;
-            buf += &text[usize::from(del_range.end())..];
-            buf
+        let new_text = match del_range {
+            None => ins_text.to_owned(),
+            Some(del_range) => {
+                let text = &*self.files[file.0 as usize].0;
+                ensure!(
+                    del_range.end() <= TextSize::of(text),
+                    "Invalid delete range {del_range:?}",
+                );
+                let mut buf = String::with_capacity(
+                    text.len() - usize::from(del_range.len()) + ins_text.len(),
+                );
+                buf += &text[..usize::from(del_range.start())];
+                buf += ins_text;
+                buf += &text[usize::from(del_range.end())..];
+                buf
+            }
         };
         // This is not quite efficient, but we already do many O(n) traversals.
         let (new_text, line_map) = LineMap::normalize(new_text).context("File too large")?;
