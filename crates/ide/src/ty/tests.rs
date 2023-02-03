@@ -194,9 +194,9 @@ fn external() {
             },
         } -> derivation),
         expect![[r#"
-            stdenv: { mkDerivation: { name: string } → { } }
+            stdenv: { mkDerivation: { name: string } → { args: [string], builder: string, name: string, system: string } }
             name: string
-            : { stdenv: { mkDerivation: { name: string } → { } } } → { }
+            : { stdenv: { mkDerivation: { name: string } → { args: [string], builder: string, name: string, system: string } } } → { args: [string], builder: string, name: string, system: string }
         "#]],
     );
 }
@@ -226,4 +226,10 @@ fn flake_file() {
               ",
         expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, … }"],
     );
+}
+
+#[test]
+fn builtins() {
+    check("true", expect!["bool"]);
+    check("builtins.length [ ]", expect!["int"]);
 }

@@ -1,5 +1,5 @@
 use super::union_find::UnionFind;
-use super::{AttrSource, TyDatabase};
+use super::{known, AttrSource, TyDatabase};
 use crate::def::{
     BindingValue, Bindings, Expr, ExprId, Literal, NameId, NameResolution, ResolveResult,
 };
@@ -146,8 +146,12 @@ impl<'db> InferCtx<'db> {
                         // TODO: With names.
                         self.new_ty_var()
                     }
-                    // TODO: Builtin types.
-                    ResolveResult::Builtin(_) => self.new_ty_var(),
+                    ResolveResult::Builtin(name) => {
+                        match known::BUILTINS.as_attrset().unwrap().get(name) {
+                            None => self.new_ty_var(),
+                            Some(ty) => self.import_external(ty.clone()),
+                        }
+                    }
                 },
             },
             Expr::Literal(lit) => match lit {

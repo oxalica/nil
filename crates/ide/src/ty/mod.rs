@@ -2,18 +2,32 @@
 #[macro_export]
 macro_rules! ty {
     (?) => { $crate::ty::Ty::Unknown };
-    (bool) => { $crate::ty::Ty::Int };
+    (!) => { $crate::ty::Ty::Unknown };
+    (bool) => { $crate::ty::Ty::Bool };
     (int) => { $crate::ty::Ty::Int };
     (float) => { $crate::ty::Ty::Float };
     (string) => { $crate::ty::Ty::String };
+    (regex) => { $crate::ty::Ty::String };
     (path) => { $crate::ty::Ty::Path };
-    (# $e:tt) => {{ $e }};
-    // TODO: More precise type for derivations.
-    (derivation) => {
-        $crate::ty::Ty::Attrset($crate::ty::Attrset::default())
-    };
-    (($($inner:tt)*)) => {{ ty!($($inner)*) }};
-    ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::arc::Arc::new($ty!($($inner)*)))};
+    (# $e:expr) => { $e };
+
+    (derivation) => { $crate::ty::known::DERIVATION.clone() };
+
+    // TODO: Union type.
+    (number) => { $crate::ty::Ty::Float };
+    (stringish) => { $crate::ty::Ty::String };
+    ($ty:tt | $($rest:tt)|+) => {{
+        $(let _ = ty!($rest);)+
+        ty!($ty)
+    }};
+
+    // TODO: Polymorphism.
+    (forall a $(b)?, $($ty:tt)*) => { ty!($($ty)*) };
+    (a) => { $crate::ty::Ty::Unknown };
+    (b) => { $crate::ty::Ty::Unknown };
+
+    (($($inner:tt)*)) => { ty!($($inner)*) };
+    ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::sync::Arc::new(ty!($($inner)*)))};
     ({ $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
         // TODO: Rest type.
         $(let _ = ty!($rest_ty);)?
