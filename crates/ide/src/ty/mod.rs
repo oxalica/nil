@@ -45,7 +45,7 @@ macro_rules! ty {
 
 mod fmt;
 mod infer;
-mod known;
+pub mod known;
 mod union_find;
 
 #[cfg(test)]

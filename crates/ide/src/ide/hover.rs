@@ -45,9 +45,13 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             None => {}
             Some(ResolveResult::Builtin(name)) => {
                 let b = &ALL_BUILTINS[*name];
-                // TODO: Types of builtins.
+                let ty = crate::ty::known::BUILTINS
+                    .as_attrset()
+                    .unwrap()
+                    .get(name)
+                    .map_or(String::default(), |ty| ty.display().to_string());
                 let markup = format!(
-                    "{}\n\n{}",
+                    "`builtins.{name}`\n`{ty}`\n\n{}\n{}",
                     b.summary,
                     b.doc.unwrap_or("(No documentation from Nix)"),
                 );
@@ -59,7 +63,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
                     _ => return None,
                 };
                 let ty = infer.ty_for_expr(expr).display().to_string();
-                let mut markup = format!("`with` attribute `{text}`: `{ty}`");
+                let mut markup = format!("`with` attribute `{text}`\n`{ty}`\nEnvironments:");
                 for (&expr, i) in withs.iter().zip(1..) {
                     let ptr = source_map.node_for_expr(expr)?;
                     let with_node = ast::With::cast(ptr.to_node(&parse.syntax_node()))?;
@@ -88,7 +92,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
         };
         return Some(HoverResult {
             range,
-            markup: format!("{kind} `{text}`: `{ty}`"),
+            markup: format!("{kind} `{text}`\n`{ty}`"),
         });
     }
 
@@ -115,7 +119,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
         }
         let range = name_node.syntax().text_range();
         let markup = format!(
-            "Field `{}`: `{}`",
+            "Field `{}`\n`{}`",
             name_node
                 .token()
                 .map_or_else(String::new, |t| t.text().into()),
@@ -151,37 +155,98 @@ mod tests {
 
     #[test]
     fn definition() {
-        check("let $0a = 1; in a", "a", expect!["Let binding `a`: `int`"]);
+        check(
+            "let $0a = 1; in a",
+            "a",
+            expect![[r#"
+                Let binding `a`
+                `int`
+            "#]],
+        );
         check(
             "let a.$0a = 1; in a",
             "a",
-            expect!["Attrset attribute `a`: `int`"],
+            expect![[r#"
+                Attrset attribute `a`
+                `int`
+            "#]],
         );
-        check("{ $0a = 1; }", "a", expect!["Attrset attribute `a`: `int`"]);
+        check(
+            "{ $0a = 1; }",
+            "a",
+            expect![[r#"
+                Attrset attribute `a`
+                `int`
+            "#]],
+        );
         check(
             "rec { $0a = 1; }",
             "a",
-            expect!["Rec-attrset attribute `a`: `int`"],
+            expect![[r#"
+                Rec-attrset attribute `a`
+                `int`
+            "#]],
         );
-        check("$0a: a", "a", expect!["Parameter `a`: `?`"]);
-        check("{$0a}: a", "a", expect!["Field parameter `a`: `?`"]);
+        check(
+            "$0a: a",
+            "a",
+            expect![[r#"
+                Parameter `a`
+                `?`
+            "#]],
+        );
+        check(
+            "{$0a}: a",
+            "a",
+            expect![[r#"
+                Field parameter `a`
+                `?`
+            "#]],
+        );
     }
 
     #[test]
     fn reference() {
-        check("let a = 1; in $0a", "a", expect!["Let binding `a`: `int`"]);
+        check(
+            "let a = 1; in $0a",
+            "a",
+            expect![[r#"
+                Let binding `a`
+                `int`
+            "#]],
+        );
         check(
             "let a = 1; in { inherit $0a; }",
             "a",
-            expect!["Let binding `a`: `int`"],
+            expect![[r#"
+                Let binding `a`
+                `int`
+            "#]],
         );
         check(
             "let a = 1; in rec { inherit $0a; }",
             "a",
-            expect!["Let binding `a`: `int`"],
+            expect![[r#"
+                Let binding `a`
+                `int`
+            "#]],
         );
-        check("a: $0a", "a", expect!["Parameter `a`: `?`"]);
-        check("{a}: $0a", "a", expect!["Field parameter `a`: `?`"]);
+        check(
+            "a: $0a",
+            "a",
+            expect![[r#"
+                Parameter `a`
+                `?`
+            "#]],
+        );
+        check(
+            "{a}: $0a",
+            "a",
+            expect![[r#"
+                Field parameter `a`
+                `?`
+            "#]],
+        );
     }
 
     #[test]
@@ -190,7 +255,9 @@ mod tests {
             "with 1; $0a",
             "a",
             expect![[r#"
-                `with` attribute `a`: `?`
+                `with` attribute `a`
+                `?`
+                Environments:
                 1. `with 1;`
             "#]],
         );
@@ -198,7 +265,9 @@ mod tests {
             "with 1; with 2; $0a",
             "a",
             expect![[r#"
-                `with` attribute `a`: `?`
+                `with` attribute `a`
+                `?`
+                Environments:
                 1. `with 2;`
                 2. `with 1;`
             "#]],
@@ -212,7 +281,9 @@ mod tests {
             "true",
             expect![[r#"
                 `builtins.true`
+                `bool`
 
+                `builtins.true`
                 (No documentation from Nix)
             "#]],
         );
@@ -220,8 +291,10 @@ mod tests {
             "$0map",
             "map",
             expect![[r#"
-                `builtins.map f list`
+                `builtins.map`
+                `(? → ?) → [?] → [?]`
 
+                `builtins.map f list`
                 Apply the function *f* to each element in the list *list*. For
                 example,
 
@@ -239,17 +312,26 @@ mod tests {
         check(
             "let foo.$0bar = 1; in foo.bar",
             "bar",
-            expect!["Attrset attribute `bar`: `int`"],
+            expect![[r#"
+                Attrset attribute `bar`
+                `int`
+            "#]],
         );
         check(
             "let foo.bar = 1; in foo.$0bar",
             "bar",
-            expect!["Field `bar`: `int`"],
+            expect![[r#"
+                Field `bar`
+                `int`
+            "#]],
         );
         check(
             "let foo.bar = 1; in foo?$0bar",
             "bar",
-            expect!["Field `bar`: `int`"],
+            expect![[r#"
+                Field `bar`
+                `int`
+            "#]],
         );
     }
 }
