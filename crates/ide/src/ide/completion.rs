@@ -1,5 +1,5 @@
 use crate::def::{AstPtr, BindingValue, Expr, NameKind};
-use crate::ty::AttrSource;
+use crate::ty::{AttrSource, Ty};
 use crate::{FileId, FilePos, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
@@ -104,7 +104,23 @@ pub(crate) fn completions(
 
     match node {
         Left(ref_node) => complete_expr(db, file_id, source_range, ref_node),
-        Right(name_node) => complete_attrpath(db, file_id, source_range, name_node),
+        Right(name_node) => {
+            match_ast! {
+                match (name_node.syntax().parent()?) {
+                    ast::Attrpath(path_node) => {
+                        complete_attrpath(db, file_id, source_range, name_node, path_node)
+                    },
+                    ast::PatField(pat_field_node) => {
+                        let lambda_node = pat_field_node
+                            .syntax()
+                            .ancestors()
+                            .find_map(ast::Lambda::cast)?;
+                        complete_pat_param(db, file_id, source_range, name_node, lambda_node)
+                    },
+                    _ => None,
+                }
+            }
+        }
     }
 }
 
@@ -145,7 +161,8 @@ fn complete_trigger(
         _ => return None,
     };
 
-    complete_attrpath(db, file_id, source_range, name_node)
+    let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
+    complete_attrpath(db, file_id, source_range, name_node, path_node)
 }
 
 fn complete_expr(
@@ -234,8 +251,8 @@ fn complete_attrpath(
     file_id: FileId,
     source_range: TextRange,
     name_node: ast::Name,
+    path_node: ast::Attrpath,
 ) -> Option<Vec<CompletionItem>> {
-    let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
     let (set_node, container_node) = match_ast! {
         match (path_node.syntax().parent()?){
             ast::AttrpathValue(n) => {
@@ -357,6 +374,37 @@ fn complete_attrpath(
     Some(items)
 }
 
+fn complete_pat_param(
+    db: &dyn TyDatabase,
+    file_id: FileId,
+    source_range: TextRange,
+    name_node: ast::Name,
+    lambda_node: ast::Lambda,
+) -> Option<Vec<CompletionItem>> {
+    let source_map = db.source_map(file_id);
+    let infer = db.infer(file_id);
+    let lambda_expr = source_map.expr_for_node(AstPtr::new(lambda_node.syntax()))?;
+    let lambda_ty = infer.ty_for_expr(lambda_expr);
+    let Ty::Lambda(arg_ty, _) = lambda_ty else { return None };
+    let arg_set = arg_ty.as_attrset()?;
+
+    let name_tok = name_node.token()?;
+    let prefix = name_tok.text();
+
+    let items = arg_set
+        .iter()
+        .filter(|(name, ..)| prefix != name.as_str() && can_complete(prefix, name))
+        .map(|(name, ty, _)| CompletionItem {
+            label: name.clone(),
+            source_range,
+            replace: name.clone(),
+            kind: CompletionItemKind::Param,
+            brief: Some(ty.display().to_string()),
+            doc: None,
+        })
+        .collect();
+    Some(items)
+}
 fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
     CompletionItem {
         label: kw.into(),
@@ -645,5 +693,29 @@ mod tests {
         check_no("a: a.f$0", "f");
         check_no("{ f$0 = 1; }", "f");
         check_no("let f$0 = 1; in 1", "f");
+    }
+
+    #[test]
+    fn parameter_definition() {
+        check(
+            "({ f$0 }: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({ foo }: 42) { foo = 42; }"],
+        );
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+{
+    inputs.nixpkgs.url = "...";
+    outputs = { n$0 }: { };
+}
+            "#,
+            "nixpkgs",
+            expect![[r#"
+                (Param) {
+                    inputs.nixpkgs.url = "...";
+                    outputs = { nixpkgs }: { };
+                }"#]],
+        );
     }
 }
