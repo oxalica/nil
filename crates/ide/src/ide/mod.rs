@@ -45,8 +45,7 @@ pub use salsa::Cancelled;
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 #[salsa::database(SourceDatabaseStorage, DefDatabaseStorage, TyDatabaseStorage)]
-#[derive(Default)]
-pub struct RootDatabase {
+struct RootDatabase {
     storage: salsa::Storage<Self>,
 }
 
@@ -66,7 +65,19 @@ impl fmt::Debug for RootDatabase {
     }
 }
 
-#[derive(Debug, Default)]
+impl Default for RootDatabase {
+    fn default() -> Self {
+        use crate::SourceDatabase;
+
+        let mut db = Self {
+            storage: salsa::Storage::default(),
+        };
+        db.set_flake_graph_with_durability(Default::default(), Durability::MEDIUM);
+        db
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct AnalysisHost {
     db: RootDatabase,
 }
