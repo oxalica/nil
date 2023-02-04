@@ -77,9 +77,9 @@ let
 
     highlight link CocSemDelimiterPunctuation   TSPunctDelimiter
     highlight link CocSemConditionalKeyword     Conditional
-    highlight link CocSemDefaultLibraryVariable TSConstBuiltin
-    highlight link CocSemDefaultLibraryFunction TSFuncBuiltin
-    highlight link CocSemDefaultLibrary         TSVariableBuiltin
+    highlight link CocSemBuiltinVariable TSConstBuiltin
+    highlight link CocSemBuiltinFunction TSFuncBuiltin
+    highlight link CocSemBuiltin         TSVariableBuiltin
   '';
 
   cocSetting = {

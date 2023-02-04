@@ -282,6 +282,10 @@ impl NameResolution {
             .filter_map(|(e, res)| Some((*e, res.as_ref()?)))
     }
 
+    pub fn is_inherited_builtin(&self, name: NameId) -> bool {
+        self.inherited_builtins.contains(&name)
+    }
+
     pub fn check_builtin<'db>(&self, expr: ExprId, module: &'db Module) -> Option<&'db str> {
         match self.get(expr)? {
             ResolveResult::Builtin(b) => return Some(b),

@@ -1,9 +1,10 @@
 //! This is actually so-called "semantic highlighting".
 //! Ref: <https://github.com/rust-lang/rust-analyzer/blob/a670ff888437f4b6a3d24cc2996e9f969a87cbae/crates/ide/src/syntax_highlighting/tags.rs>
-use crate::def::{AstPtr, Expr, NameKind, ResolveResult};
+use crate::def::{AstPtr, Expr, Literal, NameKind, ResolveResult};
 use crate::{DefDatabase, FileId};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use syntax::{SyntaxKind, SyntaxToken, TextRange, T};
+use syntax::ast::AstNode;
+use syntax::{ast, match_ast, SyntaxKind, SyntaxToken, TextRange, T};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlRange {
@@ -76,8 +77,67 @@ pub(crate) fn highlight(
     let nameres = db.name_resolution(file);
     let module = db.module(file);
 
-    let highlight_token = |tok: &SyntaxToken| -> Option<HlRange> {
-        let tag = match tok.kind() {
+    let ident_tag = |tok: &SyntaxToken| -> Option<HlTag> {
+        match tok.parent() {
+            Some(node) if node.kind() == SyntaxKind::REF => {
+                let expr = source_map.expr_for_node(AstPtr::new(&node))?;
+                if let Some(builtin) = nameres.check_builtin(expr, &module) {
+                    return Some(HlTag::Builtin(ALL_BUILTINS[builtin].kind));
+                }
+                Some(match nameres.get(expr) {
+                    None => HlTag::UnresolvedRef,
+                    Some(ResolveResult::Definition(def)) => HlTag::NameRef(module[*def].kind),
+                    Some(ResolveResult::WithExprs(_)) => HlTag::AttrField(HlAttrField::With),
+                    // Covered by `check_builtin`.
+                    Some(ResolveResult::Builtin(_)) => unreachable!(),
+                })
+            }
+            Some(node) if node.kind() == SyntaxKind::NAME => {
+                let ptr = AstPtr::new(&node);
+                match source_map.name_for_node(ptr.clone()) {
+                    // Definition.
+                    Some(name) => {
+                        // `inherit (builtins) head;`
+                        //                     ^^^^
+                        if nameres.is_inherited_builtin(name) {
+                            return Some(HlTag::Builtin(ALL_BUILTINS[&*module[name].text].kind));
+                        }
+
+                        Some(HlTag::NameDef(module[name].kind))
+                    }
+                    // Selection.
+                    None => {
+                        let expr = source_map.expr_for_node(ptr)?;
+                        // Attrs in select-expression should be converted into string literals.
+                        let Expr::Literal(Literal::String(attr_text)) = &module[expr] else { return None };
+
+                        let path_node = ast::Attrpath::cast(node.parent()?)?;
+                        let set_node = match_ast! {
+                            match (path_node.syntax().parent()?) {
+                                ast::HasAttr(n) => n.set(),
+                                ast::Select(n) => n.set(),
+                                _ => None,
+                            }
+                        }?;
+                        let set_expr = source_map.expr_for_node(AstPtr::new(set_node.syntax()))?;
+
+                        // `builtins.xxx`
+                        //           ^^^
+                        if let Some(ResolveResult::Builtin("builtins")) = nameres.get(set_expr) {
+                            if let Some(b) = ALL_BUILTINS.get(attr_text) {
+                                return Some(HlTag::Builtin(b.kind));
+                            }
+                        }
+                        Some(HlTag::AttrField(HlAttrField::Select))
+                    }
+                }
+            }
+            _ => None,
+        }
+    };
+
+    let token_tag = |tok: &SyntaxToken| -> Option<HlTag> {
+        Some(match tok.kind() {
             SyntaxKind::SPACE => return None,
             SyntaxKind::COMMENT => HlTag::Comment,
             SyntaxKind::PATH | SyntaxKind::SEARCH_PATH => HlTag::Path,
@@ -112,41 +172,8 @@ pub(crate) fn highlight(
                 HlTag::Keyword(HlKeyword::Other)
             }
 
-            SyntaxKind::IDENT => match tok.parent() {
-                Some(node) if node.kind() == SyntaxKind::REF => {
-                    let expr = source_map.expr_for_node(AstPtr::new(&node))?;
-                    match nameres.get(expr) {
-                        None => HlTag::UnresolvedRef,
-                        Some(ResolveResult::Definition(def)) => HlTag::NameRef(module[*def].kind),
-                        Some(ResolveResult::WithExprs(_)) => HlTag::AttrField(HlAttrField::With),
-                        Some(ResolveResult::Builtin(name)) => {
-                            HlTag::Builtin(ALL_BUILTINS[*name].kind)
-                        }
-                    }
-                }
-                Some(node) if node.kind() == SyntaxKind::NAME => {
-                    let ptr = AstPtr::new(&node);
-                    match source_map.name_for_node(ptr.clone()) {
-                        Some(name) => HlTag::NameDef(module[name].kind),
-                        None => {
-                            match source_map.expr_for_node(ptr) {
-                                // Attrs in select-expression are converted into string literals.
-                                Some(expr) if matches!(&module[expr], Expr::Literal(_)) => {
-                                    HlTag::AttrField(HlAttrField::Select)
-                                }
-                                _ => return None,
-                            }
-                        }
-                    }
-                }
-                _ => return None,
-            },
+            SyntaxKind::IDENT => return ident_tag(tok),
             _ => return None,
-        };
-
-        Some(HlRange {
-            range: tok.text_range(),
-            tag,
         })
     };
 
@@ -160,7 +187,12 @@ pub(crate) fn highlight(
 
     std::iter::successors(first_tok, |tok| tok.next_token())
         .take_while(|tok| tok.text_range().start() < end_pos)
-        .filter_map(|tok| highlight_token(&tok))
+        .filter_map(|tok| {
+            Some(HlRange {
+                range: tok.text_range(),
+                tag: token_tag(&tok)?,
+            })
+        })
         .collect()
 }
 
@@ -228,10 +260,31 @@ mod tests {
     }
 
     #[test]
-    fn builtins() {
+    fn builtins_global() {
         check("$0true", expect!["Builtin(Const)"]);
         check("$0builtins", expect!["Builtin(Attrset)"]);
         check("$0map", expect!["Builtin(Function)"]);
+    }
+
+    #[test]
+    fn builtins_attrpath() {
+        check("builtins.$0head", expect!["Builtin(Function)"]);
+        check("builtins.$0not_exist", expect!["AttrField(Select)"]);
+    }
+
+    #[test]
+    fn builtins_special() {
+        check("with builtins; $0head", expect!["Builtin(Function)"]);
+        check("with builtins; $0not_exist", expect!["AttrField(With)"]);
+
+        check(
+            "let inherit (builtins) head; in $0head",
+            expect!["Builtin(Function)"],
+        );
+        check(
+            "let inherit (builtins) head; in $0tail",
+            expect!["UnresolvedRef"],
+        );
     }
 
     #[test]
