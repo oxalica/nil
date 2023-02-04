@@ -42,11 +42,14 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
     let mut name = None;
 
     if let Some(expr) = source_map.expr_for_node(ptr.clone()) {
+        if let Some(builtin) = nameres.check_builtin(expr, &module) {
+            return hover_builtin(builtin, range);
+        }
+
         match nameres.get(expr) {
             None => {}
-            Some(ResolveResult::Builtin(name)) => {
-                return hover_builtin(name, range);
-            }
+            // Covered by `check_builtin`.
+            Some(ResolveResult::Builtin(_)) => unreachable!(),
             Some(ResolveResult::WithExprs(withs)) => {
                 let text = match &module[expr] {
                     Expr::Reference(text) => text,
@@ -307,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn global_builtin() {
+    fn builtin_global() {
         check(
             "$0true",
             "true",
@@ -335,6 +338,40 @@ mod tests {
                 ```
 
                 evaluates to `[ "foobar" "foobla" "fooabc" ]`.
+            "#]],
+        );
+    }
+
+    #[test]
+    fn builtin_with() {
+        check(
+            "with { }; with builtins; head$0",
+            "head",
+            expect![[r#"
+                `builtins.head`
+                `[?] → ?`
+
+                `builtins.head list`
+                Return the first element of a list; abort evaluation if the argument
+                isn’t a list or is an empty list. You can test whether a list is
+                empty by comparing it with `[]`.
+            "#]],
+        );
+    }
+
+    #[test]
+    fn builtin_alias() {
+        check(
+            "let inherit (builtins) head; in head$0",
+            "head",
+            expect![[r#"
+                `builtins.head`
+                `[?] → ?`
+
+                `builtins.head list`
+                Return the first element of a list; abort evaluation if the argument
+                isn’t a list or is an empty list. You can test whether a list is
+                empty by comparing it with `[]`.
             "#]],
         );
     }

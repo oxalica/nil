@@ -1,9 +1,10 @@
 use super::{BindingValue, Bindings, DefDatabase, Expr, ExprId, Module, NameId};
 use crate::{Diagnostic, DiagnosticKind, FileId};
 use builtin::ALL_BUILTINS;
+use if_chain::if_chain;
 use la_arena::{Arena, ArenaMap, Idx};
 use smol_str::SmolStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{iter, ops};
 
@@ -224,6 +225,9 @@ impl ScopeData {
 pub struct NameResolution {
     // `None` value for unresolved names.
     resolve_map: HashMap<ExprId, Option<ResolveResult>>,
+    // All names from the common pattern `inherit (builtins) ...`.
+    // This is used for tracking builtins names even through alising.
+    inherited_builtins: HashSet<NameId>,
 }
 
 impl NameResolution {
@@ -240,8 +244,32 @@ impl NameResolution {
                 }
             })
             .collect::<HashMap<_, _>>();
+
+        let mut inherited_builtins = HashSet::new();
+        for (_, expr) in module.exprs() {
+            // NB. Only recursive attrset are considered here.
+            let (Expr::LetIn(bindings, _)
+            | Expr::LetAttrset(bindings)
+            | Expr::RecAttrset(bindings)) = expr else {
+                continue;
+            };
+            for &(name, value) in bindings.statics.iter() {
+                let BindingValue::InheritFrom(from_expr) = value else { continue };
+                if let Some(Some(ResolveResult::Builtin("builtins"))) = resolve_map.get(&from_expr)
+                {
+                    if ALL_BUILTINS.contains_key(&module[name].text) {
+                        inherited_builtins.insert(name);
+                    }
+                }
+            }
+        }
+
         resolve_map.shrink_to_fit();
-        Arc::new(Self { resolve_map })
+        inherited_builtins.shrink_to_fit();
+        Arc::new(Self {
+            resolve_map,
+            inherited_builtins,
+        })
     }
 
     pub fn get(&self, expr: ExprId) -> Option<&ResolveResult> {
@@ -252,6 +280,29 @@ impl NameResolution {
         self.resolve_map
             .iter()
             .filter_map(|(e, res)| Some((*e, res.as_ref()?)))
+    }
+
+    pub fn check_builtin<'db>(&self, expr: ExprId, module: &'db Module) -> Option<&'db str> {
+        match self.get(expr)? {
+            ResolveResult::Builtin(b) => return Some(b),
+            ResolveResult::Definition(name) => {
+                if self.inherited_builtins.contains(name) {
+                    return Some(&module[*name].text);
+                }
+            }
+            ResolveResult::WithExprs(withs) => {
+                if_chain! {
+                    if let &Expr::With(env, _) = &module[withs[0]];
+                    if let Some(ResolveResult::Builtin("builtins")) = self.get(env);
+                    if let Expr::Reference(name) = &module[expr];
+                    if ALL_BUILTINS.contains_key(&**name);
+                    then {
+                        return Some(name);
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn to_diagnostics(
@@ -316,7 +367,7 @@ impl NameReference {
 
 #[cfg(test)]
 mod tests {
-    use super::ScopeKind;
+    use super::*;
     use crate::def::{AstPtr, DefDatabase, ResolveResult};
     use crate::tests::TestDB;
     use syntax::ast::{self, AstNode};
@@ -414,6 +465,23 @@ mod tests {
         assert_eq!(got, expect);
     }
 
+    #[track_caller]
+    fn check_builtin(fixture: &str, expect: Option<&str>) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let file = f.files()[0];
+        let module = db.module(file);
+        let source_map = db.source_map(file);
+        let nameres = db.name_resolution(file);
+        let name_node = db
+            .node_at::<ast::Expr>(f.markers()[0])
+            .expect("Not an Expr node");
+        let expr = source_map
+            .expr_for_node(AstPtr::new(name_node.syntax()))
+            .expect("Not an Expr");
+        let got = nameres.check_builtin(expr, &module);
+        assert_eq!(got, expect);
+    }
+
     #[test]
     fn top_level() {
         check_scopes(r"$0a");
@@ -479,5 +547,21 @@ mod tests {
         check_resolve("let $1true = 1; in with x; $0true + false + falsie");
         check_resolve("let true = 1; in with x; true + $0$1false + falsie");
         check_resolve("let true = 1; in $1with x; true + false + $0falsie");
+    }
+
+    #[test]
+    fn check_builtin_alias() {
+        check_builtin(
+            "let inherit (builtins) tryEval; in $0tryEval",
+            Some("tryEval"),
+        );
+        check_builtin("let inherit (builtins) not_exist; in $0not_exist", None);
+    }
+
+    #[test]
+    fn check_builtin_with() {
+        check_builtin("with { }; with builtins; $0tryEval", Some("tryEval"));
+        check_builtin("with builtins; with { }; $0tryEval", None);
+        check_builtin("with builtins; $0not_exist", None);
     }
 }
