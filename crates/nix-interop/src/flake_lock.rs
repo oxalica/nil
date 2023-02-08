@@ -4,10 +4,10 @@
 //! which may be very costly for large repositories like nixpkgs.
 //!
 //! https://github.com/NixOS/nix/blob/2.13.1/src/nix/flake.md#lock-files
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 
@@ -26,56 +26,30 @@ pub fn resolve_flake_locked_inputs(
 ) -> Result<HashMap<String, ResolvedInput>> {
     let lock =
         serde_json::from_slice::<FlakeLock>(lock_src).context("Failed to parse flake lock")?;
-    let root_node = lock.nodes.get(&lock.root).context("Missing root node")?;
 
-    // Resolve followed inputs.
-    let inputs = root_node
-        .inputs
+    let mut resolver = Resolver::new(&lock);
+    let inputs = resolver
+        .resolve_node_inputs(&lock.root)
+        .context("Failed to resolve inputs from flake lock")?;
+
+    let hashes = inputs
         .iter()
-        .map(|(input_name, input)| {
-            let name_seq = match input {
-                FlakeInput::Node(name) => std::slice::from_ref(name),
-                FlakeInput::Follow(name_seq) => name_seq,
-            };
-            let target = name_seq.iter().try_fold(root_node, |node, input| {
-                match node
-                    .inputs
-                    .get(input)
-                    .with_context(|| format!("Missing followed input {input:?}"))?
-                {
-                    FlakeInput::Node(name) => lock
-                        .nodes
-                        .get(name)
-                        .with_context(|| format!("Missing followed node {name:?}")),
-                    FlakeInput::Follow(_) => bail!("Chained 'follows' is not supported"),
-                }
-            })?;
-
-            let nar_hash = &target
+        .map(|(input_name, node)| {
+            let hash = &node
                 .locked
                 .as_ref()
-                .with_context(|| format!("Flake input {input_name:?} is not locked"))?
+                .with_context(|| format!("Input {input_name:?} is not locked"))?
                 .nar_hash;
 
             // Validate since we'll wrap this in Nix strings below.
             ensure!(
-                nar_hash.bytes().all(|b| b != b'\\' && b != b'"'),
-                "Invalid nar hash"
+                hash.bytes().all(|b| b != b'\\' && b != b'"'),
+                "Invalid nar hash",
             );
-
-            Ok((input_name, target.flake, nar_hash))
+            Ok(format!("\"{hash}\" "))
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<String>>()?;
 
-    // Trivial case to skip calling Nix.
-    if inputs.is_empty() {
-        return Ok(HashMap::new());
-    }
-
-    let hashes = inputs
-        .iter()
-        .flat_map(|(_, _, hash)| ["\"", hash, "\" "])
-        .collect::<String>();
     let store_paths = nix_eval_expr_json::<Vec<String>>(
         nix_command,
         &format!(
@@ -93,17 +67,74 @@ pub fn resolve_flake_locked_inputs(
     )?;
 
     let resolved = std::iter::zip(inputs, store_paths)
-        .map(|((name, is_flake, _), store_path)| {
-            (
-                name.to_owned(),
-                ResolvedInput {
-                    is_flake,
-                    store_path,
-                },
-            )
+        .map(|((input_name, node), store_path)| {
+            let resolved = ResolvedInput {
+                is_flake: node.flake,
+                store_path,
+            };
+            (input_name.to_owned(), resolved)
         })
         .collect();
     Ok(resolved)
+}
+
+#[derive(Debug)]
+struct Resolver<'a> {
+    lock: &'a FlakeLock,
+    // Prevent infinite recursion when `follows` form a cycle.
+    visiting: HashSet<(&'a str, &'a str)>,
+}
+
+impl<'a> Resolver<'a> {
+    fn new(lock: &'a FlakeLock) -> Self {
+        Self {
+            lock,
+            visiting: HashSet::with_capacity(lock.nodes.len()),
+        }
+    }
+
+    fn get_node(&mut self, node_id: &str) -> Result<&'a FlakeNode> {
+        self.lock
+            .nodes
+            .get(node_id)
+            .with_context(|| format!("Missing node {node_id:?}"))
+    }
+
+    fn resolve_input_node_id(&mut self, input: &'a FlakeInput) -> Result<&'a str> {
+        let path = match input {
+            FlakeInput::Node(node_id) => return Ok(node_id),
+            FlakeInput::Follow(path) => path,
+        };
+        path.iter()
+            .try_fold(&*self.lock.root, |node_id, input_name| {
+                let input = self
+                    .get_node(node_id)?
+                    .inputs
+                    .get(input_name)
+                    .with_context(|| {
+                        format!("Missing input {input_name:?} for node {node_id:?}")
+                    })?;
+                ensure!(
+                    self.visiting.insert((node_id, input_name)),
+                    "Cyclic 'follows'"
+                );
+                let ret = self.resolve_input_node_id(input)?;
+                self.visiting.remove(&(node_id, input_name));
+                Ok(ret)
+            })
+    }
+
+    fn resolve_node_inputs(&mut self, node_id: &str) -> Result<Vec<(&'a str, &'a FlakeNode)>> {
+        self.get_node(node_id)?
+            .inputs
+            .iter()
+            .map(|(input_name, input)| {
+                let target_id = self.resolve_input_node_id(input)?;
+                let resolved = self.get_node(target_id)?;
+                Ok((&**input_name, resolved))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
