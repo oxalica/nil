@@ -40,6 +40,7 @@
           clippyFlags = lib.concatStringsSep " " [
             "-D" "warnings"
             "-D" "clippy::dbg_macro"
+            "-D" "clippy::todo"
           ];
 
           pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
