@@ -125,7 +125,10 @@ fn goto_flake_input(
     if explicit_inputs.get(name_str) == Some(&name_id)
         || param_inputs.get(name_str) == Some(&name_id)
     {
-        let target = flake_info.input_store_paths.get(name_str)?.join(FLAKE_FILE);
+        let target = flake_info
+            .input_store_paths
+            .get(name_str)?
+            .join(FLAKE_FILE)?;
         return Some(GotoDefinitionResult::Path(target));
     }
 

@@ -13,31 +13,49 @@ pub struct SourceRootId(pub u32);
 
 /// An path in the virtual filesystem.
 #[cfg(unix)]
-#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct VfsPath(PathBuf);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum VfsPath {
+    Path(PathBuf),
+    Virtual(String),
+}
 
 impl VfsPath {
     /// Construct a new filesystem path.
     #[must_use]
     pub fn new(path: impl AsRef<Path>) -> Self {
-        Self(path.as_ref().to_path_buf())
+        Self::Path(path.as_ref().to_path_buf())
     }
 
     /// Return a reference to the underlying `Path`.
     #[must_use]
-    pub fn as_path(&self) -> &Path {
-        &self.0
+    pub fn as_path(&self) -> Option<&Path> {
+        match self {
+            Self::Path(path) => Some(path),
+            Self::Virtual(_) => None,
+        }
     }
 
     /// Extends `self` with `path`.
-    pub fn push(&mut self, path: &str) {
-        self.0.push(path);
+    ///
+    /// Returns `None` if the path is not extentable, otherwise returns `Some(())`.
+    #[must_use]
+    pub fn push(&mut self, path: &str) -> Option<()> {
+        match self {
+            Self::Path(this) => {
+                this.push(path);
+                Some(())
+            }
+            Self::Virtual(_) => None,
+        }
     }
 
     /// Creates a new `VfsPath` with `path` adjoined to self.
     #[must_use]
-    pub fn join(&self, path: &str) -> Self {
-        Self(self.0.join(path))
+    pub fn join(&self, path: &str) -> Option<Self> {
+        match self {
+            Self::Path(this) => Some(Self::Path(this.join(path))),
+            Self::Virtual(_) => None,
+        }
     }
 
     /// Truncates `self` to the parent of it.
@@ -45,25 +63,39 @@ impl VfsPath {
     /// Returns `false` and does nothing if `self` has no parent,
     /// otherwise, return `true`.
     pub fn pop(&mut self) -> bool {
-        self.0.pop()
+        match self {
+            Self::Path(this) => this.pop(),
+            Self::Virtual(_) => false,
+        }
     }
 
     /// Returns an `impl Display` struct for human.
     #[must_use]
     pub fn display(&self) -> impl fmt::Display + '_ {
-        self.0.display()
+        struct Display<'a>(&'a VfsPath);
+
+        impl fmt::Display for Display<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self.0 {
+                    VfsPath::Path(path) => path.display().fmt(f),
+                    VfsPath::Virtual(id) => write!(f, "(virtual path {id})"),
+                }
+            }
+        }
+
+        Display(self)
     }
 }
 
 impl From<PathBuf> for VfsPath {
     fn from(path: PathBuf) -> Self {
-        Self(path)
+        Self::Path(path)
     }
 }
 
 impl From<&'_ Path> for VfsPath {
     fn from(path: &'_ Path) -> Self {
-        Self(path.to_path_buf())
+        Self::Path(path.to_path_buf())
     }
 }
 

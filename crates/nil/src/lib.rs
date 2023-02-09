@@ -30,16 +30,28 @@ impl fmt::Display for LspError {
 
 impl std::error::Error for LspError {}
 
-pub(crate) trait UrlExt {
+pub(crate) trait UrlExt: Sized {
     fn to_vfs_path(&self) -> Result<VfsPath>;
+    fn from_vfs_path(path: &VfsPath) -> Self;
 }
 
 impl UrlExt for Url {
     fn to_vfs_path(&self) -> Result<VfsPath> {
-        let path = self
-            .to_file_path()
-            .map_err(|()| anyhow!("Non-file URI: {self}"))?;
-        Ok(path.try_into()?)
+        // `Url::to_file_path` doesn't do schema check.
+        if self.scheme() == "file" {
+            let path = self
+                .to_file_path()
+                .map_err(|()| anyhow!("Invalid file URI: {self}"))?;
+            return Ok(path.into());
+        }
+        Ok(VfsPath::Virtual(self.as_str().to_owned()))
+    }
+
+    fn from_vfs_path(vpath: &VfsPath) -> Self {
+        match vpath {
+            VfsPath::Path(path) => Url::from_file_path(path).expect("VfsPath must be absolute"),
+            VfsPath::Virtual(uri) => uri.parse().expect("Virtual path must be an URI"),
+        }
     }
 }
 

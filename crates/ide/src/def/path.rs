@@ -22,14 +22,21 @@ impl Path {
             // TODO
             PathAnchor::Absolute | PathAnchor::Home | PathAnchor::Search(_) => return None,
         };
+
         let sid = db.file_source_root(file);
         let root = db.source_root(sid);
         let mut vpath = root.path_for_file(file).clone();
+
+        // Virtual paths are all standalone.
+        if matches!(vpath, VfsPath::Virtual(_)) {
+            return None;
+        }
+
         for _ in 0..(data.supers.saturating_add(1)) {
             // Allows extra `..`s.
             vpath.pop();
         }
-        vpath.push(&data.relative_path);
+        vpath.push(&data.relative_path)?;
         Some(vpath)
     }
 

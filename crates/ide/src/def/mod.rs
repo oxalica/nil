@@ -166,7 +166,7 @@ impl Module {
                 };
                 let mut vpath = path.resolve(db)?;
                 source_root.file_for_path(&vpath).or_else(|| {
-                    vpath.push(DEFAULT_IMPORT_FILE);
+                    vpath.push(DEFAULT_IMPORT_FILE)?;
                     source_root.file_for_path(&vpath)
                 })
             })

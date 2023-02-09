@@ -39,7 +39,7 @@ pub(crate) fn goto_definition(
     let targets = match ret {
         None => return Ok(None),
         Some(GotoDefinitionResult::Path(vpath)) => {
-            let path = vpath.as_path();
+            let Some(path) = vpath.as_path() else { return Ok(None) };
             let default_child = path.join(DEFAULT_IMPORT_FILE);
             let target_path = if path.is_file() {
                 path
@@ -282,7 +282,7 @@ pub(crate) fn document_links(
                 LinkTarget::Uri(uri) => uri,
                 // FIXME: Duplicated with `goto_definition`.
                 LinkTarget::VfsPath(vpath) => {
-                    let path = vpath.as_path();
+                    let path = vpath.as_path()?;
                     let default_child = path.join(DEFAULT_IMPORT_FILE);
                     let target_path = if path.is_file() {
                         path
