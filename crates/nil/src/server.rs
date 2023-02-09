@@ -347,7 +347,7 @@ impl Server {
 
         let vfs = self.vfs.clone();
         let task = move || {
-            let flake_vpath = VfsPath::try_from(&*flake_path)?;
+            let flake_vpath = VfsPath::new(&flake_path);
             let flake_src = match fs::read_to_string(&flake_path) {
                 Ok(src) => src,
                 // Not a flake.
@@ -399,8 +399,8 @@ impl Server {
             let input_store_paths = inputs
                 .into_iter()
                 .filter(|(_, input)| Path::new(&input.store_path).exists())
-                .map(|(key, input)| Ok((key, VfsPath::new(input.store_path)?)))
-                .collect::<Result<HashMap<_, _>>>()?;
+                .map(|(key, input)| (key, VfsPath::new(input.store_path)))
+                .collect::<HashMap<_, _>>();
 
             Ok(LoadFlakeResult::IsFlake {
                 missing_inputs: input_store_paths.len() != inputs_cnt,

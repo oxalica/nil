@@ -117,7 +117,7 @@ fn source_root_flake() {
             flake_file: file,
             input_store_paths: HashMap::from_iter([(
                 "nixpkgs".into(),
-                VfsPath::new("/nix/store/eeee").unwrap(),
+                VfsPath::new("/nix/store/eeee"),
             )]),
         },
     );

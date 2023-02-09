@@ -92,10 +92,7 @@ impl AnalysisHost {
         let file = FileId(0);
         change.change_file(file, src.into());
         let mut file_set = FileSet::default();
-        file_set.insert(
-            file,
-            VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap(),
-        );
+        file_set.insert(file, VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")));
         change.set_roots(vec![SourceRoot::new_local(file_set, Some(file))]);
         let mut this = Self::new();
         this.apply_change(change);

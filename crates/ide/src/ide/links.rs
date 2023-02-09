@@ -32,7 +32,9 @@ pub(crate) fn links(db: &dyn DefDatabase, file_id: FileId) -> Vec<Link> {
             }
             Literal::Path(p) => {
                 let vpath = p.resolve(db)?;
-                (vpath.as_str().to_owned(), LinkTarget::VfsPath(vpath))
+                // Walkaround a lifetime issue.
+                let tooltip = vpath.display().to_string();
+                (tooltip, LinkTarget::VfsPath(vpath))
             }
             _ => return None,
         };
@@ -131,7 +133,7 @@ mod tests {
             .map(|link| {
                 let target = match &link.target {
                     LinkTarget::Uri(uri) => uri.to_string(),
-                    LinkTarget::VfsPath(p) => p.as_str().to_owned(),
+                    LinkTarget::VfsPath(p) => p.display().to_string(),
                 };
                 format!("{} -> {}: {}\n", &src[link.range], target, link.tooltip,)
             })

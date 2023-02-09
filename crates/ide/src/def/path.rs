@@ -26,9 +26,10 @@ impl Path {
         let root = db.source_root(sid);
         let mut vpath = root.path_for_file(file).clone();
         for _ in 0..(data.supers.saturating_add(1)) {
-            vpath.pop()?;
+            // Allows extra `..`s.
+            vpath.pop();
         }
-        vpath.append(&data.relative);
+        vpath.push(&data.relative_path);
         Some(vpath)
     }
 
@@ -45,29 +46,37 @@ impl Path {
 pub struct PathData {
     anchor: PathAnchor,
     supers: u8,
-    // Normalized relative path.
-    relative: VfsPath,
+    // Normalized relative path separated by `/`.
+    relative_path: Box<str>,
 }
 
 impl PathData {
     pub(crate) fn normalize(anchor: PathAnchor, segments: &str) -> Self {
-        let mut relative = VfsPath::root();
+        let mut relative_path = String::with_capacity(segments.len());
         let mut supers = 0u8;
         for seg in segments
             .split('/')
             .filter(|&seg| !seg.is_empty() && seg != ".")
         {
             if seg != ".." {
-                relative.push_segment(seg);
-            // Extra ".." has no effect for absolute path.
-            } else if relative.pop().is_none() && anchor != PathAnchor::Absolute {
+                relative_path.push_str(seg);
+                relative_path.push('/');
+            } else if !relative_path.is_empty() {
+                relative_path.pop();
+                relative_path.truncate(relative_path.rfind('/').map_or(0, |i| i + 1));
+                // Extra ".." has no effect for absolute path.
+            } else if anchor != PathAnchor::Absolute {
                 supers = supers.saturating_add(1);
             }
         }
+
+        // Trailing `/` if there are any segments.
+        relative_path.pop();
+
         Self {
             anchor,
             supers,
-            relative,
+            relative_path: relative_path.into_boxed_str(),
         }
     }
 }
@@ -83,34 +92,44 @@ pub enum PathAnchor {
 #[cfg(test)]
 mod tests {
     use super::{PathAnchor, PathData};
-    use crate::{FileId, VfsPath};
+    use crate::FileId;
 
     #[test]
-    #[rustfmt::skip]
     fn normalize_relative() {
-        for anchor in [PathAnchor::Relative(FileId(0)), PathAnchor::Home, PathAnchor::Search("foo".into())] {
+        for anchor in [
+            PathAnchor::Relative(FileId(0)),
+            PathAnchor::Home,
+            PathAnchor::Search("foo".into()),
+        ] {
             let norm = |s| PathData::normalize(anchor.clone(), s);
-            let path = |supers, p: &str| PathData { anchor: anchor.clone(), supers, relative: VfsPath::new(p).unwrap() };
-            assert_eq!(norm(""), path(0, "/"));
-            assert_eq!(norm("./."), path(0, "/"));
-            assert_eq!(norm("./.."), path(1, "/"));
-            assert_eq!(norm("../."), path(1, "/"));
-            assert_eq!(norm("foo/./bar/../.baz"), path(0, "/foo/.baz"));
-            assert_eq!(norm("../../foo"), path(2, "/foo"));
+            let path = |supers, p: &str| PathData {
+                anchor: anchor.clone(),
+                supers,
+                relative_path: p.into(),
+            };
+            assert_eq!(norm(""), path(0, ""));
+            assert_eq!(norm("./."), path(0, ""));
+            assert_eq!(norm("./.."), path(1, ""));
+            assert_eq!(norm("../."), path(1, ""));
+            assert_eq!(norm("foo/./bar/../.baz"), path(0, "foo/.baz"));
+            assert_eq!(norm("../../foo"), path(2, "foo"));
         }
     }
 
     #[test]
-    #[rustfmt::skip]
     fn normalize_absolute() {
         let anchor = PathAnchor::Absolute;
         let norm = |s| PathData::normalize(anchor.clone(), s);
-            let path = |p: &str| PathData { anchor: anchor.clone(), supers: 0, relative: VfsPath::new(p).unwrap() };
-        assert_eq!(norm("/"), path("/"));
-        assert_eq!(norm("./."), path("/"));
-        assert_eq!(norm("./.."), path("/"));
-        assert_eq!(norm("../."), path("/"));
-        assert_eq!(norm("foo/./bar/../.baz"), path("/foo/.baz"));
-        assert_eq!(norm("../../foo"), path("/foo"));
+        let path = |p: &str| PathData {
+            anchor: anchor.clone(),
+            supers: 0,
+            relative_path: p.into(),
+        };
+        assert_eq!(norm("/"), path(""));
+        assert_eq!(norm("./."), path(""));
+        assert_eq!(norm("./.."), path(""));
+        assert_eq!(norm("../."), path(""));
+        assert_eq!(norm("foo/./bar/../.baz"), path("foo/.baz"));
+        assert_eq!(norm("../../foo"), path("foo"));
     }
 }

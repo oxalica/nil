@@ -41,8 +41,7 @@ impl TestDB {
             file_set.insert(file, path.clone());
             change.change_file(file, text.to_owned().into());
         }
-        let entry =
-            file_set.file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap());
+        let entry = file_set.file_for_path(&VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")));
         change.set_roots(vec![SourceRoot::new_local(file_set, entry)]);
         let flake_graph = FlakeGraph {
             nodes: HashMap::from_iter(f.flake_info.clone().map(|info| (SourceRootId(0), info))),
@@ -84,10 +83,7 @@ impl ops::Index<usize> for Fixture {
 impl<'a> ops::Index<&'a str> for Fixture {
     type Output = FileId;
     fn index(&self, index: &'a str) -> &Self::Output {
-        let id = self
-            .files
-            .get_index_of(&VfsPath::new(index).unwrap())
-            .unwrap();
+        let id = self.files.get_index_of(&VfsPath::new(index)).unwrap();
         &self.file_ids[id]
     }
 }
@@ -112,14 +108,14 @@ impl Fixture {
 
                 let mut iter = header.split(' ');
                 let path = iter.next().context("Missing path")?;
-                let path = VfsPath::new(path)?;
+                let path = VfsPath::new(path);
 
                 for prop in iter {
                     if let Some((name, target)) = prop
                         .strip_prefix("input:")
                         .and_then(|input| input.split_once('='))
                     {
-                        let target = VfsPath::new(target)?;
+                        let target = VfsPath::new(target);
                         this.flake_info
                             .get_or_insert_with(|| FlakeInfo {
                                 flake_file: cur_file,
@@ -139,7 +135,7 @@ impl Fixture {
             } else {
                 if cur_path.is_none() {
                     missing_header = true;
-                    cur_path = Some(VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")).unwrap());
+                    cur_path = Some(VfsPath::new(format!("/{DEFAULT_IMPORT_FILE}")));
                 }
 
                 let mut iter = line.chars().peekable();

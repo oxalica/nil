@@ -1,7 +1,7 @@
 use salsa::Durability;
 use std::collections::HashMap;
 use std::fmt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use syntax::{TextRange, TextSize};
 
@@ -11,108 +11,61 @@ pub struct FileId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceRootId(pub u32);
 
-/// An absolute Unix-like path in the virtual filesystem.
-///
-/// It must be in form `(/[^/]+)+` and every segment must be non-empty and not `.` or `..`.
-/// The root represented by an empty path.
+/// An path in the virtual filesystem.
+#[cfg(unix)]
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct VfsPath(String);
+pub struct VfsPath(PathBuf);
 
 impl VfsPath {
-    pub fn root() -> Self {
-        Self::default()
+    /// Construct a new filesystem path.
+    #[must_use]
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        Self(path.as_ref().to_path_buf())
     }
 
-    /// Construct a new absolute path in Unix-like format.
-    pub fn new(s: impl Into<String>) -> Result<Self, ParseVfsPathError> {
-        let s = s.into();
-        if s == "/" {
-            return Ok(Self::root());
-        }
-        if !s.starts_with('/') || s[1..].split('/').any(|seg| matches!(seg, "" | "." | "..")) {
-            return Err(ParseVfsPathError);
-        }
-        Ok(Self(s))
+    /// Return a reference to the underlying `Path`.
+    #[must_use]
+    pub fn as_path(&self) -> &Path {
+        &self.0
     }
 
-    /// Append a path segment at the end and return the new path.
-    /// Panic if it is empty or contains `/`.
-    pub fn join_segment(&self, segment: &str) -> Self {
-        assert!(!segment.is_empty() && !segment.contains('/'));
-        let mut buf = String::with_capacity(self.0.len() + 1 + segment.len());
-        buf += &self.0;
-        buf += "/";
-        buf += segment;
-        Self(buf)
+    /// Extends `self` with `path`.
+    pub fn push(&mut self, path: &str) {
+        self.0.push(path);
     }
 
-    /// Assume another VfsPath as relative and append it to this one.
-    pub fn append(&mut self, relative: &Self) {
-        self.0.push_str(&relative.0);
+    /// Creates a new `VfsPath` with `path` adjoined to self.
+    #[must_use]
+    pub fn join(&self, path: &str) -> Self {
+        Self(self.0.join(path))
     }
 
-    /// Push a path segment at the end.
-    /// Panic if it is empty or contains `/`.
-    pub fn push_segment(&mut self, segment: &str) {
-        assert!(!segment.is_empty() && !segment.contains('/'));
-        self.0 += "/";
-        self.0 += segment;
+    /// Truncates `self` to the parent of it.
+    ///
+    /// Returns `false` and does nothing if `self` has no parent,
+    /// otherwise, return `true`.
+    pub fn pop(&mut self) -> bool {
+        self.0.pop()
     }
 
-    /// Pop the last segment from the end.
-    /// Returns `None` if it is already the root.
-    pub fn pop(&mut self) -> Option<()> {
-        self.0.truncate(self.0.rsplit_once('/')?.0.len());
-        Some(())
-    }
-
-    /// Get the path in Unix-like form.
-    pub fn as_str(&self) -> &str {
-        if !self.0.is_empty() {
-            &self.0
-        } else {
-            "/"
-        }
+    /// Returns an `impl Display` struct for human.
+    #[must_use]
+    pub fn display(&self) -> impl fmt::Display + '_ {
+        self.0.display()
     }
 }
 
-impl TryFrom<PathBuf> for VfsPath {
-    type Error = ParseVfsPathError;
-
-    fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
-        (&*path).try_into()
+impl From<PathBuf> for VfsPath {
+    fn from(path: PathBuf) -> Self {
+        Self(path)
     }
 }
 
-impl TryFrom<&'_ Path> for VfsPath {
-    type Error = ParseVfsPathError;
-
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        let mut ret = Self(String::with_capacity(path.as_os_str().len()));
-        for comp in path.components() {
-            match comp {
-                Component::RootDir => {}
-                Component::Normal(seg) => {
-                    ret.push_segment(seg.to_str().ok_or(ParseVfsPathError)?);
-                }
-                _ => return Err(ParseVfsPathError),
-            }
-        }
-        Ok(ret)
+impl From<&'_ Path> for VfsPath {
+    fn from(path: &'_ Path) -> Self {
+        Self(path.to_path_buf())
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub struct ParseVfsPathError;
-
-impl fmt::Display for ParseVfsPathError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Invalid VfsPath")
-    }
-}
-
-impl std::error::Error for ParseVfsPathError {}
 
 /// A set of [`VfsPath`]s identified by [`FileId`]s.
 #[derive(Default, Clone, PartialEq, Eq)]

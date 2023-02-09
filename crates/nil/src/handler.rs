@@ -11,7 +11,6 @@ use lsp_types::{
     SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
 };
 use nix_interop::DEFAULT_IMPORT_FILE;
-use std::path::Path;
 use std::process;
 use std::sync::Arc;
 use text_size::TextRange;
@@ -40,7 +39,7 @@ pub(crate) fn goto_definition(
     let targets = match ret {
         None => return Ok(None),
         Some(GotoDefinitionResult::Path(vpath)) => {
-            let path = Path::new(vpath.as_str());
+            let path = vpath.as_path();
             let default_child = path.join(DEFAULT_IMPORT_FILE);
             let target_path = if path.is_file() {
                 path
@@ -283,7 +282,7 @@ pub(crate) fn document_links(
                 LinkTarget::Uri(uri) => uri,
                 // FIXME: Duplicated with `goto_definition`.
                 LinkTarget::VfsPath(vpath) => {
-                    let path = Path::new(vpath.as_str());
+                    let path = vpath.as_path();
                     let default_child = path.join(DEFAULT_IMPORT_FILE);
                     let target_path = if path.is_file() {
                         path

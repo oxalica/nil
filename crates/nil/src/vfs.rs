@@ -125,7 +125,7 @@ impl Vfs {
 
     pub fn uri_for_file(&self, file: FileId) -> Url {
         let vpath = self.local_file_set.path_for_file(file);
-        Url::from_file_path(vpath.as_str()).expect("VfsPath is absolute")
+        Url::from_file_path(vpath.as_path()).expect("VfsPath is absolute")
     }
 
     pub fn take_change(&mut self) -> Change {
