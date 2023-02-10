@@ -1,5 +1,5 @@
 use crate::def::{AstPtr, BindingValue, Expr, NameKind};
-use crate::ty::{AttrSource, Ty};
+use crate::ty::{self, AttrSource, DisplayConfig, Ty};
 use crate::{FileId, FilePos, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
@@ -7,6 +7,16 @@ use smol_str::SmolStr;
 use syntax::ast::{self, AstNode, Attr};
 use syntax::semantic::AttrKind;
 use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
+
+use super::hover::TY_DETAILED_DISPLAY;
+
+pub const TY_SIGNATURE_DISPLAY: DisplayConfig = DisplayConfig {
+    max_lambda_lhs_depth: 2,
+    max_list_depth: 4,
+    max_attrset_depth: 0,
+    max_attrset_fields: 0,
+    lambda_need_parentheses: false,
+};
 
 #[rustfmt::skip]
 const EXPR_POS_KEYWORDS: &[&str] = &[
@@ -33,10 +43,12 @@ pub struct CompletionItem {
     pub replace: SmolStr,
     /// What item (struct, function, etc) are we completing.
     pub kind: CompletionItemKind,
-    /// A brief summary.
-    pub brief: Option<String>,
+    /// Type signature.
+    pub signature: Option<String>,
+    /// A brief description.
+    pub description: Option<String>,
     /// The detailed documentation.
-    pub doc: Option<String>,
+    pub documentation: Option<String>,
 }
 
 /// The type of the completion item.
@@ -210,18 +222,25 @@ fn complete_expr(
         feed(keyword_to_completion("in", source_range));
     }
 
+    let infer = db.infer(file_id);
+
     // Names in current scopes.
     scopes
         .ancestors(scope_id)
         .filter_map(|scope| scope.as_definitions())
         .flatten()
-        .map(|(text, name)| CompletionItem {
+        .map(|(text, &name)| CompletionItem {
             label: text.clone(),
             source_range,
             replace: text.clone(),
-            kind: module[*name].kind.into(),
-            brief: None,
-            doc: None,
+            kind: module[name].kind.into(),
+            signature: {
+                let ty = infer.ty_for_name(name);
+                ty.is_known()
+                    .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string())
+            },
+            description: None,
+            documentation: None,
         })
         .for_each(&mut feed);
 
@@ -229,13 +248,28 @@ fn complete_expr(
     ALL_BUILTINS
         .entries()
         .filter(|(_, b)| b.is_global)
-        .map(|(name, b)| CompletionItem {
-            label: name.into(),
-            source_range,
-            replace: name.into(),
-            kind: b.kind.into(),
-            brief: Some(b.summary.into()),
-            doc: b.doc.map(|s| s.to_owned()),
+        .map(|(name, b)| {
+            let ty = ty::known::BUILTINS
+                .as_attrset()
+                .unwrap()
+                .get(name)
+                .cloned()
+                .unwrap_or(Ty::Unknown);
+            CompletionItem {
+                label: name.into(),
+                source_range,
+                replace: name.into(),
+                kind: b.kind.into(),
+                signature: ty
+                    .is_known()
+                    .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+                description: Some(format!(
+                    "{}\n{}",
+                    ty.display_with(TY_DETAILED_DISPLAY),
+                    b.summary,
+                )),
+                documentation: b.doc.map(|s| s.to_owned()),
+            }
         })
         .for_each(&mut feed);
 
@@ -315,8 +349,9 @@ fn complete_attrpath(
                             source_range,
                             replace: name,
                             kind: CompletionItemKind::LetBinding,
-                            brief: None,
-                            doc: None,
+                            signature: None,
+                            description: None,
+                            documentation: None,
                         }),
                 );
             }
@@ -363,8 +398,9 @@ fn complete_attrpath(
                         AttrSource::Unknown => CompletionItemKind::Field,
                         AttrSource::Name(name) => module[name].kind.into(),
                     },
-                    brief: Some(ty.display().to_string()),
-                    doc: None,
+                    signature: Some(ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+                    description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
+                    documentation: None,
                 }),
         );
 
@@ -399,8 +435,11 @@ fn complete_pat_param(
             source_range,
             replace: name.clone(),
             kind: CompletionItemKind::Param,
-            brief: Some(ty.display().to_string()),
-            doc: None,
+            signature: ty
+                .is_known()
+                .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+            description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
+            documentation: None,
         })
         .collect();
     Some(items)
@@ -411,8 +450,9 @@ fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
         source_range,
         replace: kw.into(),
         kind: CompletionItemKind::Keyword,
-        brief: None,
-        doc: None,
+        signature: None,
+        description: None,
+        documentation: None,
     }
 }
 

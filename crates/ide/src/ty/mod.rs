@@ -43,7 +43,7 @@ macro_rules! ty {
     };
 }
 
-mod fmt;
+mod display;
 mod infer;
 pub mod known;
 mod union_find;
@@ -53,9 +53,10 @@ mod tests;
 
 use crate::def::NameId;
 use crate::{DefDatabase, FileId};
+use std::fmt;
 use std::sync::Arc;
 
-pub use fmt::TyDisplay;
+pub use display::{Config as DisplayConfig, TyDisplay};
 pub use infer::InferenceResult;
 use smol_str::SmolStr;
 
@@ -87,6 +88,10 @@ pub enum Ty {
 }
 
 impl Ty {
+    pub fn is_known(&self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
+
     pub fn as_attrset(&self) -> Option<&Attrset> {
         match self {
             Self::Attrset(v) => Some(v),
@@ -94,18 +99,18 @@ impl Ty {
         }
     }
 
-    pub fn display(&self) -> TyDisplay<'_> {
-        TyDisplay::new(self, 2)
+    pub fn display_with(&self, config: display::Config) -> TyDisplay<'_> {
+        TyDisplay::new(self, config)
     }
 
     pub fn debug(&self) -> TyDisplay<'_> {
-        TyDisplay::new(self, usize::MAX)
+        self.display_with(display::Config::FULL)
     }
 }
 
-impl std::fmt::Debug for Ty {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&TyDisplay::new(self, usize::MAX), f)
+impl fmt::Debug for Ty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.debug(), f)
     }
 }
 

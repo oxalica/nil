@@ -224,7 +224,7 @@ fn flake_file() {
     outputs = { self, nixpkgs }: { };
 }
               ",
-        expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, … }"],
+        expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, shortRev: string, sourceInfo: { dir: string, id: string, narHash: string, owner: string, ref: string, repo: string, rev: string, submodules: bool, type: string, url: string }, submodules: bool }"],
     );
 }
 

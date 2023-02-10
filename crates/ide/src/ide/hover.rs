@@ -1,4 +1,5 @@
 use crate::def::{AstPtr, Expr, ResolveResult};
+use crate::ty::{DisplayConfig, Ty};
 use crate::{FilePos, NameKind, TyDatabase};
 use builtin::ALL_BUILTINS;
 use if_chain::if_chain;
@@ -6,6 +7,15 @@ use std::fmt::Write;
 use syntax::ast::{self, AstNode};
 use syntax::semantic::AttrKind;
 use syntax::{best_token_at_offset, match_ast, TextRange};
+
+// Kinda detailed, but don't flood users with thousands of fields for `pkgs`.
+pub const TY_DETAILED_DISPLAY: DisplayConfig = DisplayConfig {
+    max_lambda_lhs_depth: 4,
+    max_list_depth: 4,
+    max_attrset_depth: 2,
+    max_attrset_fields: 4,
+    lambda_need_parentheses: false,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HoverResult {
@@ -55,7 +65,10 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
                     Expr::Reference(text) => text,
                     _ => return None,
                 };
-                let ty = infer.ty_for_expr(expr).display().to_string();
+                let ty = infer
+                    .ty_for_expr(expr)
+                    .display_with(TY_DETAILED_DISPLAY)
+                    .to_string();
                 let mut markup = format!("`with` attribute `{text}`\n`{ty}`\nEnvironments:");
                 for (&expr, i) in withs.iter().zip(1..) {
                     let ptr = source_map.node_for_expr(expr)?;
@@ -74,7 +87,10 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
     }
 
     if let Some(name) = name.or_else(|| source_map.name_for_node(ptr.clone())) {
-        let ty = infer.ty_for_name(name).display().to_string();
+        let ty = infer
+            .ty_for_name(name)
+            .display_with(TY_DETAILED_DISPLAY)
+            .to_string();
         let text = &module[name].text;
         let kind = match module[name].kind {
             NameKind::LetIn => "Let binding",
@@ -136,7 +152,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             name_node
                 .token()
                 .map_or_else(String::new, |t| t.text().into()),
-            ty.display(),
+            ty.display_with(TY_DETAILED_DISPLAY),
         );
         Some(HoverResult { range, markup })
     }) {
@@ -152,9 +168,11 @@ fn hover_builtin(name: &str, range: TextRange) -> Option<HoverResult> {
         .as_attrset()
         .unwrap()
         .get(name)
-        .map_or(String::default(), |ty| ty.display().to_string());
+        .cloned()
+        .unwrap_or(Ty::Unknown);
     let markup = format!(
-        "`builtins.{name}`\n`{ty}`\n\n{}\n{}",
+        "`builtins.{name}`\n`{}`\n\n{}\n{}",
+        ty.display_with(TY_DETAILED_DISPLAY),
         b.summary,
         b.doc.unwrap_or("(No documentation from Nix)"),
     );
@@ -396,12 +414,12 @@ mod tests {
             "builtins.true$0.trailing",
             "builtins.true",
             expect![[r#"
-            `builtins.true`
-            `bool`
+                `builtins.true`
+                `bool`
 
-            `builtins.true`
-            (No documentation from Nix)
-        "#]],
+                `builtins.true`
+                (No documentation from Nix)
+            "#]],
         );
 
         // Invalid builtins.
@@ -412,7 +430,7 @@ mod tests {
             "builtins",
             expect![[r#"
                 `builtins.builtins`
-                `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, any: (? → bool) → [?] → bool, appendContext: (? → bool) → { }, attrNames: { } → [string], attrValues: { } → [?], … }`
+                `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, … }`
 
                 `builtins.builtins`
                 (No documentation from Nix)
