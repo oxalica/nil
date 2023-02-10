@@ -1,4 +1,4 @@
-use super::{Attrset, Ty};
+use super::{AttrSource, Attrset, Ty};
 use once_cell::sync::Lazy;
 
 pub static DERIVATION: Lazy<Ty> = Lazy::new(|| {
@@ -83,7 +83,10 @@ pub fn flake(inputs: &[&str]) -> Ty {
     );
 
     let inputs_ty = Ty::Attrset(Attrset::from_internal(
-        inputs.iter().copied().map(|name| (name, input_ty.clone())),
+        inputs
+            .iter()
+            .copied()
+            .map(|name| (name, input_ty.clone(), AttrSource::Unknown)),
     ));
 
     let outputs_param_ty = Ty::Attrset(Attrset::from_internal(
@@ -91,7 +94,7 @@ pub fn flake(inputs: &[&str]) -> Ty {
             .iter()
             .copied()
             .chain(Some("self"))
-            .map(|name| (name, FLAKE.clone())),
+            .map(|name| (name, FLAKE.clone(), AttrSource::Unknown)),
     ));
 
     ty!({
@@ -158,14 +161,14 @@ pub static BUILTINS: Lazy<Ty> = Lazy::new(|| {
     let b = builtins();
     merge_attrset(
         &b,
-        &ty!({
+        &ty!({(AttrSource::Builtin)
             "builtins": (#b.clone()),
         }),
     )
 });
 
 fn builtins() -> Ty {
-    ty!({
+    ty!({(AttrSource::Builtin)
         "abort": (stringish -> !),
         "add": (number -> number -> number),
         "addErrorContext": (forall a, stringish -> a -> a),

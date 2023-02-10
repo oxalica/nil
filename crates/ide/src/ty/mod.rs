@@ -32,7 +32,13 @@ macro_rules! ty {
         // TODO: Rest type.
         $(let _ = ty!($rest_ty);)?
         $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal([
-            $(($key, ty!($ty)),)*
+            $(($key, ty!($ty), $crate::ty::AttrSource::Unknown),)*
+        ]))
+    }};
+    ({($src:expr) $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
+        $(let _ = ty!($rest_ty);)?
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal([
+            $(($key, ty!($ty), $src),)*
         ]))
     }};
     ($arg:tt -> $($ret:tt)*) => {
@@ -130,10 +136,10 @@ impl Attrset {
     /// # Panics
     /// The given iterator must have no duplicated fields, or it'll panic.
     #[track_caller]
-    pub fn from_internal<'a>(iter: impl IntoIterator<Item = (&'a str, Ty)>) -> Self {
+    pub fn from_internal<'a>(iter: impl IntoIterator<Item = (&'a str, Ty, AttrSource)>) -> Self {
         let mut set = iter
             .into_iter()
-            .map(|(name, ty)| (SmolStr::from(name), ty, AttrSource::Unknown))
+            .map(|(name, ty, src)| (SmolStr::from(name), ty, src))
             .collect::<Arc<[_]>>();
         Arc::get_mut(&mut set)
             .unwrap()
@@ -178,7 +184,8 @@ pub enum AttrSource {
     Unknown,
     /// Defined by a name.
     Name(NameId),
-    // TODO: Builtins.
+    /// A builtin name.
+    Builtin,
 }
 
 fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {

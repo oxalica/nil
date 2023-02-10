@@ -248,29 +248,7 @@ fn complete_expr(
     ALL_BUILTINS
         .entries()
         .filter(|(_, b)| b.is_global)
-        .map(|(name, b)| {
-            let ty = ty::known::BUILTINS
-                .as_attrset()
-                .unwrap()
-                .get(name)
-                .cloned()
-                .unwrap_or(Ty::Unknown);
-            CompletionItem {
-                label: name.into(),
-                source_range,
-                replace: name.into(),
-                kind: b.kind.into(),
-                signature: ty
-                    .is_known()
-                    .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
-                description: Some(format!(
-                    "{}\n{}",
-                    ty.display_with(TY_DETAILED_DISPLAY),
-                    b.summary,
-                )),
-                documentation: b.doc.map(|s| s.to_owned()),
-            }
-        })
+        .filter_map(|(name, _)| builtin_to_completion(source_range, name))
         .for_each(&mut feed);
 
     // TODO: Better sorting.
@@ -385,24 +363,32 @@ fn complete_attrpath(
             })?;
         let set = ty.as_attrset()?;
 
-        items.extend(
-            set.iter()
-                // We should not report current incomplete definition.
-                // This is covered by `no_incomplete_field`.
-                .filter(|(name, _, _)| **name != current_input)
-                .map(|(name, ty, src)| CompletionItem {
-                    label: name.clone(),
-                    source_range,
-                    replace: name.clone(),
-                    kind: match src {
-                        AttrSource::Unknown => CompletionItemKind::Field,
-                        AttrSource::Name(name) => module[name].kind.into(),
-                    },
-                    signature: Some(ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
-                    description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
-                    documentation: None,
-                }),
-        );
+        items.extend(set.iter().filter_map(|(name, ty, src)| {
+            // We should not report current incomplete definition.
+            // This is covered by `no_incomplete_field`.
+            if **name == current_input {
+                return None;
+            }
+
+            if src == AttrSource::Builtin {
+                return builtin_to_completion(source_range, name);
+            }
+
+            Some(CompletionItem {
+                label: name.clone(),
+                source_range,
+                replace: name.clone(),
+                kind: match src {
+                    AttrSource::Unknown => CompletionItemKind::Field,
+                    AttrSource::Name(name) => module[name].kind.into(),
+                    // Handled above.
+                    AttrSource::Builtin => unreachable!(),
+                },
+                signature: Some(ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+                description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
+                documentation: None,
+            })
+        }));
 
         Some(())
     })();
@@ -454,6 +440,31 @@ fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
         description: None,
         documentation: None,
     }
+}
+
+fn builtin_to_completion(source_range: TextRange, name: &str) -> Option<CompletionItem> {
+    let builtin = ALL_BUILTINS.get(name)?;
+    let ty = ty::known::BUILTINS
+        .as_attrset()
+        .unwrap()
+        .get(name)
+        .cloned()
+        .unwrap_or(Ty::Unknown);
+    Some(CompletionItem {
+        label: name.into(),
+        source_range,
+        replace: name.into(),
+        kind: builtin.kind.into(),
+        signature: ty
+            .is_known()
+            .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+        description: Some(format!(
+            "{}\n{}",
+            ty.display_with(TY_DETAILED_DISPLAY),
+            builtin.summary,
+        )),
+        documentation: builtin.doc.map(|s| s.to_owned()),
+    })
 }
 
 // Subsequence matching.
@@ -546,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn builtin() {
+    fn builtin_global() {
         check("toS$0", "toString", expect!["(BuiltinFunction) toString"]);
         check("t$0", "true", expect!["(BuiltinConst) true"]);
         check("b$0", "builtins", expect!["(BuiltinAttrset) builtins"]);
@@ -555,6 +566,15 @@ mod tests {
         check_no("__al$0", "__all");
         // No non-global builtins.
         check_no("attrN$0", "attrNames");
+    }
+
+    #[test]
+    fn builtin_attrpath() {
+        check(
+            "builtins.attrNa$0",
+            "attrNames",
+            expect!["(BuiltinFunction) builtins.attrNames"],
+        );
     }
 
     #[test]
