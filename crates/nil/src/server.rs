@@ -1,5 +1,5 @@
 use crate::config::{Config, CONFIG_KEY};
-use crate::{convert, handler, LspError, Vfs};
+use crate::{convert, handler, LspError, UrlExt, Vfs, MAX_FILE_LEN};
 use anyhow::{anyhow, bail, Context, Result};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
@@ -289,9 +289,19 @@ impl Server {
                 Ok(())
             })?
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
+                // Ignore the open event for unsupported files, thus all following interactions
+                // will error due to unopened files.
+                let len = params.text_document.text.len();
+                if len > MAX_FILE_LEN {
+                    st.show_message(
+                        MessageType::WARNING,
+                        "Disable LSP functionalities for too large file ({len} > {MAX_FILE_LEN})",
+                    );
+                    return Ok(());
+                }
                 let uri = &params.text_document.uri;
+                st.set_vfs_file_content(uri, params.text_document.text);
                 st.opened_files.insert(uri.clone(), FileData::default());
-                st.set_vfs_file_content(uri, params.text_document.text)?;
                 Ok(())
             })?
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
@@ -301,23 +311,27 @@ impl Server {
             })?
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 let mut vfs = st.vfs.write().unwrap();
+                let uri = &params.text_document.uri;
                 // Ignore files not maintained in Vfs.
-                let Ok(file) = vfs.file_for_uri(&params.text_document.uri) else { return Ok(()) };
+                let Ok(file) = vfs.file_for_uri(uri) else { return Ok(()) };
                 for change in params.content_changes {
-                    let del_range = match change.range {
-                        None => None,
-                        Some(range) => match convert::from_range(&vfs, file, range) {
-                            Ok((_, range)) => Some(range),
-                            Err(err) => {
-                                tracing::error!(
-                                    "File out of sync! Invalid change range {range:?}: {err}. Change: {change:?}",
-                                );
-                                continue;
-                            }
-                        },
-                    };
-                    if let Err(err) = vfs.change_file_content(file, del_range, &change.text) {
-                        tracing::error!("File is out of sync! Failed to apply change: {err}. Change: {change:?}");
+                    let ret = (|| {
+                        let del_range = match change.range {
+                            None => None,
+                            Some(range) => Some(convert::from_range(&vfs, file, range).ok()?.1),
+                        };
+                        vfs.change_file_content(file, del_range, &change.text)
+                            .ok()?;
+                        Some(())
+                    })();
+                    if ret.is_none() {
+                        tracing::error!(
+                            "File is out of sync! Failed to apply change for {uri}: {change:?}"
+                        );
+
+                        // Clear file states to minimize pollution of the broken state.
+                        st.opened_files.remove(uri);
+                        // TODO: Remove the file from Vfs.
                     }
                 }
                 drop(vfs);
@@ -369,7 +383,7 @@ impl Server {
                     // prefer the managed one. It contains more recent unsaved changes.
                     Ok(file) => file,
                     // Otherwise, cache the file content from disk.
-                    Err(_) => vfs.set_path_content(flake_vpath, flake_src)?,
+                    Err(_) => vfs.set_path_content(flake_vpath, flake_src),
                 }
             };
 
@@ -535,10 +549,10 @@ impl Server {
         }
     }
 
-    fn set_vfs_file_content(&mut self, uri: &Url, text: String) -> Result<()> {
-        self.vfs.write().unwrap().set_uri_content(uri, text)?;
+    fn set_vfs_file_content(&mut self, uri: &Url, text: String) {
+        let vpath = uri.to_vfs_path();
+        self.vfs.write().unwrap().set_path_content(vpath, text);
         self.apply_vfs_change();
-        Ok(())
     }
 
     fn apply_vfs_change(&mut self) {

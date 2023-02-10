@@ -44,39 +44,25 @@ impl Vfs {
         });
     }
 
-    pub fn set_uri_content(&mut self, uri: &Url, text: String) -> Result<()> {
-        let vpath = uri.to_vfs_path()?;
-        self.set_path_content(vpath, text)?;
-        Ok(())
-    }
-
-    pub fn set_path_content(&mut self, path: VfsPath, text: String) -> Result<FileId> {
-        // For invalid files (currently, too large), we store them as empty files in database,
-        // but remove them from `local_file_set`. Thus any interactions on them would fail.
-        let (text, line_map, is_valid) = LineMap::normalize(text)
-            .map(|(text, line_map)| (text, line_map, true))
-            .unwrap_or_default();
+    pub fn set_path_content(&mut self, path: VfsPath, text: String) -> FileId {
+        let (text, line_map) = LineMap::normalize(text);
         let text = <Arc<str>>::from(text);
         let line_map = Arc::new(line_map);
         match self.local_file_set.file_for_path(&path) {
             Some(file) => {
                 self.files[file.0 as usize] = (text.clone(), line_map);
                 self.change.change_file(file, text);
-                if !is_valid {
-                    self.local_file_set.remove_file(file);
-                    self.root_changed = true;
-                }
-                Ok(file)
+                self.local_file_set.remove_file(file);
+                self.root_changed = true;
+                file
             }
             None => {
-                // FIXME: Somehow get rid of this validity check from Vfs.
-                ensure!(is_valid, "File is not valid");
                 let file = FileId(u32::try_from(self.files.len()).expect("Length overflow"));
                 self.local_file_set.insert(file, path);
                 self.root_changed = true;
                 self.files.push((text.clone(), line_map));
                 self.change.change_file(file, text);
-                Ok(file)
+                file
             }
         }
     }
@@ -105,7 +91,7 @@ impl Vfs {
             }
         };
         // This is not quite efficient, but we already do many O(n) traversals.
-        let (new_text, line_map) = LineMap::normalize(new_text).context("File too large")?;
+        let (new_text, line_map) = LineMap::normalize(new_text);
         let new_text = <Arc<str>>::from(new_text);
         log::trace!("File {:?} content changed: {:?}", file, new_text);
         self.files[file.0 as usize] = (new_text.clone(), Arc::new(line_map));
@@ -120,7 +106,7 @@ impl Vfs {
     }
 
     pub fn file_for_uri(&self, uri: &Url) -> Result<FileId> {
-        self.file_for_path(&uri.to_vfs_path()?)
+        self.file_for_path(&uri.to_vfs_path())
     }
 
     pub fn uri_for_file(&self, file: FileId) -> Url {
@@ -165,20 +151,12 @@ enum CodeUnitsDiff {
     Two = 2,
 }
 
-impl Default for LineMap {
-    fn default() -> Self {
-        Self::normalize(String::new()).unwrap().1
-    }
-}
-
 impl LineMap {
-    fn normalize(text: String) -> Option<(String, Self)> {
-        // Too large for `TextSize`.
-        if text.len() > u32::MAX as usize {
-            return None;
-        }
+    fn normalize(mut text: String) -> (String, Self) {
+        // Must be valid for `TextSize`.
+        u32::try_from(text.len()).expect("Text too long");
 
-        let text = text.replace('\r', "");
+        text.retain(|c| c != '\r');
         let bytes = text.as_bytes();
 
         let mut line_starts = Some(0)
@@ -215,7 +193,7 @@ impl LineMap {
             line_starts,
             char_diffs,
         };
-        Some((text, this))
+        (text, this)
     }
 
     pub fn last_line(&self) -> u32 {
@@ -273,7 +251,7 @@ mod tests {
     #[test]
     fn line_map_ascii() {
         let s = "hello\nworld\nend";
-        let (norm, map) = LineMap::normalize(s.into()).unwrap();
+        let (norm, map) = LineMap::normalize(s.into());
         assert_eq!(norm, s);
         assert_eq!(&map.line_starts, &[0, 6, 12, 15]);
 
@@ -299,7 +277,7 @@ mod tests {
         // ℝ  | U+0211D | E2 84 9D    | 211D
         // 💣 | U+1F4A3 | F0 9F 92 A3 | D83D DCA3
         let s = "_A_ß_ℝ_💣_";
-        let (norm, map) = LineMap::normalize(s.into()).unwrap();
+        let (norm, map) = LineMap::normalize(s.into());
         assert_eq!(norm, s);
         assert_eq!(&map.line_starts, &[0, 15]);
         assert_eq!(
@@ -333,20 +311,20 @@ mod tests {
 
     #[test]
     fn last_line() {
-        let (_, map) = LineMap::normalize("".into()).unwrap();
+        let (_, map) = LineMap::normalize("".into());
         assert_eq!(map.last_line(), 0);
-        let (_, map) = LineMap::normalize("\n".into()).unwrap();
+        let (_, map) = LineMap::normalize("\n".into());
         assert_eq!(map.last_line(), 1);
-        let (_, map) = LineMap::normalize("foo\nbar".into()).unwrap();
+        let (_, map) = LineMap::normalize("foo\nbar".into());
         assert_eq!(map.last_line(), 1);
-        let (_, map) = LineMap::normalize("foo\nbar\n".into()).unwrap();
+        let (_, map) = LineMap::normalize("foo\nbar\n".into());
         assert_eq!(map.last_line(), 2);
     }
 
     #[test]
     fn line_end_col() {
         // See comments in `line_map_unicode`.
-        let (_, map) = LineMap::normalize("hello\nAßℝ💣\n\nend".into()).unwrap();
+        let (_, map) = LineMap::normalize("hello\nAßℝ💣\n\nend".into());
         assert_eq!(map.end_col_for_line(0), 5);
         assert_eq!(map.end_col_for_line(1), 5);
         assert_eq!(map.end_col_for_line(2), 0);
