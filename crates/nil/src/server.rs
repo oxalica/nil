@@ -167,7 +167,7 @@ impl Server {
                             if notif.method == notif::Exit::METHOD {
                                 return Ok(());
                             }
-                            self.dispatch_notification(notif)?;
+                            self.dispatch_notification(notif);
                         }
                         Message::Response(resp) => {
                             if let Some(callback) = self.req_queue.outgoing.complete(resp.id.clone()) {
@@ -276,7 +276,7 @@ impl Server {
             .finish();
     }
 
-    fn dispatch_notification(&mut self, notif: Notification) -> Result<()> {
+    fn dispatch_notification(&mut self, notif: Notification) {
         NotificationDispatcher(self, Some(notif))
             .on_sync_mut::<notif::Cancel>(|st, params| {
                 let id: RequestId = match params.id {
@@ -286,8 +286,7 @@ impl Server {
                 if let Some(resp) = st.req_queue.incoming.cancel(id) {
                     st.lsp_tx.send(resp.into()).unwrap();
                 }
-                Ok(())
-            })?
+            })
             .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
                 // Ignore the open event for unsupported files, thus all following interactions
                 // will error due to unopened files.
@@ -297,23 +296,21 @@ impl Server {
                         MessageType::WARNING,
                         "Disable LSP functionalities for too large file ({len} > {MAX_FILE_LEN})",
                     );
-                    return Ok(());
+                    return;
                 }
                 let uri = &params.text_document.uri;
                 st.set_vfs_file_content(uri, params.text_document.text);
                 st.opened_files.insert(uri.clone(), FileData::default());
-                Ok(())
-            })?
+            })
             .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
                 // N.B. Don't clear text here.
                 st.opened_files.remove(&params.text_document.uri);
-                Ok(())
-            })?
+            })
             .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
                 let mut vfs = st.vfs.write().unwrap();
                 let uri = &params.text_document.uri;
                 // Ignore files not maintained in Vfs.
-                let Ok(file) = vfs.file_for_uri(uri) else { return Ok(()) };
+                let Ok(file) = vfs.file_for_uri(uri) else { return };
                 for change in params.content_changes {
                     let ret = (|| {
                         let del_range = match change.range {
@@ -336,18 +333,16 @@ impl Server {
                 }
                 drop(vfs);
                 st.apply_vfs_change();
-                Ok(())
-            })?
+            })
             // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
             // this notification's parameters should be ignored and the actual config queried separately.
             .on_sync_mut::<notif::DidChangeConfiguration>(|st, _params| {
                 st.load_config(|_| {});
-                Ok(())
-            })?
+            })
             // Workaround:
             // > In former implementations clients pushed file events without the server actively asking for it.
             // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
-            .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| Ok(()))?
+            .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| {})
             .finish()
     }
 
@@ -645,30 +640,26 @@ impl<'s> RequestDispatcher<'s> {
 struct NotificationDispatcher<'s>(&'s mut Server, Option<Notification>);
 
 impl<'s> NotificationDispatcher<'s> {
-    fn on_sync_mut<N: notif::Notification>(
-        mut self,
-        f: fn(&mut Server, N::Params) -> Result<()>,
-    ) -> Result<Self> {
+    fn on_sync_mut<N: notif::Notification>(mut self, f: fn(&mut Server, N::Params)) -> Self {
         if matches!(&self.1, Some(notif) if notif.method == N::METHOD) {
             match serde_json::from_value::<N::Params>(self.1.take().unwrap().params) {
                 Ok(params) => {
-                    f(self.0, params)?;
+                    f(self.0, params);
                 }
                 Err(err) => {
                     tracing::error!("Failed to parse notification {}: {}", N::METHOD, err)
                 }
             }
         }
-        Ok(self)
+        self
     }
 
-    fn finish(self) -> Result<()> {
+    fn finish(self) {
         if let Some(notif) = self.1 {
             if !notif.method.starts_with("$/") {
                 tracing::error!("Unhandled notification: {:?}", notif);
             }
         }
-        Ok(())
     }
 }
 
