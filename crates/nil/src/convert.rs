@@ -156,16 +156,7 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
             })
         }),
 
-        // TODO
-        deprecated: None,
-        preselect: None,
-        sort_text: None,
-        filter_text: None,
-        additional_text_edits: None,
-        command: None,
-        commit_characters: None,
-        data: None,
-        tags: None,
+        ..lsp::CompletionItem::default()
     }
 }
 
