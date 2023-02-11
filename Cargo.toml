@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "crates/builtin",
     "crates/ide",
@@ -6,6 +7,12 @@ members = [
     "crates/nix-interop",
     "crates/syntax",
 ]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.66"
 
 [profile.dev]
 debug = 1
