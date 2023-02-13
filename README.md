@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
 
-An incremental analysis assistent for writing in Nix.
+An incremental analysis assistant for writing in Nix.
 
 See [release notes][releases] for change log between tagged unstable versions.
 
@@ -37,8 +37,8 @@ run `nix profile install github:oxalica/nil` to get `nil` installed.
 You can also use this repository as a flake input and add its output to your own flake-managed
 systemwide or home configuration.
 
-*Disclamer: We ship `flake.lock` which is tested in CI to be working. If you use `follows` to
-override flake inputs, we provides no guarentee of whether it would still build.*
+*Disclaimer: We ship `flake.lock` which is tested in CI to be working. If you use `follows` to
+override flake inputs, we provide no guarantee of whether it would still build.*
 
 Flake output structure (not necessary up-to-date):
 ```
