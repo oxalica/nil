@@ -40,6 +40,7 @@
           clippyFlags = lib.concatStringsSep " " [
             "-D" "warnings"
             "-D" "clippy::dbg_macro"
+            "-D" "clippy::semicolon_if_nothing_returned"
             "-D" "clippy::todo"
           ];
 

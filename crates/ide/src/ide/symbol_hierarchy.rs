@@ -53,7 +53,7 @@ impl Collector<'_> {
             match rhs {
                 BindingValue::InheritFrom(_) => {}
                 BindingValue::Inherit(child) | BindingValue::Expr(child) => {
-                    self.collect_expr(child)
+                    self.collect_expr(child);
                 }
             }
             (|| {

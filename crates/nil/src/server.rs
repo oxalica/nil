@@ -343,7 +343,7 @@ impl Server {
             // > In former implementations clients pushed file events without the server actively asking for it.
             // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
             .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| {})
-            .finish()
+            .finish();
     }
 
     /// Enqueue a task to reload the flake.{nix,lock} and the locked inputs.
@@ -480,7 +480,7 @@ impl Server {
                     }
                     Err(err) => tracing::error!("Failed to update config: {}", err),
                 }
-                callback(st)
+                callback(st);
             },
         );
     }
@@ -647,7 +647,7 @@ impl<'s> NotificationDispatcher<'s> {
                     f(self.0, params);
                 }
                 Err(err) => {
-                    tracing::error!("Failed to parse notification {}: {}", N::METHOD, err)
+                    tracing::error!("Failed to parse notification {}: {}", N::METHOD, err);
                 }
             }
         }
@@ -681,7 +681,7 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
                 inner.set(format!("Location: {loc:#}\nBacktrace: {backtrace:#}"));
             });
             old_hook(info);
-        }))
+        }));
     });
 
     match panic::catch_unwind(f) {

@@ -345,7 +345,7 @@ impl NameReference {
             match resolved {
                 ResolveResult::Builtin(_) => {}
                 &ResolveResult::Definition(name) => {
-                    this.def_refs.entry(name).or_default().push(expr)
+                    this.def_refs.entry(name).or_default().push(expr);
                 }
                 ResolveResult::WithExprs(withs) => withs
                     .iter()

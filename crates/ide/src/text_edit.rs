@@ -18,6 +18,6 @@ pub struct TextEdit {
 impl TextEdit {
     pub fn apply(&self, src: &mut String) {
         let delete_range = usize::from(self.delete.start())..usize::from(self.delete.end());
-        src.replace_range(delete_range, &self.insert)
+        src.replace_range(delete_range, &self.insert);
     }
 }

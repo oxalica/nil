@@ -82,7 +82,7 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
         }
         HlTag::AttrField(kind) => {
             if kind == HlAttrField::With {
-                mods.insert(TokenModIdx::WithAttribute)
+                mods.insert(TokenModIdx::WithAttribute);
             }
             TokenTypeIdx::Property
         }
@@ -118,7 +118,7 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
         HlTag::Punct(punct) => {
             match punct {
                 HlPunct::Brace | HlPunct::Bracket | HlPunct::Paren => {
-                    mods.insert(TokenModIdx::Parenthesis)
+                    mods.insert(TokenModIdx::Parenthesis);
                 }
                 HlPunct::Dot
                 | HlPunct::Question

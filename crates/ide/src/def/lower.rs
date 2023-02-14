@@ -458,7 +458,7 @@ impl MergingSet {
                     ));
                     // We don't skip the RHS but still process it as a recovery.
                 }
-                self.push_dynamic(ctx, key_expr, value)
+                self.push_dynamic(ctx, key_expr, value);
             }
         }
     }

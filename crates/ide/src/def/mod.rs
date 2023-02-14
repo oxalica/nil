@@ -273,7 +273,7 @@ impl Expr {
                 }
             }
             Self::StringInterpolation(xs) | Self::List(xs) | Self::PathInterpolation(xs) => {
-                xs.iter().copied().for_each(f)
+                xs.iter().copied().for_each(f);
             }
             Self::LetIn(bindings, body) => {
                 bindings.walk_child_exprs(&mut f);

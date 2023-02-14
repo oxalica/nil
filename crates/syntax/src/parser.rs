@@ -100,7 +100,7 @@ impl<'i> Parser<'i> {
     }
 
     fn finish_node(&mut self) {
-        self.builder.finish_node()
+        self.builder.finish_node();
     }
 
     /// Consume the next token, including whitespaces. Panic if there is no more token.
@@ -231,7 +231,7 @@ impl<'i> Parser<'i> {
                 self.expr_function_opt();
                 self.want(T![;]);
                 self.expr_function_opt();
-                self.finish_node()
+                self.finish_node();
             }
             Some(T![let]) => {
                 if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
@@ -246,7 +246,7 @@ impl<'i> Parser<'i> {
             }
             Some(T![rec]) => {
                 if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
-                    self.expr_operator_opt()
+                    self.expr_operator_opt();
                 } else {
                     self.bump_error();
                     self.error(ErrorKind::ExpectToken(T!['{']));
@@ -668,7 +668,7 @@ impl<'i> Parser<'i> {
                         self.attr_opt(false);
                     }
                     self.want(T![;]);
-                    self.finish_node()
+                    self.finish_node();
                 }
                 // Ensure we always consume somthing in the loop!
                 Some(k) if k.can_start_attr() => {
@@ -715,7 +715,7 @@ impl<'i> Parser<'i> {
                     } else {
                         self.bump();
                     }
-                    self.finish_node()
+                    self.finish_node();
                 }
             }
         }
