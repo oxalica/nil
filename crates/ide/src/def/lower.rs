@@ -372,8 +372,9 @@ impl MergingSet {
     fn merge_inherit(&mut self, ctx: &mut LowerCtx, i: ast::Inherit) {
         let from_expr = i.from_expr().map(|e| {
             let expr = ctx.lower_expr_opt(e.expr());
+            let idx = self.inherit_froms.len();
             self.inherit_froms.push(expr);
-            expr
+            idx
         });
 
         if i.attrs().next().is_none() {
@@ -400,7 +401,7 @@ impl MergingSet {
             };
 
             let value = match from_expr {
-                Some(e) => BindingValue::InheritFrom(e),
+                Some(i) => BindingValue::InheritFrom(i),
                 None => {
                     let ref_expr = ctx.alloc_expr(Expr::Reference(key.clone()), attr_ptr.clone());
                     BindingValue::Inherit(ref_expr)
@@ -924,7 +925,7 @@ mod tests {
                 2: Reference("c")
                 3: Reference("d")
                 4: Reference("e")
-                5: Attrset(Bindings { statics: [(Idx::<Name>(0), Inherit(Idx::<Expr>(0))), (Idx::<Name>(1), Inherit(Idx::<Expr>(1))), (Idx::<Name>(2), Inherit(Idx::<Expr>(2))), (Idx::<Name>(3), InheritFrom(Idx::<Expr>(4))), (Idx::<Name>(4), InheritFrom(Idx::<Expr>(4)))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
+                5: Attrset(Bindings { statics: [(Idx::<Name>(0), Inherit(Idx::<Expr>(0))), (Idx::<Name>(1), Inherit(Idx::<Expr>(1))), (Idx::<Name>(2), Inherit(Idx::<Expr>(2))), (Idx::<Name>(3), InheritFrom(1)), (Idx::<Name>(4), InheritFrom(1))], inherit_froms: [Idx::<Expr>(3), Idx::<Expr>(4)], dynamics: [] })
 
                 0: Name { text: "a", kind: PlainAttrset }
                 1: Name { text: "b", kind: PlainAttrset }

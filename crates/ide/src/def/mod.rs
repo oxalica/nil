@@ -332,9 +332,9 @@ pub struct Bindings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BindingValue {
-    Inherit(ExprId),
-    InheritFrom(ExprId),
     Expr(ExprId),
+    Inherit(ExprId),
+    InheritFrom(usize),
 }
 
 impl Bindings {
@@ -342,8 +342,7 @@ impl Bindings {
         for (_, value) in self.statics.iter() {
             match value {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => f(*e),
-                // Walking here would be redundant, we traverse them outside `entries` loop.
-                BindingValue::InheritFrom(_) => {}
+                BindingValue::InheritFrom(_idx) => {}
             }
         }
         for &e in self.inherit_froms.iter() {
@@ -352,12 +351,6 @@ impl Bindings {
         for &(k, v) in self.dynamics.iter() {
             f(k);
             f(v);
-        }
-    }
-
-    pub fn walk_child_defs(&self, mut f: impl FnMut(NameId, BindingValue)) {
-        for &(name, value) in self.statics.iter() {
-            f(name, value);
         }
     }
 

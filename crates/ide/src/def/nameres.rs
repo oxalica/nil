@@ -254,7 +254,8 @@ impl NameResolution {
                 continue;
             };
             for &(name, value) in bindings.statics.iter() {
-                let BindingValue::InheritFrom(from_expr) = value else { continue };
+                let BindingValue::InheritFrom(i) = value else { continue };
+                let from_expr = bindings.inherit_froms[i];
                 if let Some(Some(ResolveResult::Builtin("builtins"))) = resolve_map.get(&from_expr)
                 {
                     if ALL_BUILTINS.contains_key(&module[name].text) {

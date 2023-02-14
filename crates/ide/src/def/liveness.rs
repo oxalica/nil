@@ -116,12 +116,13 @@ pub(crate) fn liveness_check_query(
                 },
                 Expr::LetIn(bindings, body) => {
                     // Pre-mark all let-binding.
-                    bindings.walk_child_defs(|name, value| {
-                        let (BindingValue::Inherit(e)
-                        | BindingValue::InheritFrom(e)
-                        | BindingValue::Expr(e)) = value;
+                    for &(name, value) in bindings.statics.iter() {
+                        let e = match value {
+                            BindingValue::Expr(e) | BindingValue::Inherit(e) => e,
+                            BindingValue::InheritFrom(i) => bindings.inherit_froms[i],
+                        };
                         discovered_let_rhs.insert(name, e);
-                    });
+                    }
 
                     // Traverse the body as root.
                     stack.push(*body);

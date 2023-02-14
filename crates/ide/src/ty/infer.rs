@@ -346,9 +346,11 @@ impl<'db> InferCtx<'db> {
     }
 
     fn infer_bindings(&mut self, bindings: &Bindings) -> Attrset {
-        for &from_expr in bindings.inherit_froms.iter() {
-            self.infer_expr(from_expr);
-        }
+        let inherit_from_tys = bindings
+            .inherit_froms
+            .iter()
+            .map(|&from_expr| self.infer_expr(from_expr))
+            .collect::<Vec<_>>();
 
         let mut fields = BTreeMap::new();
         for &(name, value) in bindings.statics.iter() {
@@ -356,10 +358,11 @@ impl<'db> InferCtx<'db> {
             let name_text = self.module[name].text.clone();
             let value_ty = match value {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => self.infer_expr(e),
-                BindingValue::InheritFrom(from_expr) => {
-                    let from_ty = self.ty_for_expr(from_expr);
-                    self.infer_set_field(from_ty, name_text.clone(), AttrSource::Name(name))
-                }
+                BindingValue::InheritFrom(i) => self.infer_set_field(
+                    inherit_from_tys[i],
+                    name_text.clone(),
+                    AttrSource::Name(name),
+                ),
             };
             self.unify_var(name_ty, value_ty);
             let src = AttrSource::Name(name);
