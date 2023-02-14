@@ -150,7 +150,6 @@ name = "ide"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "bitflags",
  "builtin",
  "either",
  "expect-test",
@@ -312,13 +311,11 @@ dependencies = [
  "codespan-reporting",
  "crossbeam-channel",
  "ide",
- "indexmap",
  "libc",
  "log",
  "lsp-server",
  "lsp-types",
  "nix-interop",
- "serde",
  "serde_json",
  "text-size",
  "tracing",
