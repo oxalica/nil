@@ -59,21 +59,26 @@
 
           nil = pkgs.callPackage mkNil { };
         in
-        {
+        rec {
           packages = {
             inherit nil;
             default = nil;
           };
 
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
+            nativeBuildInputs = with pkgs; [
               # Override the stable rustfmt.
               rustPkgs.rust-nightly_2023-01-01.availableComponents.rustfmt
               # Follows nixpkgs's version of rustc.
               (let vers = lib.splitVersion rustc.version; in
                 rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}")
 
-              nix.out # For generation of builtins.
+              # Don't include `nix` by default. If would override user's (newer
+              # or patched) one, cause damage or misbehavior due to version
+              # mismatch.
+              # If you do want a locked one, use `devShells.full` below.
+              # nix.out
+
               jq
               pre-commit
               nixpkgs-fmt
@@ -95,6 +100,13 @@
               export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/debug/nil"
             '';
           };
+
+          # See comments above.
+          devShells.full = devShells.default.overrideAttrs (old: {
+            nativeBuildInputs = old.nativeBuildInputs ++ [
+              pkgs.nix.out
+            ];
+          });
 
           devShells.fuzz = pkgs.mkShell {
             packages = with pkgs; with rustPkgs; [
