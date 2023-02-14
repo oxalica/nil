@@ -26,7 +26,6 @@ pub(super) fn lower(
             names: Arena::new(),
             // Placeholder.
             entry_expr: ExprId::from_raw(0.into()),
-            diagnostics: Vec::new(),
         },
         source_map: ModuleSourceMap::default(),
     };
@@ -60,7 +59,7 @@ impl LowerCtx<'_> {
     }
 
     fn diagnostic(&mut self, diag: Diagnostic) {
-        self.module.diagnostics.push(diag);
+        self.source_map.diagnostics.push(diag);
     }
 
     fn lower_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
@@ -603,11 +602,12 @@ mod tests {
     fn check_lower(src: &str, expect: Expect) {
         let (db, file_id) = TestDB::single_file(src).unwrap();
         let module = db.module(file_id);
+        let source_map = db.source_map(file_id);
         let mut got = String::new();
-        for diag in module.diagnostics() {
+        for diag in source_map.diagnostics() {
             writeln!(got, "{}", diag.debug_display()).unwrap();
         }
-        if !module.diagnostics.is_empty() {
+        if !source_map.diagnostics.is_empty() {
             writeln!(got).unwrap();
         }
         for (i, e) in module.exprs.iter() {
@@ -640,9 +640,8 @@ mod tests {
     #[track_caller]
     fn check_error(src: &str, expect: Expect) {
         let (db, file_id) = TestDB::single_file(src).unwrap();
-        let module = db.module(file_id);
         let mut got = String::new();
-        for diag in module.diagnostics() {
+        for diag in db.source_map(file_id).diagnostics() {
             writeln!(got, "{}", diag.debug_display()).unwrap();
         }
         expect.assert_eq(&got);

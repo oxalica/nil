@@ -108,7 +108,6 @@ pub struct Module {
     exprs: Arena<Expr>,
     names: Arena<Name>,
     entry_expr: ExprId,
-    diagnostics: Vec<Diagnostic>,
 }
 
 pub type ExprId = Idx<Expr>;
@@ -132,15 +131,10 @@ impl Module {
     pub fn shrink_to_fit(&mut self) {
         self.exprs.shrink_to_fit();
         self.names.shrink_to_fit();
-        self.diagnostics.shrink_to_fit();
     }
 
     pub fn entry_expr(&self) -> ExprId {
         self.entry_expr
-    }
-
-    pub fn diagnostics(&self) -> &[Diagnostic] {
-        &self.diagnostics
     }
 
     pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &'_ Expr)> + ExactSizeIterator + '_ {
@@ -184,6 +178,9 @@ pub struct ModuleSourceMap {
     expr_map_rev: HashMap<ExprId, AstPtr>,
     name_map: HashMap<AstPtr, NameId>,
     name_map_rev: ArenaMap<NameId, Vec<AstPtr>>,
+
+    // This contains locations, thus is quite volatile.
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl ModuleSourceMap {
@@ -192,6 +189,7 @@ impl ModuleSourceMap {
         self.expr_map_rev.shrink_to_fit();
         self.name_map.shrink_to_fit();
         self.name_map_rev.shrink_to_fit();
+        self.diagnostics.shrink_to_fit();
     }
 
     pub fn expr_for_node(&self, node: AstPtr) -> Option<ExprId> {
@@ -212,6 +210,10 @@ impl ModuleSourceMap {
             .into_iter()
             .flatten()
             .cloned()
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 }
 

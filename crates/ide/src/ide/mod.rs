@@ -33,6 +33,8 @@ pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
 pub use syntax_highlighting::{HlAttrField, HlKeyword, HlOperator, HlPunct, HlRange, HlTag};
 
+pub const DEFAULT_LRU_CAP: usize = 128;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationTarget {
     pub file_id: FileId,
@@ -72,6 +74,10 @@ impl Default for RootDatabase {
         let mut db = Self {
             storage: salsa::Storage::default(),
         };
+
+        crate::def::ParseQuery
+            .in_db_mut(&mut db)
+            .set_lru_capacity(DEFAULT_LRU_CAP);
         db.set_flake_graph_with_durability(Default::default(), Durability::MEDIUM);
         db
     }

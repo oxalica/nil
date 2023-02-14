@@ -180,7 +180,7 @@ mod tests {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.files().len(), 1);
         let file = f.files()[0];
-        assert_eq!(db.module(file).diagnostics(), Vec::new(), "Lower error");
+        assert_eq!(db.source_map(file).diagnostics(), Vec::new(), "Lower error");
         let expect = f.markers().iter().map(|p| p.pos).collect::<Vec<_>>();
         let mut got = db
             .liveness_check(file)
