@@ -2,6 +2,7 @@ mod assists;
 mod completion;
 mod diagnostics;
 mod expand_selection;
+mod file_references;
 mod goto_definition;
 mod highlight_related;
 mod hover;
@@ -134,6 +135,8 @@ impl Analysis {
         Cancelled::catch(|| f(&self.db))
     }
 
+    //// LSP standard ////
+
     pub fn expand_selection(&self, frange: FileRange) -> Cancellable<Option<Vec<TextRange>>> {
         self.with_db(|db| expand_selection::expand_selection(db, frange))
     }
@@ -196,5 +199,15 @@ impl Analysis {
 
     pub fn highlight_related(&self, fpos: FilePos) -> Cancellable<Vec<HlRelated>> {
         self.with_db(|db| highlight_related::highlight_related(db, fpos).unwrap_or_default())
+    }
+
+    //// Custom extensions ////
+
+    pub fn file_references(&self, file: FileId) -> Cancellable<Vec<FileId>> {
+        self.with_db(|db| file_references::file_references(db, file))
+    }
+
+    pub fn file_referrers(&self, file: FileId) -> Cancellable<Vec<FileId>> {
+        self.with_db(|db| file_references::file_referrers(db, file))
     }
 }

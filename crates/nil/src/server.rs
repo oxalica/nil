@@ -1,5 +1,5 @@
 use crate::config::{Config, CONFIG_KEY};
-use crate::{convert, handler, LspError, UrlExt, Vfs, MAX_FILE_LEN};
+use crate::{convert, handler, lsp_ext, LspError, UrlExt, Vfs, MAX_FILE_LEN};
 use anyhow::{anyhow, bail, Context, Result};
 use crossbeam_channel::{Receiver, Sender};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
@@ -273,6 +273,7 @@ impl Server {
             .on::<req::DocumentLinkRequest>(handler::document_links)
             .on::<req::CodeActionRequest>(handler::code_action)
             .on::<req::DocumentHighlightRequest>(handler::document_highlight)
+            .on::<lsp_ext::ParentModule>(handler::parent_module)
             .finish();
     }
 

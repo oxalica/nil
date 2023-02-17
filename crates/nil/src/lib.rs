@@ -2,6 +2,7 @@ mod capabilities;
 mod config;
 mod convert;
 mod handler;
+mod lsp_ext;
 mod semantic_tokens;
 mod server;
 mod vfs;
