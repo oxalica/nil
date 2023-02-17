@@ -161,6 +161,7 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "salsa",
+ "smallvec",
  "smol_str",
  "syntax",
  "url",

@@ -2,6 +2,7 @@ use super::DefDatabase;
 use crate::tests::TestDB;
 use crate::{FlakeInfo, ModuleKind, SourceDatabase, VfsPath};
 use expect_test::expect;
+use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 #[test]
@@ -62,6 +63,64 @@ baz/../../bar.nix + ../default.nix
         let expect = refs.iter().map(|path| f[*path]).collect::<HashSet<_>>();
         assert_eq!(got, &expect, "Module {:?} should reference {:?}", src, refs);
     }
+}
+
+#[test]
+fn source_root_referrer_graph() {
+    let (db, f) = TestDB::from_fixture(
+        "
+#- /default.nix
+./foo/bar.nix
+
+#- /foo/bar.nix
+baz/../../bar.nix + ../default.nix
+
+#- /bar.nix
+./.
+
+#- /single.nix
+42
+
+#- /mutual1.nix
+./mutual2.nix
+
+#- /mutual2.nix
+./mutual1.nix
+    ",
+    )
+    .unwrap();
+
+    let sid = db.file_source_root(f["/default.nix"]);
+    let source_root = db.source_root(sid);
+    let graph = db.source_root_referrer_graph(sid);
+
+    let got = source_root
+        .files()
+        .sorted_by_key(|&(f, _)| f)
+        .map(|(referee, _)| {
+            let referrers = graph.get(&referee).cloned().unwrap_or_default();
+            let referee = source_root.path_for_file(referee).display();
+            let referrers = referrers
+                .iter()
+                .map(|&f| source_root.path_for_file(f).display())
+                .join(", ");
+            format!("{referee} <- [{referrers}]\n")
+        })
+        .collect::<String>();
+    expect![[r#"
+        /default.nix <- [/foo/bar.nix, /bar.nix]
+        /foo/bar.nix <- [/default.nix]
+        /bar.nix <- [/foo/bar.nix]
+        /single.nix <- []
+        /mutual1.nix <- [/mutual2.nix]
+        /mutual2.nix <- [/mutual1.nix]
+    "#]]
+    .assert_eq(&got);
+
+    assert_eq!(
+        db.module_referrers(f["/default.nix"]).into_vec(),
+        vec![f["/foo/bar.nix"], f["/bar.nix"]],
+    );
 }
 
 #[test]

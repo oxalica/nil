@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use syntax::{TextRange, TextSize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SourceRootId(pub u32);
 
 /// An path in the virtual filesystem.
@@ -126,7 +126,7 @@ impl FileSet {
         &self.paths[&file]
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + ExactSizeIterator + '_ {
         self.paths.iter().map(|(&file, path)| (file, path))
     }
 }
@@ -157,7 +157,7 @@ impl SourceRoot {
         self.file_set.path_for_file(file)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + '_ {
+    pub fn files(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + ExactSizeIterator + '_ {
         self.file_set.iter()
     }
 
@@ -281,7 +281,7 @@ impl Change {
         if let Some(roots) = self.roots {
             u32::try_from(roots.len()).expect("Length overflow");
             for (sid, root) in (0u32..).map(SourceRootId).zip(roots) {
-                for (fid, _) in root.iter() {
+                for (fid, _) in root.files() {
                     db.set_file_source_root_with_durability(fid, sid, Durability::HIGH);
                 }
                 db.set_source_root_with_durability(sid, Arc::new(root), Durability::HIGH);

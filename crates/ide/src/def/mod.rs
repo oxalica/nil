@@ -11,6 +11,7 @@ use crate::{Diagnostic, FileId, SourceRootId, VfsPath};
 use la_arena::{Arena, ArenaMap, Idx};
 use nix_interop::DEFAULT_IMPORT_FILE;
 use ordered_float::OrderedFloat;
+use smallvec::SmallVec;
 use smol_str::SmolStr;
 use std::collections::{HashMap, HashSet};
 use std::ops;
@@ -42,7 +43,16 @@ pub trait DefDatabase: SourceDatabase {
     #[salsa::invoke(Module::module_references_query)]
     fn module_references(&self, file_id: FileId) -> Arc<HashSet<FileId>>;
 
+    fn source_root_referrer_graph(
+        &self,
+        sid: SourceRootId,
+    ) -> Arc<HashMap<FileId, ModuleReferrers>>;
+
     fn source_root_closure(&self, id: SourceRootId) -> Arc<HashSet<FileId>>;
+
+    // The result is not wrapped in Arc. Typically, the number of referrers is just 1 or 0.
+    // And also this method is not call so often.
+    fn module_referrers(&self, file_id: FileId) -> ModuleReferrers;
 
     #[salsa::invoke(Path::resolve_path_query)]
     fn resolve_path(&self, path: Path) -> Option<VfsPath>;
@@ -82,6 +92,40 @@ fn module(db: &dyn DefDatabase, file_id: FileId) -> Arc<Module> {
 
 fn source_map(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleSourceMap> {
     db.module_with_source_map(file_id).1
+}
+
+pub type ModuleReferrers = SmallVec<[FileId; 2]>;
+
+fn source_root_referrer_graph(
+    db: &dyn DefDatabase,
+    sid: SourceRootId,
+) -> Arc<HashMap<FileId, ModuleReferrers>> {
+    // Assert our inline threshould costs no extra memory.
+    const _: [(); std::mem::size_of::<Vec<FileId>>()] =
+        [(); std::mem::size_of::<ModuleReferrers>()];
+
+    let source_root = db.source_root(sid);
+    let mut graph = HashMap::<FileId, ModuleReferrers>::with_capacity(source_root.files().len());
+    for (file, _) in source_root.files() {
+        for &referrer in &*db.module_references(file) {
+            // This never duplicates, since `module_references` returns a `HashSet`.
+            graph.entry(referrer).or_default().push(file);
+        }
+    }
+
+    // Keep the order deterministic.
+    for referees in graph.values_mut() {
+        referees.sort();
+    }
+
+    graph.shrink_to_fit();
+    Arc::new(graph)
+}
+
+fn module_referrers(db: &dyn DefDatabase, file_id: FileId) -> ModuleReferrers {
+    let sid = db.file_source_root(file_id);
+    let graph = db.source_root_referrer_graph(sid);
+    graph.get(&file_id).cloned().unwrap_or_default()
 }
 
 fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<FileId>> {
