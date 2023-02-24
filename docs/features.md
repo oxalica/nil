@@ -26,7 +26,7 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Links for [flake references][flake-ref] like `"github:NixOS/nixpkgs"`.
 
 - [x] Code actions. `textDocument/codeAction`
-  See [`docs/code_actions.md`](docs/code_actions.md) for the list of supported code actions.
+  See [`docs/code_actions.md`](./code_actions.md) for the list of supported code actions.
 
 - [x] Completion. `textDocument/completion`
   - [x] Builtin names.
