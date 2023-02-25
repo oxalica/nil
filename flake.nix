@@ -11,13 +11,14 @@
 
   outputs = { self, flake-utils, nixpkgs, rust-overlay }:
     let
+      inherit (builtins) substring;
+      inherit (nixpkgs) lib;
+
+      mtime = self.lastModifiedDate;
+      date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
+      rev = self.rev or (throw "Git changes are not committed");
+
       mkNil = { rustPlatform, nix, ... }:
-        let
-          inherit (builtins) substring;
-          mtime = self.lastModifiedDate;
-          date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
-          rev = self.rev or (throw "Git changes are not committed");
-        in
         rustPlatform.buildRustPackage {
           pname = "nil";
           version = "unstable-${date}";
@@ -28,12 +29,23 @@
 
           CFG_RELEASE = "git-${rev}";
         };
+
+      mkCocNil = { runCommand, nodejs, esbuild }:
+        runCommand "coc-nil-unstable-${date}" {
+          nativeBuildInputs = [ nodejs esbuild ];
+          src = ./editors/coc-nil;
+        } ''
+          cp -r --no-preserve=all $src ./source
+          cd source
+          npm run build --offline
+          mkdir -p $out
+          cp -rt $out lib package{,-lock}.json
+        '';
+
     in
     flake-utils.lib.eachDefaultSystem
       (system:
         let
-          inherit (nixpkgs) lib;
-
           pkgs = nixpkgs.legacyPackages.${system};
           rustPkgs = rust-overlay.packages.${system};
 
@@ -55,14 +67,16 @@
               || die 'Format failed'
             cargo clippy --all --all-targets -- ${clippyFlags} \
               || die 'Clippy failed'
+
+            ( cd editors/coc-nil; npm run lint )
           '';
 
-          nil = pkgs.callPackage mkNil { };
         in
         rec {
-          packages = {
-            inherit nil;
+          packages = rec {
             default = nil;
+            nil = pkgs.callPackage mkNil { };
+            coc-nil = pkgs.callPackage mkCocNil { };
           };
 
           devShells.default = pkgs.mkShell {
@@ -78,6 +92,8 @@
               # mismatch.
               # If you do want a locked one, use `devShells.full` below.
               # nix.out
+
+              nodejs
 
               jq
               pre-commit
@@ -98,6 +114,7 @@
             # bash
             shellHook = ''
               export NIL_PATH="$(cargo metadata --format-version=1 | jq -r .target_directory)/debug/nil"
+              export COC_NIL_PATH="$(realpath ./editors/coc-nil)"
             '';
           };
 
@@ -124,12 +141,17 @@
             '';
           };
         })
-    // rec {
+    // {
       overlays = {
+        default = lib.composeExtension self.overlays.nil self.overlays.coc-nil;
         nil = final: prev: {
           nil = final.callPackage mkNil { };
         };
-        default = overlays.nil;
+        coc-nil = final: prev: {
+          vimPlugins = prev.vimPlugins or { } // {
+            coc-nil = final.callPackage mkCocNil { };
+          };
+        };
       };
     };
 }

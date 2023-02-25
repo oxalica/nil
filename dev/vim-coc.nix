@@ -4,7 +4,9 @@ let
   customRC = ''
     source ${./vimrc.vim}
 
-    let $COC_NO_PLUGINS = 1
+    if !empty($COC_NIL_PATH)
+      execute 'set rtp^=' . $COC_NIL_PATH
+    endif
 
     autocmd BufRead,BufNewFile *.nix setf nix
 
@@ -83,21 +85,15 @@ let
   '';
 
   cocSetting = {
-    "coc.preferences.formatOnSaveFiletypes" = [ "nix" ];
-    "links.tooltip" = true;
+    coc.preferences.formatOnSaveFiletypes = [ "nix" ];
+    links.tooltip = true;
     semanticTokens.filetypes = [ "nix" ];
-    languageserver.nix = {
-      command = pkgs.writeShellScript "nil" ''
-        exec "$NIL_PATH" "$@"
-      '';
-      filetypes = [ "nix" ];
-      rootPatterns =  [ "flake.nix" ];
-      settings.nil = {
-        testSetting = 42;
-        formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
-        diagnostics.excludedFiles = [ "generated.nix" ];
-      };
-    };
+
+    nil.server.path = pkgs.writeShellScript "nil" ''
+      exec "$NIL_PATH" "$@"
+    '';
+    nil.formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
+    nil.diagnostics.excludedFiles = [ "generated.nix" ];
   };
 
 
@@ -115,6 +111,7 @@ pkgs.vim_configurable.customize {
     packages.myPlugins.start = with pkgs.vimPlugins; [
       vim-nix # File type and syntax highlighting.
       coc-nvim
+      coc-json
       # FIXME
       (nightfox-nvim.overrideAttrs (old: {
         src = pkgs.fetchFromGitHub {

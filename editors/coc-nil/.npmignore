@@ -1,0 +1,11 @@
+src
+node_modules
+tsconfig.json
+*.map
+.tags
+.DS_Store
+webpack.config.js
+esbuild.js
+.github
+.eslintrc.js
+.prettierrc

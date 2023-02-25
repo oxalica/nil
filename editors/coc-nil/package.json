@@ -1,0 +1,100 @@
+{
+  "name": "coc-nil",
+  "version": "0.0.0",
+  "description": "Nix extension using nil LSP for coc.nvim",
+  "author": "oxalica <oxalicc@pm.me>",
+  "license": "MIT OR Apache-2.0",
+  "main": "lib/main.js",
+  "keywords": [
+    "coc.nvim"
+  ],
+  "engines": {
+    "coc": "^0.0.80"
+  },
+  "scripts": {
+    "clean": "rimraf lib",
+    "lint": "eslint src --ext ts",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node14 --external:coc.nvim --outdir=lib --color=false",
+    "watch": "esbuild src/main.ts --bundle --platform=node --target=node14 --external:coc.nvim --outdir=lib --color=false --watch",
+    "prepare": "npm run clean && npm run build"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "printWidth": 120,
+    "semi": true
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.53.0",
+    "@typescript-eslint/parser": "^5.53.0",
+    "coc.nvim": "^0.0.82",
+    "esbuild": "^0.17.10",
+    "eslint": "^8.34.0",
+    "eslint-config-prettier": "^8.6.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "prettier": "^2.8.4",
+    "rimraf": "^4.1.2",
+    "typescript": "^4.9.5"
+  },
+  "activationEvents": [
+    "onLanguage:nix"
+  ],
+  "contributes": {
+    "rootPatterns": [
+      {
+        "filetype": "nix",
+        "patterns": [
+          "flake.nix"
+        ]
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "coc-nil configuration",
+      "properties": {
+        "nil.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable `coc-nil` extension"
+        },
+        "nil.server.path": {
+          "type": "string",
+          "default": "nil",
+          "description": "Path to the `nil` LSP server"
+        },
+        "nil.formatting.command": {
+          "type": [
+            "null",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": "null",
+          "description": "External formatter command with arguments"
+        },
+        "nil.diagnostics.ignored": {
+          "type": "string",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Ignored diagnostic kinds"
+        },
+        "nil.diagnostics.excludedFiles": {
+          "type": "string",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "File globs to exclude from showing diagnostics"
+        },
+        "nil.nix.binary": {
+          "type": "string",
+          "default": "nix",
+          "description": "The path to the `nix` binary"
+        }
+      }
+    },
+    "commands": []
+  }
+}
