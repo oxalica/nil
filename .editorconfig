@@ -1,0 +1,20 @@
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+indent_size = 1
+
+[*.{ast,nix,sh,vim}]
+indent_size = 2
+
+[*.patch]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{js,json,ts}]
+indent_size = 2
