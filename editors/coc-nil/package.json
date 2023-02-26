@@ -69,7 +69,7 @@
           "items": {
             "type": "string"
           },
-          "default": "null",
+          "default": null,
           "description": "External formatter command with arguments"
         },
         "nil.diagnostics.ignored": {
