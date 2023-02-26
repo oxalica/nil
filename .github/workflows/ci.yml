@@ -18,7 +18,7 @@ jobs:
       - name: Prepare devShell
         run: nix develop --command true
       - name: Install NPM packages
-        run: nix develop --command npm ci
+        run: nix develop --command bash -c 'cd editors/coc-nil && npm ci'
       - name: Run pre-commit
         run: nix develop --command pre-commit
 
