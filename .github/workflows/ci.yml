@@ -17,6 +17,8 @@ jobs:
         uses: cachix/install-nix-action@v17
       - name: Prepare devShell
         run: nix develop --command true
+      - name: Install NPM packages
+        run: nix develop --command npm ci
       - name: Run pre-commit
         run: nix develop --command pre-commit
 

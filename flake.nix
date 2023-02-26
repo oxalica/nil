@@ -143,7 +143,7 @@
         })
     // {
       overlays = {
-        default = lib.composeExtension self.overlays.nil self.overlays.coc-nil;
+        default = lib.composeExtensions self.overlays.nil self.overlays.coc-nil;
         nil = final: prev: {
           nil = final.callPackage mkNil { };
         };
