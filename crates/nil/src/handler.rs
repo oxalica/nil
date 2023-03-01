@@ -334,7 +334,7 @@ pub(crate) fn document_highlight(
 pub(crate) fn parent_module(
     snap: StateSnapshot,
     params: TextDocumentPositionParams,
-) -> Result<Option<GotoDefinitionResponse>> {
+) -> Result<Option<Vec<Location>>> {
     let (file, _) = convert::from_file(&snap.vfs(), &params.text_document)?;
     let files = snap.analysis.file_referrers(file)?;
     let vfs = snap.vfs();
@@ -342,5 +342,5 @@ pub(crate) fn parent_module(
         .into_iter()
         .map(|file| convert::to_location(&vfs, FileRange::new(file, TextRange::default())))
         .collect();
-    Ok(Some(GotoDefinitionResponse::Array(locs)))
+    Ok(Some(locs))
 }

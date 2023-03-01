@@ -95,6 +95,12 @@
         }
       }
     },
-    "commands": []
+    "commands": [
+      {
+        "command": "nil.fileReferrer",
+        "title": "Locate the Nix file(s) containing paths to the current one",
+        "category": "nil"
+      }
+    ]
   }
 }

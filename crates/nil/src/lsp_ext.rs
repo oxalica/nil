@@ -5,6 +5,6 @@ pub enum ParentModule {}
 
 impl Request for ParentModule {
     type Params = lsp_types::TextDocumentPositionParams;
-    type Result = Option<lsp_types::GotoDefinitionResponse>;
+    type Result = Option<Vec<lsp_types::Location>>;
     const METHOD: &'static str = "experimental/parentModule";
 }
