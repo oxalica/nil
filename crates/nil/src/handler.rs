@@ -336,11 +336,13 @@ pub(crate) fn parent_module(
     params: TextDocumentPositionParams,
 ) -> Result<Option<Vec<Location>>> {
     let (file, _) = convert::from_file(&snap.vfs(), &params.text_document)?;
-    let files = snap.analysis.file_referrers(file)?;
+    let targets = snap.analysis.file_referrers(file)?;
     let vfs = snap.vfs();
-    let locs = files
+    let locs = targets
         .into_iter()
-        .map(|file| convert::to_location(&vfs, FileRange::new(file, TextRange::default())))
+        .map(|target| {
+            convert::to_location(&vfs, FileRange::new(target.file_id, target.focus_range))
+        })
         .collect();
     Ok(Some(locs))
 }

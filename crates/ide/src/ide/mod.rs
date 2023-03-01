@@ -203,11 +203,7 @@ impl Analysis {
 
     //// Custom extensions ////
 
-    pub fn file_references(&self, file: FileId) -> Cancellable<Vec<FileId>> {
-        self.with_db(|db| file_references::file_references(db, file))
-    }
-
-    pub fn file_referrers(&self, file: FileId) -> Cancellable<Vec<FileId>> {
+    pub fn file_referrers(&self, file: FileId) -> Cancellable<Vec<NavigationTarget>> {
         self.with_db(|db| file_references::file_referrers(db, file))
     }
 }
