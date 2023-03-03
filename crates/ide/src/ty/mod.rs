@@ -58,7 +58,7 @@ mod union_find;
 mod tests;
 
 use crate::def::NameId;
-use crate::{DefDatabase, FileId};
+use crate::{DefDatabase, FileId, ModuleKind};
 use std::fmt;
 use std::sync::Arc;
 
@@ -190,8 +190,8 @@ pub enum AttrSource {
 
 fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
     match &*db.module_kind(file) {
-        crate::ModuleKind::Unknown => None,
-        crate::ModuleKind::FlakeNix {
+        ModuleKind::Unknown => None,
+        ModuleKind::FlakeNix {
             explicit_inputs,
             param_inputs,
         } => {
@@ -204,5 +204,8 @@ fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
             inputs.dedup();
             Some(known::flake(&inputs))
         }
+        ModuleKind::Package { .. } => Some(known::PACKAGE.clone()),
+        ModuleKind::ConfigModule { .. } => Some(known::CONFIG_MODULE.clone()),
+        ModuleKind::Config { .. } => Some(known::CONFIG.clone()),
     }
 }

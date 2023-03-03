@@ -318,3 +318,38 @@ fn builtins() -> Ty {
         "zipAttrsWith": (forall a b, (string -> [a] -> b) -> [{ _: a }] -> { _: b }),
     })
 }
+
+pub static PACKAGE: Lazy<Ty> = Lazy::new(|| {
+    ty!({
+        // TODO: nixpkgs.lib
+        "lib": { },
+        // TODO: Packages.
+        "pkgs": { },
+    } -> derivation)
+});
+
+pub static CONFIG_MODULE: Lazy<Ty> = Lazy::new(|| {
+    ty!({
+        "lib": { },
+        // TODO: Config.
+        "config": { },
+        "pkgs": { },
+    } -> {
+        // https://github.com/NixOS/nixpkgs/blob/fcb7bdf46213eac1a9cb573d2737620e93e46bfb/nixos/modules/misc/meta.nix#L33
+        "meta": {
+            "maintainers": [?],
+            "doc": path,
+            "buildDocsInSandbox": bool,
+        },
+        "options": { },
+        "config": { },
+    })
+});
+
+pub static CONFIG: Lazy<Ty> = Lazy::new(|| {
+    ty!({
+        "lib": { },
+        "config": { },
+        "pkgs": { },
+    } -> derivation)
+});
