@@ -43,12 +43,13 @@ This incomplete list tracks noteble features currently implemented or planned.
 
 - [x] Diagnostics. `textDocument/publishDiagnostics`
 
-  - [x] Syntax errors. 
+  - [x] Syntax errors.
   - [x] Hard semantic errors reported as parse errors by Nix, like duplicated keys in attrsets.
   - [x] Undefiend names.
   - [x] Warnings of legacy syntax.
   - [x] Warnings of unnecessary syntax.
   - [x] Warnings of unused bindings, `with` and `rec`.
+  - [x] Warnings of unused parameters for packages and modules.
   - [ ] Client pulled diagnostics.
   - [x] Custom filter on kinds.
   - [x] Exclude files.

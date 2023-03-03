@@ -16,8 +16,9 @@
 //! - Unused `let` bindings.
 //! - Unused `with` expressions.
 //! - Unnecessary `rec` attrsets.
+//! - Unused parameters of a package.
 use super::{BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
-use crate::{Diagnostic, DiagnosticKind, FileId};
+use crate::{Diagnostic, DiagnosticKind, FileId, ModuleKind};
 use la_arena::ArenaMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -74,6 +75,13 @@ pub(crate) fn liveness_check_query(
 ) -> Arc<LivenessCheckResult> {
     let module = db.module(file_id);
     let name_res = db.name_resolution(file_id);
+
+    let must_use_params_expr = match &*db.module_kind(file_id) {
+        ModuleKind::Package { lambda_expr }
+        | ModuleKind::ConfigModule { lambda_expr }
+        | ModuleKind::Config { lambda_expr } => Some(*lambda_expr),
+        _ => None,
+    };
 
     // Unused let-bindings are eagerly collected into this.
     let mut unused_defs = Vec::new();
@@ -145,8 +153,26 @@ pub(crate) fn liveness_check_query(
     let mut unused_recs = Vec::new();
     for (expr, kind) in module.exprs() {
         match kind {
-            &Expr::Lambda(Some(param), Some(_), _) if visited_defs.get(param).is_none() => {
-                unused_defs.push(param);
+            Expr::Lambda(param, pat, _) => {
+                // `{ ... }@bar: ...`
+                //          ^ Unused and removable.
+                if let Some(param) = *param {
+                    if pat.is_some() && visited_defs.get(param).is_none() {
+                        unused_defs.push(param);
+                    }
+                }
+                // `{ foo, ... }[@bar]: ...`
+                //    ^ Unused and removable, only for packages and configurations.
+                if must_use_params_expr == Some(expr) {
+                    if let Some(pat) = pat {
+                        unused_defs.extend(
+                            pat.fields
+                                .iter()
+                                .filter_map(|(name, _)| *name)
+                                .filter(|name| visited_defs.get(*name).is_none()),
+                        );
+                    }
+                }
             }
             &Expr::With(..) if visited_withs.get(expr).is_none() => {
                 unused_withs.push(expr);
@@ -250,5 +276,15 @@ mod tests {
     #[test]
     fn with_used_by_unused_let() {
         check("with 1; let $0a = from_with; in 1");
+    }
+
+    #[test]
+    fn unused_pat_param_package() {
+        check("{ stdenv, $0hello }: stdenv.mkDerivation { }");
+    }
+
+    #[test]
+    fn unused_pat_param_config() {
+        check("{ $0lib, pkgs, ... }: { foo = with pkgs; [ bar ]; }");
     }
 }
