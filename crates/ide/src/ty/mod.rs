@@ -194,6 +194,7 @@ fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
         ModuleKind::FlakeNix {
             explicit_inputs,
             param_inputs,
+            ..
         } => {
             let mut inputs = explicit_inputs
                 .keys()

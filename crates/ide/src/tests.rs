@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context, Result};
 use indexmap::IndexMap;
-use nix_interop::DEFAULT_IMPORT_FILE;
+use nix_interop::{DEFAULT_IMPORT_FILE, FLAKE_FILE};
 use std::collections::HashMap;
 use std::{mem, ops};
 use syntax::ast::AstNode;
@@ -108,24 +108,27 @@ impl Fixture {
 
                 let mut iter = header.split(' ');
                 let path = iter.next().context("Missing path")?;
+                let is_flake_nix = path == format!("/{FLAKE_FILE}");
                 let path = VfsPath::new(path);
 
-                for prop in iter {
-                    if let Some((name, target)) = prop
-                        .strip_prefix("input:")
-                        .and_then(|input| input.split_once('='))
-                    {
-                        let target = VfsPath::new(target);
-                        this.flake_info
-                            .get_or_insert_with(|| FlakeInfo {
-                                flake_file: cur_file,
-                                input_store_paths: HashMap::default(),
-                            })
-                            .input_store_paths
-                            .insert(name.into(), target);
-                    } else {
-                        bail!("Unknow property {prop}");
+                if is_flake_nix {
+                    let flake_info = this.flake_info.insert(FlakeInfo {
+                        flake_file: cur_file,
+                        input_store_paths: HashMap::new(),
+                    });
+                    for prop in iter {
+                        if let Some((name, target)) = prop
+                            .strip_prefix("input:")
+                            .and_then(|input| input.split_once('='))
+                        {
+                            let target = VfsPath::new(target);
+                            flake_info.input_store_paths.insert(name.into(), target);
+                        } else {
+                            bail!("Unknow property {prop}");
+                        }
                     }
+                } else if iter.next().is_some() {
+                    bail!("Invalid property: {line}");
                 }
 
                 if let Some(prev_path) = cur_path.replace(path) {

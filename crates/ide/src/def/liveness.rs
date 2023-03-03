@@ -76,11 +76,15 @@ pub(crate) fn liveness_check_query(
     let module = db.module(file_id);
     let name_res = db.name_resolution(file_id);
 
-    let must_use_params_expr = match &*db.module_kind(file_id) {
+    let (must_use_params_expr, is_flake_outputs) = match &*db.module_kind(file_id) {
         ModuleKind::Package { lambda_expr }
         | ModuleKind::ConfigModule { lambda_expr }
-        | ModuleKind::Config { lambda_expr } => Some(*lambda_expr),
-        _ => None,
+        | ModuleKind::Config { lambda_expr } => (Some(*lambda_expr), false),
+        ModuleKind::FlakeNix {
+            outputs_expr: Some(outputs_expr),
+            ..
+        } => (Some(*outputs_expr), true),
+        _ => (None, false),
     };
 
     // Unused let-bindings are eagerly collected into this.
@@ -161,16 +165,21 @@ pub(crate) fn liveness_check_query(
                         unused_defs.push(param);
                     }
                 }
-                // `{ foo, ... }[@bar]: ...`
+                // `{ foo [, ...] }[@bar]: ...`
                 //    ^ Unused and removable, only for packages and configurations.
-                if must_use_params_expr == Some(expr) {
-                    if let Some(pat) = pat {
-                        unused_defs.extend(
-                            pat.fields
-                                .iter()
-                                .filter_map(|(name, _)| *name)
-                                .filter(|name| visited_defs.get(*name).is_none()),
-                        );
+                if let Some(pat) = pat {
+                    if must_use_params_expr == Some(expr) {
+                        unused_defs.extend(pat.fields.iter().filter_map(|&(name, _)| {
+                            let name = name?;
+                            if visited_defs.get(name).is_some() {
+                                return None;
+                            }
+                            // `self` is not removable without ellipsis for flake outputs.
+                            if is_flake_outputs && !pat.ellipsis && module[name].text == "self" {
+                                return None;
+                            }
+                            Some(name)
+                        }));
                     }
                 }
             }
@@ -286,5 +295,28 @@ mod tests {
     #[test]
     fn unused_pat_param_config() {
         check("{ $0lib, pkgs, ... }: { foo = with pkgs; [ bar ]; }");
+    }
+
+    #[test]
+    fn unused_pat_param_flake_output() {
+        // Warn `self`.
+        check(
+            "
+#- /flake.nix
+{
+    outputs = { $0self, foo, $1nixpkgs, ... }: foo.lib.foo { };
+}
+            ",
+        );
+
+        // Don't warn `self`.
+        check(
+            "
+#- /flake.nix
+{
+    outputs = { self, $0nixpkgs }: { };
+}
+            ",
+        );
     }
 }

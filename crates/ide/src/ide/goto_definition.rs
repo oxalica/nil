@@ -105,7 +105,7 @@ fn goto_flake_input(
     tok: SyntaxToken,
 ) -> Option<GotoDefinitionResult> {
     let module_kind = db.module_kind(file);
-    let ModuleKind::FlakeNix { explicit_inputs, param_inputs } = &*module_kind else { return None };
+    let ModuleKind::FlakeNix { explicit_inputs, param_inputs, .. } = &*module_kind else { return None };
     let flake_info = db.source_root_flake_info(db.file_source_root(file))?;
 
     let ptr = tok.parent_ancestors().find_map(|node| {

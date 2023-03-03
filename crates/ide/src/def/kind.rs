@@ -20,6 +20,7 @@ pub enum ModuleKind {
         /// Implicit inputs introduced in the pat-parameter of `outputs`.
         /// NB. `self` parameter is special and is excluded here.
         param_inputs: HashMap<SmolStr, NameId>,
+        outputs_expr: Option<ExprId>,
     },
     /// A package definition as the first argument of `callPackage`.
     Package {
@@ -56,6 +57,7 @@ impl ModuleKind {
 fn parse_flake_nix(module: &Module) -> ModuleKind {
     let mut explicit_inputs = HashMap::new();
     let mut param_inputs = HashMap::new();
+    let mut outputs_expr = None;
     if let Expr::Attrset(flake_set) = &module[module.entry_expr()] {
         for &(name_id, value) in flake_set.statics.iter() {
             let BindingValue::Expr(value_expr) = value else { continue };
@@ -71,6 +73,7 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
                         .collect();
                 }
                 "outputs" => {
+                    outputs_expr = Some(value_expr);
                     let Expr::Lambda(_, Some(pat), _) = &module[value_expr] else { continue };
                     param_inputs = pat
                         .fields
@@ -88,6 +91,7 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
     ModuleKind::FlakeNix {
         explicit_inputs,
         param_inputs,
+        outputs_expr,
     }
 }
 
@@ -164,10 +168,12 @@ mod tests {
             ModuleKind::FlakeNix {
                 explicit_inputs,
                 param_inputs,
+                outputs_expr,
             } => {
                 let explicit_inputs = explicit_inputs.keys().sorted().join(",");
                 let param_inputs = param_inputs.keys().sorted().join(",");
-                format!("FlakeNix: explicit_inputs={explicit_inputs} param_inputs={param_inputs}")
+                let outputs = outputs_expr.map(expr_header).unwrap_or_default();
+                format!("FlakeNix: explicit_inputs={explicit_inputs} param_inputs={param_inputs} outputs={outputs}")
             }
             ModuleKind::Package { lambda_expr } => {
                 format!("Package: {}", expr_header(*lambda_expr))
@@ -192,7 +198,7 @@ mod tests {
     outputs = { self, nixpkgs, ... }: { };
 }
             "#,
-            expect!["FlakeNix: explicit_inputs=nil param_inputs=nixpkgs"],
+            expect!["FlakeNix: explicit_inputs=nil param_inputs=nixpkgs outputs={ self, nixpkgs, ... }: { }"],
         );
     }
 

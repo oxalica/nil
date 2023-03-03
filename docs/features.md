@@ -49,7 +49,7 @@ This incomplete list tracks noteble features currently implemented or planned.
   - [x] Warnings of legacy syntax.
   - [x] Warnings of unnecessary syntax.
   - [x] Warnings of unused bindings, `with` and `rec`.
-  - [x] Warnings of unused parameters for packages and modules.
+  - [x] Warnings of unused parameters for packages, modules and flake output parameters.
   - [ ] Client pulled diagnostics.
   - [x] Custom filter on kinds.
   - [x] Exclude files.

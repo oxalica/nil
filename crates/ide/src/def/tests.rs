@@ -154,15 +154,6 @@ baz/../../bar.nix + ../default.nix
 fn source_root_flake() {
     let (db, file) = TestDB::single_file(
         "
-#- /flake.nix
-{ }
-    ",
-    )
-    .unwrap();
-    assert_eq!(db.source_root_flake_info(db.file_source_root(file)), None);
-
-    let (db, file) = TestDB::single_file(
-        "
 #- /flake.nix input:nixpkgs=/nix/store/eeee
 { }
     ",
@@ -197,7 +188,7 @@ fn module_kind() {
     .unwrap();
 
     let module_kind = db.module_kind(f["/flake.nix"]);
-    let ModuleKind::FlakeNix { explicit_inputs, param_inputs } = &*module_kind else {
+    let ModuleKind::FlakeNix { explicit_inputs, param_inputs, .. } = &*module_kind else {
         panic!("Unexpected module kind: {module_kind:?}");
     };
     assert_eq!(
