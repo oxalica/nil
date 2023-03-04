@@ -93,3 +93,14 @@ Remove empty `inherit;` or `inherit (...);`.
 ```nix
 { foo = "bar"; }
 ```
+
+### `remove_empty_let_in`
+
+Remove empty `let in ...`.
+```nix
+let in { foo = "bar"; }
+```
+=>
+```nix
+{ foo = "bar"; }
+```
