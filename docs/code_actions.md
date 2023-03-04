@@ -93,3 +93,15 @@ Remove empty `inherit;` or `inherit (...);`.
 ```nix
 { foo = "bar"; }
 ```
+
+### `convert_let_attrset`
+
+Convert `let {...}` to `let ... in ...`.
+
+```nix
+let { foo = "bar"; body = foo; }
+```
+=>
+```nix
+let foo = "bar"; in foo
+```
