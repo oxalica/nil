@@ -139,7 +139,7 @@ pub fn best_token_at_offset(node: &SyntaxNode, offset: TextSize) -> Option<Synta
             | SyntaxKind::PATH_FRAGMENT
             | SyntaxKind::STRING_FRAGMENT => 2,
             SyntaxKind::STRING_ESCAPE => 3,
-            k if k.is_symbol() => 4,
+            k if k.is_punct() => 4,
             k if k.is_keyword() => 5,
             // IDENT, INT, and etc.
             _ => 6,

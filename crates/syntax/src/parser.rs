@@ -148,12 +148,12 @@ impl<'i> Parser<'i> {
             .iter()
             .rev()
             .map(|&(k, _)| k)
-            .filter(|k| !k.is_whitespace())
+            .filter(|k| !k.is_trivia())
     }
 
     /// Consumes all following whitespaces if any.
     fn ws(&mut self) {
-        while matches!(self.peek(), Some(k) if k.is_whitespace()) {
+        while matches!(self.peek(), Some(k) if k.is_trivia()) {
             self.bump();
         }
     }

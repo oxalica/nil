@@ -82,8 +82,8 @@ def! {
     KW_THEN = [then],
     KW_WITH = [with] @KEYWORD_LAST,
 
-    // Symbols len=1.
-    AT = [@] @SYMBOL_FIRST,
+    // Punctuations len=1.
+    AT = [@] @PUNCT_FIRST,
     BANG = [!],
     COLON = [:],
     COMMA = [,],
@@ -105,7 +105,7 @@ def! {
     SLASH = [/],
     STAR = [*],
 
-    // Symbols len=2.
+    // Punctuations len=2.
     AND2 = [&&],
     DOLLAR_L_CURLY = ["${"],
     EQ2 = [==],
@@ -118,8 +118,8 @@ def! {
     QUOTE2 = ["''"],
     SLASH2 = ["//"],
 
-    // Symbols len=3.
-    DOT3 = [...] @SYMBOL_LAST,
+    // Punctuations len=3.
+    DOT3 = [...] @PUNCT_LAST,
 
     // Literals and identifiers.
     FLOAT,
@@ -171,19 +171,29 @@ def! {
 }
 
 impl SyntaxKind {
+    /// Returns whether this is a SPACE.
     #[inline(always)]
-    pub fn is_whitespace(self) -> bool {
+    pub fn is_space(self) -> bool {
+        matches!(self, Self::SPACE)
+    }
+
+    /// Returns whether this is a COMMENT or SPACE.
+    #[inline(always)]
+    pub fn is_trivia(self) -> bool {
         matches!(self, Self::COMMENT | Self::SPACE)
     }
 
+    /// Returns whether this is a keyword.
+    /// Contextual keywords are not considered keywords outside expected contexts.
     #[inline(always)]
     pub fn is_keyword(self) -> bool {
         (Self::KEYWORD_FIRST as u8..=Self::KEYWORD_LAST as u8).contains(&(self as u8))
     }
 
+    /// Returns whether this is a punctuation, including operators and delimiters.
     #[inline(always)]
-    pub fn is_symbol(self) -> bool {
-        (Self::SYMBOL_FIRST as u8..=Self::SYMBOL_LAST as u8).contains(&(self as u8))
+    pub fn is_punct(self) -> bool {
+        (Self::PUNCT_FIRST as u8..=Self::PUNCT_LAST as u8).contains(&(self as u8))
     }
 }
 

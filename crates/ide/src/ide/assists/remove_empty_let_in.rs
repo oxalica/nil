@@ -23,7 +23,7 @@ pub(super) fn remove_empty_let_in(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let last_token = node
         .in_token()?
         .next_token()
-        .filter(|tok| tok.kind().is_whitespace())
+        .filter(|tok| tok.kind().is_space())
         .or(node.in_token())?;
 
     let range = node
@@ -58,5 +58,10 @@ mod tests {
         check("{ foo = let $0 in 42; }", expect!["{ foo = 42; }"]);
         check_no("let foo = 42;$0 in foo");
         check_no("{ foo = let bar = 42;$0 in bar; }");
+    }
+
+    #[test]
+    fn keep_comment() {
+        check("let in$0/*hello*/{ }", expect!["/*hello*/{ }"]);
     }
 }

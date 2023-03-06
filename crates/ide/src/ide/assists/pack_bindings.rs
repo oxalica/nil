@@ -87,7 +87,7 @@ pub(super) fn pack_bindings(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let trivia_start =
             std::iter::successors(path_value.syntax().first_token(), |tok| tok.prev_token())
                 .skip(1)
-                .take_while(|tok| tok.kind().is_whitespace())
+                .take_while(|tok| tok.kind().is_trivia())
                 .last()
                 .map_or_else(
                     || path_value.syntax().text_range().start(),

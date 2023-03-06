@@ -297,14 +297,14 @@ asts! {
             self.0
                 .children_with_tokens()
                 .filter_map(|it| it.into_token())
-                .find(|it| !it.kind().is_whitespace())
+                .find(|it| !it.kind().is_trivia())
                 .filter(|tok| tok.kind() == T![let])
         }
         pub fn rec_token(&self) -> Option<SyntaxToken> {
             self.0
                 .children_with_tokens()
                 .filter_map(|it| it.into_token())
-                .find(|it| !it.kind().is_whitespace())
+                .find(|it| !it.kind().is_trivia())
                 .filter(|tok| tok.kind() == T![rec])
         }
     },
