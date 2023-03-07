@@ -9,7 +9,7 @@ trim_trailing_whitespace = true
 [*.md]
 indent_size = 1
 
-[*.{ast,nix,sh,vim}]
+[*.{ast,nix,sh,vim,yaml}]
 indent_size = 2
 
 [*.patch]
