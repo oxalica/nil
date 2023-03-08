@@ -37,6 +37,7 @@ enum Ty {
 
     List(TyVar),
     Lambda(TyVar, TyVar),
+    // TODO: Add support for `rest` similar to super::Attrset.
     Attrset(Attrset),
 
     External(super::Ty),
