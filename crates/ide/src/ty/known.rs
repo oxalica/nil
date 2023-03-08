@@ -57,16 +57,16 @@ fn merge_attrset(lhs: &Ty, rhs: &Ty) -> Ty {
     let rhs = rhs.as_attrset().unwrap();
     // Put the RHS on the front and ...
     let mut xs = rhs
-        .named
+        .fields
         .iter()
-        .chain(lhs.named.iter())
+        .chain(lhs.fields.iter())
         .map(|(name, ty, src)| (name.clone(), ty.clone(), *src))
         .collect::<Vec<_>>();
     // ... run stable sort to prefer RHS when duplicated.
     xs.sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
     xs.dedup_by(|(lhs, ..), (rhs, ..)| lhs == rhs);
     Ty::Attrset(Attrset {
-        named: xs.into(),
+        fields: xs.into(),
         rest: rhs.rest.clone(),
     })
 }

@@ -93,12 +93,15 @@ impl fmt::Display for TyDisplay<'_> {
                     let value = Self { ty, config };
                     write!(f, " {name}: {value}")?;
                 }
-                match (config.max_attrset_fields.checked_sub(set.len()), &*set.rest) {
-                    (Some(1..), Some((ty, _))) => {
+                match (config.max_attrset_fields.checked_sub(set.len()), &set.rest) {
+                    (Some(1..), Some(rest)) => {
                         if !set.is_empty() {
                             ",".fmt(f)?;
                         }
-                        let value = Self { ty, config };
+                        let value = Self {
+                            ty: &rest.0,
+                            config,
+                        };
                         write!(f, " _: {value} }}")
                     }
                     (Some(_), _) => " }".fmt(f),

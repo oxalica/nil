@@ -142,15 +142,15 @@ impl fmt::Debug for Ty {
 // Invariant: sorted by names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attrset {
-    named: Arc<[(SmolStr, Ty, AttrSource)]>,
-    rest: Arc<Option<(Ty, AttrSource)>>,
+    fields: Arc<[(SmolStr, Ty, AttrSource)]>,
+    rest: Option<Arc<(Ty, AttrSource)>>,
 }
 
 impl Default for Attrset {
     fn default() -> Self {
         Self {
-            named: Arc::new([]),
-            rest: Arc::new(None),
+            fields: Arc::new([]),
+            rest: None,
         }
     }
 }
@@ -165,38 +165,36 @@ impl Attrset {
         iter: impl IntoIterator<Item = (&'a str, Ty, AttrSource)>,
         rest: Option<(Ty, AttrSource)>,
     ) -> Self {
-        let mut named = iter
+        let mut fields = iter
             .into_iter()
             .map(|(name, ty, src)| (SmolStr::from(name), ty, src))
             .collect::<Arc<[_]>>();
-        Arc::get_mut(&mut named)
+        Arc::get_mut(&mut fields)
             .unwrap()
             .sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
         assert!(
-            named.windows(2).all(|w| w[0].0 != w[1].0),
+            fields.windows(2).all(|w| w[0].0 != w[1].0),
             "Duplicated fields",
         );
         Self {
-            named,
-            rest: Arc::new(rest),
+            fields,
+            rest: rest.map(Arc::new),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.named.is_empty()
+        self.fields.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.named.len()
+        self.fields.len()
     }
 
     fn get_all(&self, field: &str) -> Option<(&Ty, AttrSource)> {
-        if let Ok(i) = self.named.binary_search_by(|p| (*p.0).cmp(field)) {
-            Some((&self.named[i].1, self.named[i].2))
-        } else if let Some((ty, src)) = &*self.rest {
-            Some((ty, *src))
+        if let Ok(i) = self.fields.binary_search_by(|p| (*p.0).cmp(field)) {
+            Some((&self.fields[i].1, self.fields[i].2))
         } else {
-            None
+            self.rest.as_ref().map(|rest| (&rest.0, rest.1))
         }
     }
 
@@ -209,7 +207,7 @@ impl Attrset {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&SmolStr, &Ty, AttrSource)> + '_ {
-        self.named.iter().map(|(k, ty, src)| (k, ty, *src))
+        self.fields.iter().map(|(k, ty, src)| (k, ty, *src))
     }
 }
 
