@@ -134,7 +134,19 @@ pub fn flake(inputs: &[&str]) -> Ty {
                 }
             },
             "nixosConfigurations": {
-                _: derivation
+                _: {
+                    "config": { },
+                    "extendModules":
+                        ({
+                            "modules": [?],
+                            "specialArgs": { },
+                            "prefix": [string]
+                        } -> { }),
+                    "extraArgs": { },
+                    "options": { },
+                    "pkgs": { },
+                    "type": { }
+                }
             },
             "nixosModules": {
                 "default": ({ "config": { } } -> { "options": { }, "config": { } }),
