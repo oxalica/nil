@@ -115,8 +115,10 @@ pub fn flake(inputs: &[&str]) -> Ty {
                 }
             },
             "devShells": {
-                "default": derivation,
-                _: derivation
+                _: {
+                    "default": derivation,
+                    _: derivation
+                }
             },
             "formatter": {
                 _: derivation
@@ -143,8 +145,10 @@ pub fn flake(inputs: &[&str]) -> Ty {
                 _: ({ } -> { } -> { })
             },
             "packages": {
-                "default": derivation,
-                _: derivation
+                _: {
+                    "default": derivation,
+                    _: derivation
+                }
             },
             "templates": {
                 "default": { "description": string, "path": string },
