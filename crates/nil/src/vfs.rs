@@ -52,7 +52,6 @@ impl Vfs {
             Some(file) => {
                 self.files[file.0 as usize] = (text.clone(), line_map);
                 self.change.change_file(file, text);
-                self.local_file_set.remove_file(file);
                 self.root_changed = true;
                 file
             }
