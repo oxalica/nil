@@ -104,36 +104,47 @@ pub fn flake(inputs: &[&str]) -> Ty {
         // https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-develop.html?highlight=flake#flake-output-attributes
         "outputs": ((#outputs_param_ty) -> {
             "apps": {
+                // System
                 _: {
                     "default": { "type": string, "program": string },
+                    // Name
                     _: { "type": string, "program": string }
                 }
             },
             "checks": {
+                // System
                 _: {
+                    // Name
                     _: derivation
                 }
             },
             "devShells": {
+                // System
                 _: {
                     "default": derivation,
+                    // Name
                     _: derivation
                 }
             },
             "formatter": {
+                // System
                 _: derivation
             },
             "hydraJobs": {
+                // Name
                 _: {
+                    // System
                     _: derivation
                 }
             },
             "legacyPackages": {
+                // System
                 _: {
                     _: ?
                 }
             },
             "nixosConfigurations": {
+                // Name
                 _: {
                     "config": { },
                     "extendModules":
@@ -150,20 +161,25 @@ pub fn flake(inputs: &[&str]) -> Ty {
             },
             "nixosModules": {
                 "default": ({ "config": { } } -> { "options": { }, "config": { } }),
+                // Name
                 _: ({ "config": { } } -> { "options": { }, "config": { } })
             },
             "overlays": {
                 "default": ({ } -> { } -> { }),
+                // Name
                 _: ({ } -> { } -> { })
             },
             "packages": {
+                // System
                 _: {
                     "default": derivation,
+                    // Name
                     _: derivation
                 }
             },
             "templates": {
                 "default": { "description": string, "path": string },
+                // Name
                 _: { "description": string, "path": string }
             },
         }),
