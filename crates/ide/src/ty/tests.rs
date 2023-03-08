@@ -226,8 +226,10 @@ fn flake_file() {
               ",
         expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, shortRev: string, sourceInfo: { dir: string, id: string, narHash: string, owner: string, ref: string, repo: string, rev: string, submodules: bool, type: string, url: string }, submodules: bool }"],
     );
+}
 
-    // Placeholders
+#[test]
+fn rest_type() {
     check_name(
         "bar",
         r"
