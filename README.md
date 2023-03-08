@@ -4,43 +4,38 @@
 
 An incremental analysis assistant for writing in Nix.
 
-See [release notes][releases] for change log between tagged unstable versions.
+See [release notes](https://github.com/oxalica/nil/releases) for changelog between releases.
 
 See [`docs/features.md`](docs/features.md) for an incomplete list of notable features currently
 implemented or planned.
 
 See [`docs/configuration.md`](docs/configuration.md) for all tunable configuration options.
 
-[releases]: https://github.com/oxalica/nil/releases
-
 ## Installation
 
-This program is already included in [NixOS/nixpkgs][nixpkgs] under attribute `nil`,
-and are regularly updated.
-
-[nixpkgs]: https://github.com/NixOS/nixpkgs
+This program is available in [NixOS/nixpkgs](https://github.com/NixOS/nixpkgs) under attribute `nil`,
+and is regularly updated.
 
 - If you use `nix-env`, run `nix-env -iA nixpkgs.nil`
 - If you use `nix profile`, run `nix profile install nixpkgs#nil`
-- If you want to compile it from source.
+- If you want to compile it from source:
   1. Install stable Rust toolchain >= 1.62
-  1. Install `nix` >= 2.4 and make the binary `nix` available from your `PATH`.
+  1. Install nix >= 2.4 and make sure the binary `nix` is in your `PATH`.
   1. Build and install via `cargo install --git https://github.com/oxalica/nil nil`
 
-## Flake
+## Install with [Flake](https://nixos.wiki/wiki/Flakes)
 
-This repo is also packaged via [Nix flakes][nix-flakes], the language server binary package is
-available through the default flake output `github:oxalica/nil#` with the path `bin/nil`.
+This repo is also packaged via Nix flakes. The language server package is
+available in the default flake output `github:oxalica/nil#`, under `bin/nil`.
 
-You can [enable flakes support][nix-flakes-install] in your nix configuration, and then
-run `nix profile install github:oxalica/nil` to get `nil` installed.
-You can also use this repository as a flake input and add its output to your own flake-managed
-systemwide or home configuration.
+To install, run `nix profile install github:oxalica/nil`. Alternatively,
+you can use this repository as a flake input, and add its output to your own flake-managed
+system-wide and/or home configurations.
 
-*Disclaimer: We ship `flake.lock` which is tested in CI to be working. If you use `follows` to
-override flake inputs, we provide no guarantee of whether it would still build.*
+*Disclaimer: The `flake.lock` we ship is tested in CI. If you use `follows` to
+override flake inputs, we do not guarantee that it will build.*
 
-Flake output structure (not necessary up-to-date):
+Flake output structure (not necessarily up-to-date):
 ```
 ├───devShells
 │   └───(...)
@@ -51,24 +46,16 @@ Flake output structure (not necessary up-to-date):
     └───(...)
 ```
 
-[nix-flakes]: https://nixos.wiki/wiki/Flakes
-[nix-flakes-install]: https://nixos.wiki/wiki/Flakes#Installing_flakes
-
 ## Editor integration
 
-### Neovim native LSP and [`nvim-lspconfig`]
+### Neovim native LSP and [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig)
 
-[`nvim-lspconfig`]: https://github.com/neovim/nvim-lspconfig
+We are officially supported by nvim-lspconfig, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/0fafc3ef648bd612757630097c96b725a36a0476/doc/server_configurations.txt#nil_ls),
+also [the example config for testing](dev/nvim-lsp.nix).
 
-We are officially supported by `nvim-lspconfig`, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/0fafc3ef648bd612757630097c96b725a36a0476/doc/server_configurations.txt#nil_ls).
+### Vim/Neovim with [coc.nvim](https://github.com/neoclide/coc.nvim)
 
-See also [the example config for testing](dev/nvim-lsp.nix).
-
-### Vim/Neovim with [`coc.nvim`]
-
-[`coc.nvim`]: https://github.com/neoclide/coc.nvim
-
-Merge this setting into your `coc-settings.json`, which can be opened by `:CocConfig`.
+Merge this setting into your `coc-settings.json` (open with `:CocConfig`).
 
 ```jsonc
 {
@@ -88,13 +75,11 @@ Merge this setting into your `coc-settings.json`, which can be opened by `:CocCo
 }
 ```
 
-See also [the example config for testing](dev/vim-coc.nix).
+See [the example config for testing](dev/vim-coc.nix).
 
-### Vim with [`vim-lsp`]
+### Vim with [vim-lsp](https://github.com/prabirshrestha/vim-lsp)
 
-[`vim-lsp`]: https://github.com/prabirshrestha/vim-lsp
-
-Add the following code to your `vimrc` to register the LSP server.
+Add the following code to your `~/.vimrc` to register the LSP server.
 Thanks @mitchmindtree
 
 ```vim
@@ -107,9 +92,7 @@ if executable('nil')
 endif
 ```
 
-### Emacs with [`lsp-mode`]
-
-[`lsp-mode`]: https://github.com/emacs-lsp/lsp-mode
+### Emacs with [lsp-mode](https://github.com/emacs-lsp/lsp-mode)
 
 Add the following elisp code to your configuration. (using `use-package`)
 
@@ -129,12 +112,10 @@ Add the following elisp code to your configuration. (using `use-package`)
   :ensure t)
 ```
 
-There are various other configurations to tweak it. Refer the
-[specific manual page](https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/ "https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/") for more details.
+There are various other configurations to tweak. Refer to the
+[specific manual page](https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/) for more details.
 
-### Emacs with [`eglot`]
-
-[`eglot`]: https://github.com/joaotavora/eglot
+### Emacs with [eglot](https://github.com/joaotavora/eglot)
 
 Add the following elisp code to your configuration. (using `use-package`)
 
@@ -148,9 +129,7 @@ Add the following elisp code to your configuration. (using `use-package`)
   (nix-mode . eglot-ensure))
 ```
 
-### Vscode/Vscodium with [Nix IDE]
-
-[Nix IDE]: https://github.com/nix-community/vscode-nix-ide
+### VSCode/VSCodium with [Nix IDE](https://github.com/nix-community/vscode-nix-ide)
 
 Modify the extension's settings in your `settings.json`.
 
@@ -168,9 +147,7 @@ Modify the extension's settings in your `settings.json`.
 }
 ```
 
-### Kate with [LSP Client Plugin]
-
-[LSP Client Plugin]: https://docs.kde.org/stable5/en/kate/kate/kate-application-plugin-lspclient.html
+### Kate with [LSP Client Plugin](https://docs.kde.org/stable5/en/kate/kate/kate-application-plugin-lspclient.html)
 
 Add this to your "User Server Settings" in LSP Client configuration:
 
