@@ -250,6 +250,6 @@ fn rest_type() {
 fn builtins() {
     check("true", expect!["bool"]);
     check("builtins.length [ ]", expect!["int"]);
-    check("builtins.readDir ./.", expect!["{ _: string }"]);
+    check("builtins.readDir ./.", expect!["{ …: string }"]);
     check("(builtins.readDir ./.).foo", expect!["string"]);
 }

@@ -75,7 +75,7 @@ impl fmt::Display for TyDisplay<'_> {
                 Ok(())
             }
             Ty::Attrset(set) => {
-                if config.max_attrset_depth == 0 {
+                if config.max_attrset_depth == 0 || config.max_attrset_fields == 0 {
                     return "{…}".fmt(f);
                 }
                 config.max_attrset_depth -= 1;
@@ -83,7 +83,10 @@ impl fmt::Display for TyDisplay<'_> {
 
                 "{".fmt(f)?;
                 let mut first = true;
-                for (name, ty, _src) in set.iter().take(config.max_attrset_fields) {
+                let max_fields = config
+                    .max_attrset_fields
+                    .saturating_sub(set.rest.is_some() as usize);
+                for (name, ty, _src) in set.iter().take(max_fields) {
                     if first {
                         first = false;
                     } else {
@@ -93,21 +96,61 @@ impl fmt::Display for TyDisplay<'_> {
                     let value = Self { ty, config };
                     write!(f, " {name}: {value}")?;
                 }
-                match (config.max_attrset_fields.checked_sub(set.len()), &set.rest) {
-                    (Some(1..), Some(rest)) => {
-                        if !set.is_empty() {
-                            ",".fmt(f)?;
-                        }
-                        let value = Self {
-                            ty: &rest.0,
-                            config,
-                        };
-                        write!(f, " _: {value} }}")
+                if let Some(rest) = &set.rest {
+                    if !first {
+                        ",".fmt(f)?;
                     }
-                    (Some(_), _) => " }".fmt(f),
-                    (None, _) => ", … }".fmt(f),
+                    let value = Self {
+                        ty: &rest.0,
+                        config,
+                    };
+                    write!(f, " …: {value} }}")
+                } else if set.len() > max_fields {
+                    ", … }".fmt(f)
+                } else {
+                    " }".fmt(f)
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::{expect, Expect};
+
+    use super::{Config, TyDisplay};
+    use crate::ty::Ty;
+
+    #[track_caller]
+    fn check_max_fields(max_attrset_fields: usize, ty: &Ty, expect: Expect) {
+        let disp = TyDisplay {
+            ty,
+            config: Config {
+                max_attrset_fields,
+                ..super::Config::FULL
+            },
+        };
+        expect.assert_eq(&disp.to_string());
+    }
+
+    #[test]
+    fn attrset() {
+        let ty = &ty!({ "a": int, "b": string, "c": bool });
+        check_max_fields(0, ty, expect!["{…}"]);
+        check_max_fields(1, ty, expect!["{ a: int, … }"]);
+        check_max_fields(2, ty, expect!["{ a: int, b: string, … }"]);
+        check_max_fields(3, ty, expect!["{ a: int, b: string, c: bool }"]);
+        check_max_fields(4, ty, expect!["{ a: int, b: string, c: bool }"]);
+    }
+
+    #[test]
+    fn attrset_rest() {
+        let ty = &ty!({ "a": int, "b": string, _: bool });
+        check_max_fields(0, ty, expect!["{…}"]);
+        check_max_fields(1, ty, expect!["{ …: bool }"]);
+        check_max_fields(2, ty, expect!["{ a: int, …: bool }"]);
+        check_max_fields(3, ty, expect!["{ a: int, b: string, …: bool }"]);
+        check_max_fields(4, ty, expect!["{ a: int, b: string, …: bool }"]);
     }
 }
