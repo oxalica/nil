@@ -1,6 +1,6 @@
 ## LSP Configuration
 
-There are some tunable options and settings for `nil`.
+There are some tunable options and settings for nil.
 They are retrieved via LSP and support runtime modification.
 
 All settings are nested under a key `"nil"`.
@@ -8,13 +8,13 @@ For example, `formatting.command` means to write
 `"nil": { "formatting": { "command": ["your-command"] } }`
 in JSON, not `"nil.formatting.command": ["wrong"]`.
 
-The place to write LSP configurations differs between clients.
-Please check the documentation of your LSP client (usually the editor or editor plugins).
+The place to write LSP configurations differs between clients (i.e. editors and editor plugins).
+Please refer to their corresponding documentation.
 There are some examples for common editor/plugins in [README](../README.md).
 
 ### Reference
 
-The values shown here are the default values.
+Default configuration:
 
 ```jsonc
 {
