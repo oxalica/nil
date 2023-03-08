@@ -28,18 +28,37 @@ macro_rules! ty {
 
     (($($inner:tt)*)) => { ty!($($inner)*) };
     ([$($inner:tt)*]) => { $crate::ty::Ty::List(::std::sync::Arc::new(ty!($($inner)*)))};
-    ({ $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
-        // TODO: Rest type.
-        $(let _ = ty!($rest_ty);)?
-        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal([
-            $(($key, ty!($ty), $crate::ty::AttrSource::Unknown),)*
-        ]))
+    ({ $($key:literal : $ty:tt),* $(,)? }) => {{
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal(
+            [
+                $(($key, ty!($ty), $crate::ty::AttrSource::Unknown),)*
+            ],
+            None,
+        ))
     }};
-    ({($src:expr) $($key:literal : $ty:tt),* $(,)? $(_ : $rest_ty:tt)? }) => {{
-        $(let _ = ty!($rest_ty);)?
-        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal([
-            $(($key, ty!($ty), $src),)*
-        ]))
+    ({ $($key:literal : $ty:tt),* $(,)? _ : $rest_ty:tt }) => {{
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal(
+            [
+                $(($key, ty!($ty), $crate::ty::AttrSource::Unknown),)*
+            ],
+            Some((ty!($rest_ty), $crate::ty::AttrSource::Unknown)),
+        ))
+    }};
+    ({($src:expr) $($key:literal : $ty:tt),* $(,)? }) => {{
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal(
+            [
+                $(($key, ty!($ty), $src),)*
+            ],
+            None
+        ))
+    }};
+    ({($src:expr) $($key:literal : $ty:tt),* $(,)? _ : $rest_ty:tt }) => {{
+        $crate::ty::Ty::Attrset($crate::ty::Attrset::from_internal(
+            [
+                $(($key, ty!($ty), $src),)*
+            ],
+            Some((ty!($rest_ty), $src))
+        ))
     }};
     ($arg:tt -> $($ret:tt)*) => {
         $crate::ty::Ty::Lambda(
@@ -122,11 +141,17 @@ impl fmt::Debug for Ty {
 
 // Invariant: sorted by names.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Attrset(Arc<[(SmolStr, Ty, AttrSource)]>);
+pub struct Attrset {
+    fields: Arc<[(SmolStr, Ty, AttrSource)]>,
+    rest: Option<Arc<(Ty, AttrSource)>>,
+}
 
 impl Default for Attrset {
     fn default() -> Self {
-        Self(Arc::new([]))
+        Self {
+            fields: Arc::new([]),
+            rest: None,
+        }
     }
 }
 
@@ -136,32 +161,41 @@ impl Attrset {
     /// # Panics
     /// The given iterator must have no duplicated fields, or it'll panic.
     #[track_caller]
-    pub fn from_internal<'a>(iter: impl IntoIterator<Item = (&'a str, Ty, AttrSource)>) -> Self {
-        let mut set = iter
+    pub fn from_internal<'a>(
+        iter: impl IntoIterator<Item = (&'a str, Ty, AttrSource)>,
+        rest: Option<(Ty, AttrSource)>,
+    ) -> Self {
+        let mut fields = iter
             .into_iter()
             .map(|(name, ty, src)| (SmolStr::from(name), ty, src))
             .collect::<Arc<[_]>>();
-        Arc::get_mut(&mut set)
+        Arc::get_mut(&mut fields)
             .unwrap()
             .sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
         assert!(
-            set.windows(2).all(|w| w[0].0 != w[1].0),
+            fields.windows(2).all(|w| w[0].0 != w[1].0),
             "Duplicated fields",
         );
-        Self(set)
+        Self {
+            fields,
+            rest: rest.map(Arc::new),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.fields.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.fields.len()
     }
 
     fn get_all(&self, field: &str) -> Option<(&Ty, AttrSource)> {
-        let i = self.0.binary_search_by(|p| (*p.0).cmp(field)).ok()?;
-        Some((&self.0[i].1, self.0[i].2))
+        if let Ok(i) = self.fields.binary_search_by(|p| (*p.0).cmp(field)) {
+            Some((&self.fields[i].1, self.fields[i].2))
+        } else {
+            self.rest.as_ref().map(|rest| (&rest.0, rest.1))
+        }
     }
 
     pub fn get(&self, field: &str) -> Option<&Ty> {
@@ -173,7 +207,7 @@ impl Attrset {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&SmolStr, &Ty, AttrSource)> + '_ {
-        self.0.iter().map(|(k, ty, src)| (k, ty, *src))
+        self.fields.iter().map(|(k, ty, src)| (k, ty, *src))
     }
 }
 

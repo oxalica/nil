@@ -37,6 +37,7 @@ enum Ty {
 
     List(TyVar),
     Lambda(TyVar, TyVar),
+    // TODO: Add support for `rest` similar to super::Attrset.
     Attrset(Attrset),
 
     External(super::Ty),
@@ -532,13 +533,13 @@ impl<'a> Collector<'a> {
                 let b = self.collect(b);
                 super::Ty::Lambda(a.into(), b.into())
             }
-            Ty::Attrset(set) => {
-                let set = set
+            Ty::Attrset(fields) => {
+                let fields = fields
                     .0
                     .into_iter()
                     .map(|(name, (ty, src))| (name, self.collect(ty), src))
                     .collect();
-                super::Ty::Attrset(super::Attrset(set))
+                super::Ty::Attrset(super::Attrset { fields, rest: None })
             }
             Ty::External(ty) => ty,
         }
