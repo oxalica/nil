@@ -532,13 +532,16 @@ impl<'a> Collector<'a> {
                 let b = self.collect(b);
                 super::Ty::Lambda(a.into(), b.into())
             }
-            Ty::Attrset(set) => {
-                let set = set
+            Ty::Attrset(named) => {
+                let named = named
                     .0
                     .into_iter()
                     .map(|(name, (ty, src))| (name, self.collect(ty), src))
                     .collect();
-                super::Ty::Attrset(super::Attrset(set))
+                super::Ty::Attrset(super::Attrset {
+                    named,
+                    rest: Arc::new(None),
+                })
             }
             Ty::External(ty) => ty,
         }

@@ -226,10 +226,28 @@ fn flake_file() {
               ",
         expect!["{ inputs: { }, lastModified: int, lastModifiedDate: string, narHash: string, outPath: string, outputs: { }, rev: string, revCount: int, shortRev: string, sourceInfo: { dir: string, id: string, narHash: string, owner: string, ref: string, repo: string, rev: string, submodules: bool, type: string, url: string }, submodules: bool }"],
     );
+
+    // Placeholders
+    check_name(
+        "bar",
+        r"
+#- /flake.nix
+{
+    outputs = { self }: {
+        apps.x86_64-linux = {
+            foo = let bar = bar; in bar;
+        };
+    };
+}
+        ",
+        expect!["{ program: string, type: string }"],
+    );
 }
 
 #[test]
 fn builtins() {
     check("true", expect!["bool"]);
     check("builtins.length [ ]", expect!["int"]);
+    check("builtins.readDir ./.", expect!["{ _: string }"]);
+    check("(builtins.readDir ./.).foo", expect!["string"]);
 }

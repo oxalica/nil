@@ -57,15 +57,18 @@ fn merge_attrset(lhs: &Ty, rhs: &Ty) -> Ty {
     let rhs = rhs.as_attrset().unwrap();
     // Put the RHS on the front and ...
     let mut xs = rhs
-        .0
+        .named
         .iter()
-        .chain(lhs.0.iter())
+        .chain(lhs.named.iter())
         .map(|(name, ty, src)| (name.clone(), ty.clone(), *src))
         .collect::<Vec<_>>();
     // ... run stable sort to prefer RHS when duplicated.
     xs.sort_by(|(lhs, ..), (rhs, ..)| lhs.cmp(rhs));
     xs.dedup_by(|(lhs, ..), (rhs, ..)| lhs == rhs);
-    Ty::Attrset(Attrset(xs.into()))
+    Ty::Attrset(Attrset {
+        named: xs.into(),
+        rest: rhs.rest.clone(),
+    })
 }
 
 /// https://nixos.wiki/wiki/Flakes
@@ -87,6 +90,7 @@ pub fn flake(inputs: &[&str]) -> Ty {
             .iter()
             .copied()
             .map(|name| (name, input_ty.clone(), AttrSource::Unknown)),
+        None,
     ));
 
     let outputs_param_ty = Ty::Attrset(Attrset::from_internal(
@@ -95,6 +99,7 @@ pub fn flake(inputs: &[&str]) -> Ty {
             .copied()
             .chain(Some("self"))
             .map(|name| (name, FLAKE.clone(), AttrSource::Unknown)),
+        None,
     ));
 
     ty!({
