@@ -1,6 +1,6 @@
 # nil: NIx Language server
 
-[![CI](https://github.com/oxalica/nil/actions/workflows/ci.yml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yml)
+[![CI](https://github.com/oxalica/nil/actions/workflows/ci.yaml/badge.svg)](https://github.com/oxalica/nil/actions/workflows/ci.yaml)
 
 An incremental analysis assistant for writing in Nix.
 
