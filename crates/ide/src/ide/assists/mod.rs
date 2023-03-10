@@ -6,6 +6,7 @@ macro_rules! define_check_assist {
             crate::ide::assists::tests::check_assist($handler, fixture, expect);
         }
         #[track_caller]
+        #[allow(dead_code)]
         fn check_no(fixture: &str) {
             crate::ide::assists::tests::check_assist_no($handler, fixture);
         }
