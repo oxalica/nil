@@ -18,7 +18,7 @@ impl Parse {
     }
 
     pub fn root(&self) -> SourceFile {
-        SourceFile::cast(self.syntax_node()).unwrap()
+        SourceFile::cast(self.syntax_node()).expect("The entry node is SourceFile")
     }
 
     pub fn syntax_node(&self) -> SyntaxNode {
@@ -30,8 +30,13 @@ impl Parse {
     }
 }
 
+/// Parse the source of a Nix file.
+///
+/// # Panics
+/// Panic if the source is longer than `u32::MAX`.
 pub fn parse_file(src: &str) -> Parse {
-    assert!(src.len() < u32::MAX as usize);
+    assert!(u32::try_from(src.len()).is_ok());
+
     let mut tokens = lexer::lex(src.as_bytes());
     tokens.reverse();
     Parser {
@@ -115,7 +120,7 @@ impl<'i> Parser<'i> {
         self.builder.token(kind.into(), &self.src[range]);
     }
 
-    /// Consume the next token and wrap it in an ERROR node.
+    /// Consume the next token and wrap it in an `ERROR` node.
     fn bump_error(&mut self) {
         self.start_node(ERROR);
         self.bump();
@@ -129,7 +134,7 @@ impl<'i> Parser<'i> {
         self.tokens.last().copied()
     }
 
-    /// Like `peek`, but only returns SyntaxKind.
+    /// Like `peek`, but only returns `SyntaxKind`.
     fn peek(&mut self) -> Option<SyntaxKind> {
         self.peek_full().map(|(k, _)| k)
     }
@@ -266,7 +271,7 @@ impl<'i> Parser<'i> {
                 self.finish_node();
             }
             Some(T!['{']) => {
-                // Recognise patterns of LAMBDA starting. Otherwise, it's an ATTR_SET.
+                // Recognise patterns of `LAMBDA` starting. Otherwise, it's an `ATTR_SET`.
                 // - '{ ...'
                 // - '{ } :'
                 // - '{ } @'
@@ -316,7 +321,7 @@ impl<'i> Parser<'i> {
                 }
             }
             Some(IDENT) => {
-                // Recognise patterns of LAMBDA starting. Otherwise, it's an REF.
+                // Recognise patterns of `LAMBDA` starting. Otherwise, it's a `REF`.
                 // - 'x :'
                 // - 'x @'
                 let is_lambda = matches!(self.peek_iter_non_ws().nth(1), Some(T![:] | T![@]));
@@ -392,7 +397,7 @@ impl<'i> Parser<'i> {
                     break;
                 }
 
-                // Currently we have only HAS_ATTR as a postfix operator.
+                // Currently we have only `HAS_ATTR` as a postfix operator.
                 assert_eq!(tok, T![?]);
                 self.start_node_at(cp, HAS_ATTR);
                 self.bump(); // `?`
@@ -442,7 +447,7 @@ impl<'i> Parser<'i> {
             self.finish_node();
 
         // Yes, this is weird, but Nix parse `or` immediately after a non-select atom expression,
-        // and construct a Apply node, with higher priority than left-associative Apply.
+        // and construct a `Apply` node, with higher priority than left-associative Apply.
         // `a b or c` => `(a (b or)) c`
         } else if self.peek_non_ws() == Some(T![or]) {
             self.start_node_at(cp, APPLY);
@@ -456,7 +461,7 @@ impl<'i> Parser<'i> {
     /// Atom level expression (highest priority).
     /// Maybe consume nothing.
     fn expr_atom_opt(&mut self) {
-        // This must matches SyntaxKind::can_start_atom_expr.
+        // This must matches `SyntaxKind::can_start_atom_expr`.
         match self.peek_non_ws() {
             Some(IDENT) => {
                 self.start_node(REF);
@@ -585,7 +590,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    /// Always consume some tokens and make a PAT node.
+    /// Always consume some tokens and make a `PAT` node.
     fn pat(&mut self) {
         assert_eq!(self.peek(), Some(T!['{']));
         self.start_node(PAT);
@@ -640,7 +645,7 @@ impl<'i> Parser<'i> {
         self.finish_node();
     }
 
-    /// Maybe consume tokens and maybe make many INHERIT or ATTR_PATH_VALUE nodes,
+    /// Maybe consume tokens and maybe make many `INHERIT` or `ATTR_PATH_VALUE` nodes,
     /// and must consume the guard token or reaching EOF.
     fn bindings_until(&mut self, guard: SyntaxKind) {
         loop {
@@ -721,7 +726,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    /// Maybe consume tokens and always make a ATTR_PATH node.
+    /// Maybe consume tokens and always make a `ATTR_PATH` node.
     fn attrpath_opt(&mut self) {
         self.start_node(ATTR_PATH);
         self.attr_opt(true);
@@ -735,7 +740,7 @@ impl<'i> Parser<'i> {
     /// Maybe consume tokens and always make a {IDENT,DYNAMIC,STRING} node.
     /// If `force_name` is true, an empty NAME node would be created when the next token is unexpected.
     fn attr_opt(&mut self, force_name: bool) {
-        // This must matches SyntaxKind::can_start_attr.
+        // This must matches `SyntaxKind::can_start_attr`.
         match self.peek_non_ws() {
             Some(IDENT | T![or]) => {
                 self.start_node(NAME);
@@ -754,7 +759,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    /// Must consume tokens and always make a DYNAMIC node.
+    /// Must consume tokens and always make a `DYNAMIC` node.
     fn dynamic(&mut self) {
         assert_eq!(self.peek(), Some(T!["${"]));
         self.start_node(DYNAMIC);
@@ -764,7 +769,7 @@ impl<'i> Parser<'i> {
         self.finish_node();
     }
 
-    /// Must consume tokens and always make a STRING or INDENT_STRING node.
+    /// Must consume tokens and always make a `STRING` or `INDENT_STRING` node.
     fn string(&mut self, node: SyntaxKind) {
         assert!(matches!(self.peek(), Some(T!['"'] | T!["''"])));
         self.start_node(node);
@@ -797,12 +802,12 @@ impl<'i> Parser<'i> {
 }
 
 impl SyntaxKind {
-    // This must matches Parser::attr_opt.
+    // This must matches `Parser::attr_opt`.
     fn can_start_attr(self) -> bool {
         matches!(self, T!["${"] | T!['"'] | T![or] | IDENT)
     }
 
-    // This must matches Parser::expr_atom_opt.
+    // This must matches `Parser::expr_atom_opt`.
     fn can_start_atom_expr(self) -> bool {
         matches!(
             self,
@@ -825,7 +830,7 @@ impl SyntaxKind {
 
     /// Check if a token can start an expression. Only used for error recovery.
     fn can_start_expr(self) -> bool {
-        // Should match Parser::expr_function_opt
+        // Should match `Parser::expr_function_opt`.
         // Checked in can_start_atom_expr: T![let] | T![rec] | T!['{'] | IDENT
         self.can_start_atom_expr()
             || self.prefix_bp().is_some()

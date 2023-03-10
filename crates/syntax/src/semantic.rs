@@ -33,7 +33,9 @@ pub fn escape_literal_attr(name: &str) -> Cow<'_, str> {
 
 /// Unescape a single string escape sequence.
 ///
-/// The input should be from `StringPart::Escape` produced by the parser.
+/// # Panics
+/// The input must be from `StringPart::Escape` produced by the parser.
+/// It will panic for unrecognized escape.
 pub fn unescape_string_escape(escape: &str) -> &str {
     match escape {
         "''$" => "$",
@@ -90,12 +92,12 @@ pub enum UnescapedStringPart<'a> {
     Dynamic(ast::Dynamic),
 }
 
-/// Calculate the minimal indentation of an IndentString.
+/// Calculate the minimal indentation of an `IndentString`.
 /// Or returns `usize::MAX` if all lines are empty.
 ///
 /// See:
-/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/parser.y#L195
-/// - https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/lexer.l#L204
+/// - <https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/lexer.l#L204>
+/// - <https://github.com/NixOS/nix/blob/2.11.0/src/libexpr/parser.y#L195>
 pub fn common_indent_of(n: &ast::IndentString) -> usize {
     let mut ret = usize::MAX;
     let mut counter = Some(0usize);

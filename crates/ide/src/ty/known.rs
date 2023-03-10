@@ -71,7 +71,7 @@ fn merge_attrset(lhs: &Ty, rhs: &Ty) -> Ty {
     })
 }
 
-/// https://nixos.wiki/wiki/Flakes
+/// <https://nixos.wiki/wiki/Flakes>
 pub fn flake(inputs: &[&str]) -> Ty {
     // https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references
     let input_ty = merge_attrset(

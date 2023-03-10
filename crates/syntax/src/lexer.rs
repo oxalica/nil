@@ -132,7 +132,13 @@ regex_dfa! {
 
 pub type LexTokens = Vec<(SyntaxKind, TextRange)>;
 
+/// Tokenize the source of a Nix file.
+///
+/// # Panics
+/// Panic if the source is longer than `u32::MAX`.
 pub fn lex(src: &[u8]) -> LexTokens {
+    assert!(u32::try_from(src.len()).is_ok());
+
     let total_len = TextSize::try_from(src.len()).expect("Length overflow");
 
     let default_ctx = (&*DEFAULT_TOKEN_DFA, DEFAULT_TOKEN_MAP);
@@ -152,6 +158,7 @@ pub fn lex(src: &[u8]) -> LexTokens {
             // The length of src is checked before.
             Some(m) => (
                 map[m.pattern().as_usize()],
+                // Offset <= u32, already checked.
                 TextSize::from(m.offset() as u32),
             ),
             None if ptr::eq(dfa, path_ctx.0) => {

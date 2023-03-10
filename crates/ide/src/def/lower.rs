@@ -411,7 +411,7 @@ impl MergingSet {
     }
 
     /// Push a dynamic Attr. This is also used for error recovery,
-    /// so InvalidDynamic is not checked here.
+    /// so `InvalidDynamic` is not checked here.
     fn push_dynamic(
         &mut self,
         ctx: &mut LowerCtx,

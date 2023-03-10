@@ -13,6 +13,7 @@ pub enum BuiltinKind {
     Attrset,
 }
 
+#[allow(clippy::all)]
 pub static ALL_BUILTINS: phf::Map<&'static str, Builtin> =
     include!(concat!(env!("OUT_DIR"), "/generated.expr"));
 

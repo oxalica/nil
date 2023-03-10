@@ -3,7 +3,7 @@
 //! We want a custom `nix flake archive` without dumping the current flake
 //! which may be very costly for large repositories like nixpkgs.
 //!
-//! https://github.com/NixOS/nix/blob/2.13.1/src/nix/flake.md#lock-files
+//! <https://github.com/NixOS/nix/blob/2.13.1/src/nix/flake.md#lock-files>
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 

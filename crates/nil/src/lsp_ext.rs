@@ -1,6 +1,6 @@
 use lsp_types::request::Request;
 
-/// https://github.com/microsoft/language-server-protocol/issues/1002
+/// <https://github.com/microsoft/language-server-protocol/issues/1002>
 pub enum ParentModule {}
 
 impl Request for ParentModule {

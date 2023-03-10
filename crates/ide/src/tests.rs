@@ -11,7 +11,7 @@ use nix_interop::{DEFAULT_IMPORT_FILE, FLAKE_FILE};
 use std::collections::HashMap;
 use std::{mem, ops};
 use syntax::ast::AstNode;
-use syntax::{NixLanguage, SyntaxNode, TextSize};
+use syntax::{NixLanguage, SyntaxNode, TextRange, TextSize};
 
 pub const MARKER_INDICATOR: char = '$';
 
@@ -201,7 +201,13 @@ impl Fixture {
     pub fn unwrap_single_range_marker(&self) -> FileRange {
         match *self.markers() {
             [fpos] => FileRange::empty(fpos),
-            [start, end] => FileRange::span(start, end),
+            [start, end] => {
+                assert_eq!(
+                    start.file_id, end.file_id,
+                    "Start and end markers must be in the same file"
+                );
+                FileRange::new(start.file_id, TextRange::new(start.pos, end.pos))
+            }
             _ => panic!("Must have either 1 or 2 markers"),
         }
     }

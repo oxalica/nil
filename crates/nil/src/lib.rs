@@ -7,7 +7,7 @@ mod semantic_tokens;
 mod server;
 mod vfs;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ide::VfsPath;
 use lsp_server::{Connection, ErrorCode};
 use lsp_types::{InitializeParams, Url};
@@ -68,8 +68,9 @@ impl UrlExt for Url {
 }
 
 pub fn main_loop(conn: Connection) -> Result<()> {
-    let init_params =
-        conn.initialize(serde_json::to_value(capabilities::server_capabilities()).unwrap())?;
+    let init_params = conn.initialize(
+        serde_json::to_value(capabilities::server_capabilities()).context("Invalid init_params")?,
+    )?;
     tracing::info!("Init params: {}", init_params);
 
     let init_params = serde_json::from_value::<InitializeParams>(init_params)?;
