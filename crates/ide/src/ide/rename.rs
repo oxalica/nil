@@ -78,7 +78,7 @@ pub(crate) fn rename(
                 // `new = old;`.
                 edits.push(TextEdit {
                     delete: TextRange::empty(i.syntax().text_range().end()),
-                    insert: format!("{} = {};", new_attr, old_attr).into(),
+                    insert: format!("{new_attr} = {old_attr};").into(),
                 });
             }
             Some(from_expr) => {
@@ -142,7 +142,7 @@ pub(crate) fn rename(
         // Then construct a new binding.
         edits.push(TextEdit {
             delete: TextRange::empty(i.syntax().text_range().end()),
-            insert: format!("{} = {};", old_attr, new_attr).into(),
+            insert: format!("{old_attr} = {new_attr};").into(),
         });
     }
 
@@ -227,7 +227,7 @@ mod tests {
                 if is_same {
                     src
                 } else {
-                    format!("{}\n{}\n", src, text)
+                    format!("{src}\n{text}\n")
                 }
             }
             Err(err) => err,

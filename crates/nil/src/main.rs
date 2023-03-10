@@ -67,8 +67,7 @@ fn main() {
     match nil::main_loop(conn).and_then(|()| io_threads.join().map_err(Into::into)) {
         Ok(()) => {}
         Err(err) => {
-            tracing::error!("Unexpected error: {}", err);
-            eprintln!("{}", err);
+            tracing::error!("Unexpected error: {err:#}");
             process::exit(101);
         }
     }
