@@ -19,6 +19,7 @@ mod flatten_attrset;
 mod pack_bindings;
 mod remove_empty_inherit;
 mod remove_empty_let_in;
+mod rewrite_string;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
 use syntax::ast::{self, AstNode};
@@ -48,6 +49,10 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         pack_bindings::pack_bindings,
         remove_empty_inherit::remove_empty_inherit,
         remove_empty_let_in::remove_empty_let_in,
+        rewrite_string::quote_attr,
+        rewrite_string::rewrite_indented_to_string,
+        rewrite_string::rewrite_string,
+        rewrite_string::rewrite_uri_to_string,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);

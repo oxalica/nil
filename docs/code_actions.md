@@ -82,6 +82,17 @@ foo = {
 }
 ```
 
+### `quote_attr` and `unquote_attr`
+
+Rewrite between attribute names and double quoted strings
+```nix
+{ foo = bar; }
+```
+<=>
+```nix
+{ "foo" = bar; }
+```
+
 ### `remove_empty_inherit`
 
 Remove empty `inherit;` or `inherit (...);`.
@@ -103,4 +114,30 @@ let in { foo = "bar"; }
 =>
 ```nix
 { foo = "bar"; }
+```
+
+### `rewrite_string_to_indented` and `rewrite_indented_to_string`
+
+Rewrite between double quoted strings and indented strings
+
+```nix
+"foo\nbar\n"
+```
+=>
+```nix
+''
+  foo
+  bar
+''
+```
+
+### `rewrite_uri_to_string`
+
+Rewrite URI literals to double quoted strings
+```nix
+https://nixos.org
+```
+=>
+```nix
+"https://nixos.org"
 ```
