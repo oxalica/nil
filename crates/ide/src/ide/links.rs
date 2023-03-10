@@ -21,10 +21,7 @@ pub(crate) fn links(db: &dyn DefDatabase, file_id: FileId) -> Vec<Link> {
     let source_map = db.source_map(file_id);
 
     let extract_link = |(e, kind): (ExprId, &Expr)| -> Option<Link> {
-        let lit = match kind {
-            Expr::Literal(lit) => lit,
-            _ => return None,
-        };
+        let Expr::Literal(lit) = kind else { return None };
         let (tooltip, target) = match lit {
             Literal::String(s) => {
                 let uri = try_resolve_link_uri(s)?;

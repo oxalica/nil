@@ -68,10 +68,7 @@ pub(crate) fn references(
     params: ReferenceParams,
 ) -> Result<Option<Vec<Location>>> {
     let (fpos, _) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
-    let refs = match snap.analysis.references(fpos)? {
-        None => return Ok(None),
-        Some(refs) => refs,
-    };
+    let Some(refs) = snap.analysis.references(fpos)? else { return Ok(None) };
     let vfs = snap.vfs();
     let locs = refs
         .into_iter()
@@ -88,10 +85,7 @@ pub(crate) fn completion(
     let trigger_char = params
         .context
         .and_then(|ctx| ctx.trigger_character?.chars().next());
-    let items = match snap.analysis.completions(fpos, trigger_char)? {
-        None => return Ok(None),
-        Some(items) => items,
-    };
+    let Some(items) = snap.analysis.completions(fpos, trigger_char)? else { return Ok(None) };
     let items = items
         .into_iter()
         .map(|item| convert::to_completion_item(&line_map, item))
@@ -234,10 +228,7 @@ pub(crate) fn formatting(
         Ok(stdout)
     }
 
-    let cmd = match &snap.config.formatting_command {
-        Some(cmd) => cmd,
-        None => return Ok(None),
-    };
+    let Some(cmd) = &snap.config.formatting_command else { return Ok(None) };
 
     let (file_content, line_map) = {
         let vfs = snap.vfs();

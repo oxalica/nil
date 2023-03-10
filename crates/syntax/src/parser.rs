@@ -366,12 +366,9 @@ impl<'i> Parser<'i> {
     // Ref: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
     fn expr_bp(&mut self, min_bp: u8) {
         // Always consume whitespace first, even though not `allow_prefix`.
-        let tok = match self.peek_non_ws() {
-            None => {
-                self.error(ErrorKind::ExpectExpr);
-                return;
-            }
-            Some(tok) => tok,
+        let Some(tok) = self.peek_non_ws() else {
+            self.error(ErrorKind::ExpectExpr);
+            return;
         };
 
         let cp = self.checkpoint();
@@ -387,10 +384,7 @@ impl<'i> Parser<'i> {
         }
 
         loop {
-            let tok = match self.peek_non_ws() {
-                None => break,
-                Some(tok) => tok,
-            };
+            let Some(tok) = self.peek_non_ws() else { break };
 
             if let Some(lbp) = tok.postfix_bp() {
                 if lbp < min_bp {
@@ -406,10 +400,7 @@ impl<'i> Parser<'i> {
                 continue;
             }
 
-            let (lbp, rbp) = match tok.infix_bp() {
-                None => break,
-                Some(bps) => bps,
-            };
+            let Some((lbp, rbp)) = tok.infix_bp() else { break };
             if lbp == min_bp {
                 self.error(ErrorKind::MultipleNoAssoc);
                 break;
@@ -565,10 +556,7 @@ impl<'i> Parser<'i> {
 
     /// Validate the next path fragment and emit errors about slashes.
     fn validate_path_fragment(&mut self, allow_trailing_slash: bool) {
-        let range = match self.peek_full() {
-            Some((PATH_FRAGMENT | PATH, range)) => range,
-            _ => unreachable!(),
-        };
+        let Some((PATH_FRAGMENT | PATH, range)) = self.peek_full() else { unreachable!() };
         // N.B. Path tokens are ASCII-only, which are verified by the lexer.
         self.src[range]
             .as_bytes()

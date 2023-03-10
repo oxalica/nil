@@ -174,10 +174,7 @@ impl<'db> InferCtx<'db> {
                     for &(name, default_expr) in pat.fields.iter() {
                         // Always infer default_expr.
                         let default_ty = default_expr.map(|e| self.infer_expr(e));
-                        let name = match name {
-                            Some(name) => name,
-                            None => continue,
-                        };
+                        let Some(name) = name else { continue };
                         let name_ty = self.ty_for_name(name);
                         if let Some(default_ty) = default_ty {
                             self.unify_var(name_ty, default_ty);
@@ -212,10 +209,7 @@ impl<'db> InferCtx<'db> {
                 let lhs_ty = self.infer_expr(lhs);
                 let rhs_ty = self.infer_expr(rhs);
 
-                let op = match op {
-                    None => return self.new_ty_var(),
-                    Some(op) => op,
-                };
+                let Some(op) = op else { return self.new_ty_var() };
 
                 match op {
                     BinaryOpKind::Equal | BinaryOpKind::NotEqual => Ty::Bool.intern(self),

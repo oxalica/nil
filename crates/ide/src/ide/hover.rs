@@ -61,10 +61,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             // Covered by `check_builtin`.
             Some(ResolveResult::Builtin(_)) => unreachable!(),
             Some(ResolveResult::WithExprs(withs)) => {
-                let text = match &module[expr] {
-                    Expr::Reference(text) => text,
-                    _ => return None,
-                };
+                let Expr::Reference(text) = &module[expr] else { return None };
                 let ty = infer
                     .ty_for_expr(expr)
                     .display_with(TY_DETAILED_DISPLAY)

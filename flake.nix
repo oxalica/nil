@@ -54,6 +54,7 @@
 
             "-D" "clippy::dbg_macro"
             "-D" "clippy::doc_markdown"
+            "-D" "clippy::manual-let-else"
             "-D" "clippy::missing-panics-doc"
             "-D" "clippy::semicolon_if_nothing_returned"
             "-D" "clippy::todo"

@@ -42,15 +42,12 @@ pub(crate) fn rename(
         let attr_node = ptr.to_node(&parse.syntax_node());
 
         // Simple case for non-inherited names.
-        let i = match attr_node.parent().and_then(ast::Inherit::cast) {
-            None => {
-                edits.push(TextEdit {
-                    delete: attr_node.text_range(),
-                    insert: SmolStr::new(&new_attr),
-                });
-                continue;
-            }
-            Some(i) => i,
+        let Some(i) = attr_node.parent().and_then(ast::Inherit::cast) else {
+            edits.push(TextEdit {
+                delete: attr_node.text_range(),
+                insert: SmolStr::new(&new_attr),
+            });
+            continue;
         };
 
         // Here we are renaming the *definition* of an inherited name.
@@ -114,15 +111,12 @@ pub(crate) fn rename(
         let ref_node = ptr.to_node(&parse.syntax_node());
 
         // Simple case for non-inherited names.
-        let i = match ref_node.parent().and_then(ast::Inherit::cast) {
-            None => {
-                edits.push(TextEdit {
-                    delete: ptr.text_range(),
-                    insert: SmolStr::new(&new_attr),
-                });
-                continue;
-            }
-            Some(i) => i,
+        let Some(i) = ref_node.parent().and_then(ast::Inherit::cast) else {
+            edits.push(TextEdit {
+                delete: ptr.text_range(),
+                insert: SmolStr::new(&new_attr),
+            });
+            continue;
         };
 
         // Here we are renaming the *reference* of an inherited name.

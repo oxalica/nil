@@ -40,10 +40,7 @@ pub(crate) fn goto_definition(
     // Special case for goto-path.
     if tok.kind() == SyntaxKind::PATH {
         let module = db.module(file_id);
-        let path = match &module[expr_id] {
-            Expr::Literal(Literal::Path(path)) => path,
-            _ => return None,
-        };
+        let Expr::Literal(Literal::Path(path)) = &module[expr_id] else { return None };
         let path = path.resolve(db)?;
         return Some(GotoDefinitionResult::Path(path));
     }

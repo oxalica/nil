@@ -165,12 +165,11 @@ fn complete_trigger(
     // `{ a.| = 42; }`
     //     ^  \ NAME before here
     //     DOT is here
-    let name_node = match path_node
+    let Attr::Name(name_node) = path_node
         .attrs()
         .find(|attr| source_range.start() <= attr.syntax().text_range().start())?
-    {
-        Attr::Name(name) => name,
-        _ => return None,
+    else {
+        return None;
     };
 
     let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
