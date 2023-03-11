@@ -134,6 +134,7 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
     let indent = line
         .split_once(|c: char| !c.is_whitespace())
         .map_or(line, |(indent, _)| indent);
+    let indent = format!("{indent}  ");
 
     let mut text = format!("''\n{indent}");
     let mut line_start = true;
@@ -142,10 +143,6 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
             UnescapedStringPart::Fragment(frag) => {
                 if frag.is_empty() {
                     return Ok(());
-                }
-                if line_start {
-                    text.push_str("  ");
-                    line_start = false;
                 }
 
                 let mut chars = frag.chars();
@@ -170,26 +167,32 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
                             None => text.push('\''),
                         },
                         '\n' => {
-                            text.push('\n');
-                            text.push_str(indent);
-                            line_start = true;
+                            if line_start {
+                                text.insert(text.len() - indent.len(), '\n');
+                            } else {
+                                text.push('\n');
+                                text.push_str(&indent);
+                                line_start = true;
+                                continue;
+                            }
                         }
                         _ => text.push(x),
                     }
+                    line_start = false;
                 }
             }
 
             UnescapedStringPart::Dynamic(dyna) => {
-                if line_start {
-                    text.push_str("  ");
-                    line_start = false;
-                }
+                line_start = false;
                 text.push_str(&dyna.syntax().to_string());
             }
         };
 
         Ok(())
     });
+    if line_start {
+        text.truncate(text.len() - 2);
+    }
     text.push_str("''");
 
     ctx.add(
