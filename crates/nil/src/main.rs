@@ -29,6 +29,7 @@ struct Args {
 #[argh(subcommand)]
 enum Subcommand {
     Diagnostics(DiagnosticsArgs),
+    Parse(ParseArgs),
 }
 
 #[derive(Debug, FromArgs)]
@@ -37,6 +38,20 @@ enum Subcommand {
 /// Exit with non-zero code if there are any diagnostics.
 /// WARNING: The output format is for human and should not be relied on.
 struct DiagnosticsArgs {
+    /// nix file to check, or read from stdin for `-`.
+    /// NB. You need `--` before `-` for paths starting with `-`,
+    /// to disambiguous it from flags.
+    #[argh(positional)]
+    path: PathBuf,
+}
+
+#[derive(Debug, FromArgs)]
+#[argh(subcommand, name = "parse")]
+/// Parse a Nix file, print syntax tree in stdout and parse errors in stderr.
+/// Exit with non-zero code if there are any errors.
+/// WARNING: The output, including the syntax tree layout and error format, are for human and
+/// should not be relied on.
+struct ParseArgs {
     /// nix file to check, or read from stdin for `-`.
     /// NB. You need `--` before `-` for paths starting with `-`,
     /// to disambiguous it from flags.
@@ -59,6 +74,7 @@ fn main() {
     if let Some(subcommand) = args.subcommand {
         return match subcommand {
             Subcommand::Diagnostics(args) => main_diagnostics(args),
+            Subcommand::Parse(args) => main_parse(args),
         };
     }
 
@@ -93,8 +109,44 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             .expect("No cancellation");
 
         let mut writer = StandardStream::stdout(ColorChoice::Auto);
-        emit_diagnostics(path, &src, &mut writer, &mut diags.iter())?;
+        emit_diagnostics(path, &src, &mut writer, &mut diags.iter().cloned())?;
         Ok(diags.is_empty())
+    })();
+    match ret {
+        Ok(true) => {}
+        Ok(false) => process::exit(1),
+        Err(err) => {
+            eprintln!("{err:#}");
+            process::exit(1);
+        }
+    }
+}
+
+fn main_parse(args: ParseArgs) {
+    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+
+    let ret = (|| -> anyhow::Result<bool> {
+        let path = &*args.path;
+
+        let src = if path.as_os_str() == "-" {
+            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
+        } else {
+            fs::read_to_string(path).context("Failed to read file")?
+        };
+
+        let parse = syntax::parse_file(&src);
+
+        let mut writer = StandardStream::stderr(ColorChoice::Auto);
+        emit_diagnostics(
+            path,
+            &src,
+            &mut writer,
+            &mut parse.errors().iter().map(|&err| err.into()),
+        )?;
+
+        println!("{:#?}", parse.syntax_node());
+
+        Ok(parse.errors().is_empty())
     })();
     match ret {
         Ok(true) => {}
@@ -110,7 +162,7 @@ fn emit_diagnostics(
     path: &Path,
     src: &str,
     writer: &mut dyn WriteColor,
-    diags: &mut dyn Iterator<Item = &ide::Diagnostic>,
+    diags: &mut dyn Iterator<Item = ide::Diagnostic>,
 ) -> Result<()> {
     use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
     use codespan_reporting::files::SimpleFiles;

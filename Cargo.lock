@@ -318,6 +318,7 @@ dependencies = [
  "lsp-types",
  "nix-interop",
  "serde_json",
+ "syntax",
  "text-size",
  "tracing",
  "tracing-subscriber",
