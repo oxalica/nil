@@ -117,7 +117,7 @@ regex_dfa! {
         STRING_ESCAPE = r#"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''"#,
         QUOTE2 = r"''",
         DOLLAR_L_CURLY = r"\$\{",
-        STRING_FRAGMENT = r"([^'$]|\$[^{'])+",
+        STRING_FRAGMENT = r"([^'$]|\$[^{']|'[^'])+",
         // For '$' before ending.
         STRING_FRAGMENT = r"\$",
     }
@@ -507,6 +507,15 @@ mod tests {
                 STRING_ESCAPE "''\\\n"
                 STRING_ESCAPE "''\\Σ"
                 STRING_FRAGMENT "Σ"
+                QUOTE2 "''"
+            "#]],
+        );
+
+        check_lex(
+            "'' 'a' ''",
+            expect![[r#"
+                QUOTE2 "''"
+                STRING_FRAGMENT " 'a' "
                 QUOTE2 "''"
             "#]],
         );
