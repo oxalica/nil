@@ -28,9 +28,14 @@ pub fn resolve_flake_locked_inputs(
         serde_json::from_slice::<FlakeLock>(lock_src).context("Failed to parse flake lock")?;
 
     let mut resolver = Resolver::new(&lock);
-    let inputs = resolver
+    let root_node = resolver.get_node(&lock.root).context("Missing root node")?;
+    let mut inputs = resolver
         .resolve_node_inputs(&lock.root)
         .context("Failed to resolve inputs from flake lock")?;
+
+    // Ignore the root node which is unlocked. This happens in cycle flake inputs.
+    // TODO: Should come up a way to correctly handle it in database.
+    inputs.retain(|&(_, node)| !std::ptr::eq(node, root_node));
 
     let hashes = inputs
         .iter()
