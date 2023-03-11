@@ -80,7 +80,31 @@ pub(super) fn quote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 /// ```nix
 /// { foo = bar; }
 /// ```
-///
+pub(super) fn unquote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
+    let node = ctx.covering_node::<ast::String>()?;
+    let syntax = node.syntax();
+    if syntax
+        .parent()
+        .map_or(true, |parent| parent.kind() != SyntaxKind::ATTR_PATH)
+    {
+        return None;
+    };
+
+    let text = unescape_string_literal(&node)?;
+    if is_valid_ident(&text) {
+        ctx.add(
+            "unquote_attr",
+            "Remove the double quotes from the attribute name",
+            AssistKind::RefactorRewrite,
+            vec![TextEdit {
+                delete: node.syntax().text_range(),
+                insert: text.into(),
+            }],
+        );
+    }
+    Some(())
+}
+
 /// Double quoted strings -> Indented strings
 /// ```nix
 /// "foo\nbar\n"
@@ -92,105 +116,93 @@ pub(super) fn quote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 ///   bar
 /// ''
 /// ```
-pub(super) fn rewrite_string(ctx: &mut AssistsCtx<'_>) -> Option<()> {
+pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let node = ctx.covering_node::<ast::String>()?;
     let syntax = node.syntax();
     if syntax
         .parent()
         .map_or(false, |parent| parent.kind() == SyntaxKind::ATTR_PATH)
     {
-        let text = unescape_string_literal(&node)?;
-        if is_valid_ident(&text) {
-            ctx.add(
-                "unquote_attr",
-                "Remove the double quotes from the attribute name",
-                AssistKind::RefactorRewrite,
-                vec![TextEdit {
-                    delete: node.syntax().text_range(),
-                    insert: text.into(),
-                }],
-            );
-        }
-        Some(())
-    } else {
-        let start = node.start_dquote_token()?.text_range().start().into();
-        let file = &*ctx.db.file_content(ctx.frange.file_id);
-        // The current line until the start of the string.
-        let line = file[..start].rsplit_once('\n').map_or(file, |(_, x)| x);
-        // Indentation of the current line.
-        let indent = line
-            .split_once(|c: char| !c.is_whitespace())
-            .map_or(line, |(indent, _)| indent);
-
-        let mut text = format!("''\n{indent}");
-        let mut line_start = true;
-        let _ = unescape_string::<Infallible>(&node, |part| {
-            match part {
-                UnescapedStringPart::Fragment(frag) => {
-                    if frag.is_empty() {
-                        return Ok(());
-                    }
-                    if line_start {
-                        text.push_str("  ");
-                        line_start = false;
-                    }
-
-                    let mut chars = frag.chars();
-                    while let Some(x) = chars.next() {
-                        match x {
-                            '$' => match chars.next() {
-                                Some('{') => text.push_str("''${"),
-                                Some(y) => {
-                                    text.push('$');
-                                    text.push(y);
-                                }
-                                // It's impossible to know from this context whether the next
-                                // character is '{' or not, so we assume it is just to be safe
-                                None => text.push_str("''$"),
-                            },
-                            '\'' => match chars.next() {
-                                Some('\'') => text.push_str("'''"),
-                                Some(y) => {
-                                    text.push('\'');
-                                    text.push(y);
-                                }
-                                None => text.push('\''),
-                            },
-                            '\n' => {
-                                text.push('\n');
-                                text.push_str(indent);
-                                line_start = true;
-                            }
-                            _ => text.push(x),
-                        }
-                    }
-                }
-
-                UnescapedStringPart::Dynamic(dyna) => {
-                    if line_start {
-                        text.push_str("  ");
-                        line_start = false;
-                    }
-                    text.push_str(&dyna.syntax().to_string());
-                }
-            };
-
-            Ok(())
-        });
-        text.push_str("''");
-
-        ctx.add(
-            "rewrite_string_to_indented",
-            "Rewrite the double quoted string to an indented string",
-            AssistKind::RefactorRewrite,
-            vec![TextEdit {
-                delete: node.syntax().text_range(),
-                insert: text.into(),
-            }],
-        );
-
-        Some(())
+        return None;
     }
+
+    let start = node.start_dquote_token()?.text_range().start().into();
+    let file = &*ctx.db.file_content(ctx.frange.file_id);
+    // The current line until the start of the string.
+    let line = file[..start].rsplit_once('\n').map_or(file, |(_, x)| x);
+    // Indentation of the current line.
+    let indent = line
+        .split_once(|c: char| !c.is_whitespace())
+        .map_or(line, |(indent, _)| indent);
+
+    let mut text = format!("''\n{indent}");
+    let mut line_start = true;
+    let _ = unescape_string::<Infallible>(&node, |part| {
+        match part {
+            UnescapedStringPart::Fragment(frag) => {
+                if frag.is_empty() {
+                    return Ok(());
+                }
+                if line_start {
+                    text.push_str("  ");
+                    line_start = false;
+                }
+
+                let mut chars = frag.chars();
+                while let Some(x) = chars.next() {
+                    match x {
+                        '$' => match chars.next() {
+                            Some('{') => text.push_str("''${"),
+                            Some(y) => {
+                                text.push('$');
+                                text.push(y);
+                            }
+                            // It's impossible to know from this context whether the next
+                            // character is '{' or not, so we assume it is just to be safe
+                            None => text.push_str("''$"),
+                        },
+                        '\'' => match chars.next() {
+                            Some('\'') => text.push_str("'''"),
+                            Some(y) => {
+                                text.push('\'');
+                                text.push(y);
+                            }
+                            None => text.push('\''),
+                        },
+                        '\n' => {
+                            text.push('\n');
+                            text.push_str(indent);
+                            line_start = true;
+                        }
+                        _ => text.push(x),
+                    }
+                }
+            }
+
+            UnescapedStringPart::Dynamic(dyna) => {
+                if line_start {
+                    text.push_str("  ");
+                    line_start = false;
+                }
+                text.push_str(&dyna.syntax().to_string());
+            }
+        };
+
+        Ok(())
+    });
+    text.push_str("''");
+
+    ctx.add(
+        "rewrite_string_to_indented",
+        "Rewrite the double quoted string to an indented string",
+        AssistKind::RefactorRewrite,
+        vec![TextEdit {
+            delete: node.syntax().text_range(),
+            insert: text.into(),
+        }],
+    );
+
+    Some(())
 }
 
 /// Indented strings -> Double quoted strings
@@ -299,7 +311,7 @@ mod tests {
 
     #[test]
     fn unquote_attr() {
-        define_check_assist!(super::rewrite_string);
+        define_check_assist!(super::unquote_attr);
 
         check(r#"{ $0"foo" = bar; }"#, expect!["{ foo = bar; }"]);
         check(r#"{ foo.$0"bar" = baz; }"#, expect!["{ foo.bar = baz; }"]);
@@ -308,6 +320,7 @@ mod tests {
             expect!["let foo.bar = baz; in foo"],
         );
 
+        check_no(r#"$0"foo""#);
         check_no(r#"{ ${fo$0o} = bar; }"#);
         check_no(r#"{ $0"foo\n" = bar; }"#);
         check_no(r#"{ "foo.$0bar" = baz; }"#);
@@ -315,7 +328,7 @@ mod tests {
 
     #[test]
     fn string_to_indented() {
-        define_check_assist!(super::rewrite_string);
+        define_check_assist!(super::rewrite_string_to_indented);
 
         check(r#"$0"foo""#, expect!["''\n  foo''\n"]);
         check(r#""''"$0"#, expect!["''\n  '''''\n"]);
@@ -335,6 +348,8 @@ mod tests {
                 "
             ],
         );
+
+        check_no(r#"{ $0"foo" = bar; }"#);
     }
 
     #[test]
