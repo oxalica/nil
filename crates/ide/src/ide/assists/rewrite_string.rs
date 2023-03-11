@@ -22,13 +22,11 @@ use syntax::SyntaxKind;
 /// "https://nixos.org"
 /// ```
 pub(super) fn rewrite_uri_to_string(ctx: &mut AssistsCtx<'_>) -> Option<()> {
-    let node = ctx.covering_node::<ast::Literal>()?;
-    // Node should be a URI literal
-    if node.kind()? != ast::LiteralKind::Uri {
-        return None;
-    }
+    let token = ctx
+        .covering_node::<ast::Literal>()
+        .filter(|lit| lit.kind() == Some(ast::LiteralKind::Uri))?
+        .token()?;
 
-    let token = node.token()?;
     ctx.add(
         "rewrite_uri_to_string",
         "Rewrite the URI literal to a double quoted string",
