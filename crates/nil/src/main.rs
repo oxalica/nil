@@ -1,8 +1,9 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use argh::FromArgs;
+use codespan_reporting::term::termcolor::WriteColor;
 use ide::AnalysisHost;
 use lsp_server::Connection;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs, io, process};
 use text_size::TextRange;
@@ -74,12 +75,9 @@ fn main() {
 }
 
 fn main_diagnostics(args: DiagnosticsArgs) {
-    use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
-    use codespan_reporting::files::SimpleFiles;
-    use codespan_reporting::term;
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-    let ret = (|| -> anyhow::Result<bool> {
+    let ret = (|| -> Result<bool> {
         let path = &*args.path;
 
         let src = if path.as_os_str() == "-" {
@@ -93,39 +91,10 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             .snapshot()
             .diagnostics(file)
             .expect("No cancellation");
-        if diags.is_empty() {
-            return Ok(true);
-        }
 
-        let mut files = SimpleFiles::new();
-        let cr_file = files.add(path.display().to_string(), src);
-
-        let writer = StandardStream::stdout(ColorChoice::Auto);
-        let config = codespan_reporting::term::Config::default();
-
-        for diag in diags {
-            let severity = match diag.severity() {
-                ide::Severity::IncompleteSyntax | ide::Severity::Error => Severity::Error,
-                ide::Severity::Warning => Severity::Warning,
-            };
-
-            let to_range = |range: TextRange| usize::from(range.start())..usize::from(range.end());
-
-            let labels = std::iter::once(Label::primary(cr_file, to_range(diag.range)))
-                .chain(diag.notes.iter().map(|(frange, note)| {
-                    assert_eq!(frange.file_id, file, "Diagnostics are local");
-                    Label::secondary(cr_file, to_range(frange.range)).with_message(note)
-                }))
-                .collect();
-
-            let diag = Diagnostic::new(severity)
-                .with_code(diag.code())
-                .with_message(diag.message())
-                .with_labels(labels);
-
-            term::emit(&mut writer.lock(), &config, &files, &diag)?;
-        }
-        Ok(false)
+        let mut writer = StandardStream::stdout(ColorChoice::Auto);
+        emit_diagnostics(path, &src, &mut writer, &mut diags.iter())?;
+        Ok(diags.is_empty())
     })();
     match ret {
         Ok(true) => {}
@@ -135,6 +104,43 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             process::exit(1);
         }
     }
+}
+
+fn emit_diagnostics(
+    path: &Path,
+    src: &str,
+    writer: &mut dyn WriteColor,
+    diags: &mut dyn Iterator<Item = &ide::Diagnostic>,
+) -> Result<()> {
+    use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
+    use codespan_reporting::files::SimpleFiles;
+    use codespan_reporting::term;
+
+    let config = codespan_reporting::term::Config::default();
+    let to_range = |range: TextRange| usize::from(range.start())..usize::from(range.end());
+
+    let mut files = SimpleFiles::new();
+    let cr_file = files.add(path.display().to_string(), src);
+
+    for diag in diags {
+        let severity = match diag.severity() {
+            ide::Severity::IncompleteSyntax | ide::Severity::Error => Severity::Error,
+            ide::Severity::Warning => Severity::Warning,
+        };
+        let labels = std::iter::once(Label::primary(cr_file, to_range(diag.range)))
+            .chain(diag.notes.iter().map(|(frange, note)| {
+                Label::secondary(cr_file, to_range(frange.range)).with_message(note)
+            }))
+            .collect();
+        let diag = Diagnostic::new(severity)
+            .with_code(diag.code())
+            .with_message(diag.message())
+            .with_labels(labels);
+
+        term::emit(writer, &config, &files, &diag)?;
+    }
+
+    Ok(())
 }
 
 fn setup_logger() {
