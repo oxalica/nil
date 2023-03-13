@@ -1,9 +1,11 @@
+#[macro_use]
+pub(crate) mod ty;
+
 mod base;
 mod def;
 mod diagnostic;
 mod ide;
 mod text_edit;
-pub(crate) mod ty;
 
 #[cfg(test)]
 mod tests;

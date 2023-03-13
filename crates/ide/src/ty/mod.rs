@@ -92,6 +92,9 @@ pub trait TyDatabase: DefDatabase {
 
     #[salsa::invoke(infer::infer_query)]
     fn infer(&self, file: FileId) -> Arc<InferenceResult>;
+
+    #[salsa::input]
+    fn nixos_config_ty(&self) -> Ty;
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -240,7 +243,7 @@ fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
             Some(known::flake(&inputs))
         }
         ModuleKind::Package { .. } => Some(known::PACKAGE.clone()),
-        ModuleKind::ConfigModule { .. } => Some(known::CONFIG_MODULE.clone()),
-        ModuleKind::Config { .. } => Some(known::CONFIG.clone()),
+        ModuleKind::ConfigModule { .. } => Some(known::config_module(db.nixos_config_ty())),
+        ModuleKind::Config { .. } => Some(known::config(db.nixos_config_ty())),
     }
 }

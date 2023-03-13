@@ -16,12 +16,14 @@ use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
 use crate::{
-    Change, Diagnostic, FileId, FilePos, FileRange, FileSet, SourceRoot, VfsPath, WorkspaceEdit,
+    Change, Diagnostic, FileId, FilePos, FileRange, FileSet, SourceRoot, TyDatabase, VfsPath,
+    WorkspaceEdit,
 };
 use nix_interop::DEFAULT_IMPORT_FILE;
 use salsa::{Database, Durability, ParallelDatabase};
 use smol_str::SmolStr;
 use std::fmt;
+use std::sync::Arc;
 use syntax::TextRange;
 
 pub use assists::{Assist, AssistKind};
@@ -79,7 +81,9 @@ impl Default for RootDatabase {
         crate::def::ParseQuery
             .in_db_mut(&mut db)
             .set_lru_capacity(DEFAULT_LRU_CAP);
-        db.set_flake_graph_with_durability(Default::default(), Durability::MEDIUM);
+
+        db.set_flake_graph_with_durability(Arc::default(), Durability::MEDIUM);
+        db.set_nixos_config_ty_with_durability(ty!({}), Durability::MEDIUM);
         db
     }
 }

@@ -365,11 +365,10 @@ pub static PACKAGE: Lazy<Ty> = Lazy::new(|| {
     } -> derivation)
 });
 
-pub static CONFIG_MODULE: Lazy<Ty> = Lazy::new(|| {
+pub fn config_module(config: Ty) -> Ty {
     ty!({
         "lib": { },
-        // TODO: Config.
-        "config": { },
+        "config": (#config.clone()),
         "pkgs": { },
     } -> {
         // https://github.com/NixOS/nixpkgs/blob/fcb7bdf46213eac1a9cb573d2737620e93e46bfb/nixos/modules/misc/meta.nix#L33
@@ -378,15 +377,16 @@ pub static CONFIG_MODULE: Lazy<Ty> = Lazy::new(|| {
             "doc": path,
             "buildDocsInSandbox": bool,
         },
+        // TODO
         "options": { },
-        "config": { },
+        "config": (#config),
     })
-});
+}
 
-pub static CONFIG: Lazy<Ty> = Lazy::new(|| {
+pub fn config(config: Ty) -> Ty {
     ty!({
         "lib": { },
-        "config": { },
+        "config": (#config.clone()),
         "pkgs": { },
-    } -> derivation)
-});
+    } -> (#config))
+}

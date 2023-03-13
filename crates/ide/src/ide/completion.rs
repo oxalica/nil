@@ -487,6 +487,7 @@ fn can_complete(prefix: &str, replace: &str) -> bool {
 mod tests {
     use crate::base::SourceDatabase;
     use crate::tests::TestDB;
+    use crate::TyDatabase;
     use expect_test::{expect, Expect};
 
     #[track_caller]
@@ -499,7 +500,13 @@ mod tests {
 
     #[track_caller]
     fn check_trigger(fixture: &str, trigger_char: Option<char>, label: &str, expect: Expect) {
-        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        let (mut db, f) = TestDB::from_fixture(fixture).unwrap();
+        db.set_nixos_config_ty(ty!({
+            "nix": {
+                "enable": bool
+            }
+        }));
+
         let compes = super::completions(&db, f[0], trigger_char).expect("No completion");
         let item = compes
             .iter()
@@ -775,6 +782,44 @@ mod tests {
                     inputs.nixpkgs.url = "...";
                     outputs = { nixpkgs }: { };
                 }"#]],
+        );
+    }
+
+    #[test]
+    fn nixos_config() {
+        // Option types are set in `check_trigger`.
+        check(
+            "
+{ ... }:
+{
+    nix.e$0
+}
+            ",
+            "enable",
+            expect![[r#"
+                (Field) { ... }:
+                {
+                    nix.enable
+                }"#]],
+        );
+
+        check_no(
+            "
+{ ... }:
+{
+    notexists.e$0
+}
+            ",
+            "enable",
+        );
+        check_no(
+            "
+{ stdenv }:
+stdenv.mkDerivation {
+    nix.e$0
+}
+            ",
+            "enable",
         );
     }
 }

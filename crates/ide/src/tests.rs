@@ -3,7 +3,7 @@ use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
 use crate::{
     Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, FlakeInfo, SourceRoot,
-    SourceRootId, VfsPath,
+    SourceRootId, TyDatabase, VfsPath,
 };
 use anyhow::{bail, ensure, Context, Result};
 use indexmap::IndexMap;
@@ -47,6 +47,7 @@ impl TestDB {
             nodes: HashMap::from_iter(f.flake_info.clone().map(|info| (SourceRootId(0), info))),
         };
         change.set_flake_graph(flake_graph);
+        db.set_nixos_config_ty(ty!({}));
         change.apply(&mut db);
         Ok((db, f))
     }
