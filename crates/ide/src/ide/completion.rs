@@ -485,10 +485,12 @@ fn can_complete(prefix: &str, replace: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::base::SourceDatabase;
     use crate::tests::TestDB;
-    use crate::TyDatabase;
     use expect_test::{expect, Expect};
+    use nix_interop::nixos_options::NixosOptions;
 
     #[track_caller]
     fn check_no(fixture: &str, label: &str) {
@@ -501,10 +503,21 @@ mod tests {
     #[track_caller]
     fn check_trigger(fixture: &str, trigger_char: Option<char>, label: &str, expect: Expect) {
         let (mut db, f) = TestDB::from_fixture(fixture).unwrap();
-        db.set_nixos_config_ty(ty!({
-            "nix": {
-                "enable": bool
-            }
+        db.set_nixos_options(Arc::new(NixosOptions {
+            children: <_>::from_iter([(
+                "nix".into(),
+                NixosOptions {
+                    children: <_>::from_iter([(
+                        "enable".into(),
+                        NixosOptions {
+                            ty: Some("boolean".into()),
+                            ..NixosOptions::default()
+                        },
+                    )]),
+                    ..NixosOptions::default()
+                },
+            )]),
+            ..NixosOptions::default()
         }));
 
         let compes = super::completions(&db, f[0], trigger_char).expect("No completion");

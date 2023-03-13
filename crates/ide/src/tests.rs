@@ -2,13 +2,14 @@ use crate::base::SourceDatabaseStorage;
 use crate::def::DefDatabaseStorage;
 use crate::ty::TyDatabaseStorage;
 use crate::{
-    Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, FlakeInfo, SourceRoot,
-    SourceRootId, TyDatabase, VfsPath,
+    Change, DefDatabase, FileId, FilePos, FileRange, FileSet, FlakeGraph, FlakeInfo,
+    SourceDatabase, SourceRoot, SourceRootId, VfsPath,
 };
 use anyhow::{bail, ensure, Context, Result};
 use indexmap::IndexMap;
 use nix_interop::{DEFAULT_IMPORT_FILE, FLAKE_FILE};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{mem, ops};
 use syntax::ast::AstNode;
 use syntax::{NixLanguage, SyntaxNode, TextRange, TextSize};
@@ -47,7 +48,7 @@ impl TestDB {
             nodes: HashMap::from_iter(f.flake_info.clone().map(|info| (SourceRootId(0), info))),
         };
         change.set_flake_graph(flake_graph);
-        db.set_nixos_config_ty(ty!({}));
+        db.set_nixos_options(Arc::default());
         change.apply(&mut db);
         Ok((db, f))
     }

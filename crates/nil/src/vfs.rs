@@ -2,6 +2,7 @@ use crate::UrlExt;
 use anyhow::{ensure, Context, Result};
 use ide::{Change, FileId, FileSet, FlakeGraph, FlakeInfo, SourceRoot, SourceRootId, VfsPath};
 use lsp_types::Url;
+use nix_interop::nixos_options::NixosOptions;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{fmt, mem};
@@ -42,6 +43,10 @@ impl Vfs {
         self.change.set_flake_graph(FlakeGraph {
             nodes: HashMap::from_iter(flake_info.map(|info| (SourceRootId(0), info))),
         });
+    }
+
+    pub fn set_nixos_options(&mut self, opts: NixosOptions) {
+        self.change.set_nixos_options(opts);
     }
 
     pub fn set_path_content(&mut self, path: VfsPath, text: String) -> FileId {

@@ -1,3 +1,4 @@
+use nix_interop::nixos_options::NixosOptions;
 use salsa::Durability;
 use std::collections::HashMap;
 use std::fmt;
@@ -239,6 +240,9 @@ pub trait SourceDatabase {
 
     #[salsa::input]
     fn flake_graph(&self) -> Arc<FlakeGraph>;
+
+    #[salsa::input]
+    fn nixos_options(&self) -> Arc<NixosOptions>;
 }
 
 fn source_root_flake_info(db: &dyn SourceDatabase, sid: SourceRootId) -> Option<Arc<FlakeInfo>> {
@@ -250,6 +254,7 @@ pub struct Change {
     pub flake_graph: Option<FlakeGraph>,
     pub roots: Option<Vec<SourceRoot>>,
     pub file_changes: Vec<(FileId, Arc<str>)>,
+    pub nixos_options: Option<NixosOptions>,
 }
 
 impl Change {
@@ -259,6 +264,10 @@ impl Change {
 
     pub fn set_flake_graph(&mut self, graph: FlakeGraph) {
         self.flake_graph = Some(graph);
+    }
+
+    pub fn set_nixos_options(&mut self, opts: NixosOptions) {
+        self.nixos_options = Some(opts);
     }
 
     pub fn set_roots(&mut self, roots: Vec<SourceRoot>) {
@@ -272,6 +281,9 @@ impl Change {
     pub(crate) fn apply(self, db: &mut dyn SourceDatabase) {
         if let Some(flake_graph) = self.flake_graph {
             db.set_flake_graph_with_durability(Arc::new(flake_graph), Durability::MEDIUM);
+        }
+        if let Some(opts) = self.nixos_options {
+            db.set_nixos_options_with_durability(Arc::new(opts), Durability::MEDIUM);
         }
         if let Some(roots) = self.roots {
             u32::try_from(roots.len()).expect("Length overflow");

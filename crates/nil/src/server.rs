@@ -10,6 +10,7 @@ use lsp_types::{
     InitializeParams, MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams,
     Url,
 };
+use nix_interop::nixos_options::NixosOptions;
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::backtrace::Backtrace;
 use std::cell::Cell;
@@ -19,6 +20,8 @@ use std::panic::UnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic, thread};
+
+const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
 type ReqHandler = Box<dyn FnOnce(&mut Server, Response) + 'static>;
 
@@ -33,6 +36,7 @@ enum Event {
     },
     ClientExited,
     LoadFlake(Result<LoadFlakeResult>),
+    NixosOptions(Result<NixosOptions>),
 }
 
 enum LoadFlakeResult {
@@ -230,6 +234,26 @@ impl Server {
                     if missing_inputs {
                         self.show_message(MessageType::WARNING, "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs");
                     }
+
+                    // TODO: A better way to retrieve the nixpkgs for options?
+                    if let Some(nixpkgs_path) = flake_info
+                        .input_store_paths
+                        .get(NIXOS_OPTIONS_FLAKE_INPUT)
+                        .and_then(VfsPath::as_path)
+                    {
+                        let nixpkgs_path = nixpkgs_path.to_owned();
+                        let nix_binary = self.config.nix_binary.clone();
+                        tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
+                        self.task_tx
+                            .send(Box::new(move || {
+                                Event::NixosOptions(nix_interop::nixos_options::eval_all_options(
+                                    &nix_binary,
+                                    &nixpkgs_path,
+                                ))
+                            }))
+                            .unwrap();
+                    }
+
                     self.vfs.write().unwrap().set_flake_info(Some(flake_info));
                     self.apply_vfs_change();
                 }
@@ -237,6 +261,20 @@ impl Server {
                     tracing::info!("Workspace is not a flake");
                     self.vfs.write().unwrap().set_flake_info(None);
                     self.apply_vfs_change();
+                }
+            },
+            Event::NixosOptions(ret) => match ret {
+                // Sanity check.
+                Ok(opts) if !opts.children.is_empty() => {
+                    tracing::info!("Loaded NixOS options ({} top-level)", opts.children.len());
+                    self.vfs.write().unwrap().set_nixos_options(opts);
+                    self.apply_vfs_change();
+                }
+                Ok(_) => {
+                    tracing::error!("Empty NixOS options?");
+                }
+                Err(err) => {
+                    tracing::error!("Failed to evalute NixOS options: {err}");
                 }
             },
         }
