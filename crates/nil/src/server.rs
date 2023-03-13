@@ -265,8 +265,8 @@ impl Server {
             },
             Event::NixosOptions(ret) => match ret {
                 // Sanity check.
-                Ok(opts) if !opts.children.is_empty() => {
-                    tracing::info!("Loaded NixOS options ({} top-level)", opts.children.len());
+                Ok(opts) if !opts.is_empty() => {
+                    tracing::info!("Loaded NixOS options ({} top-level options)", opts.len());
                     self.vfs.write().unwrap().set_nixos_options(opts);
                     self.apply_vfs_change();
                 }

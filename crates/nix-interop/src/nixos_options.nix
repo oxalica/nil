@@ -6,9 +6,9 @@ let
   lib = import (nixpkgs + "/lib");
   modulePath = nixpkgs + "/nixos/modules";
 
-  inherit (builtins) filter mapAttrs isPath isFunction functionArgs addErrorContext;
-  inherit (lib) evalModules trivial optionalAttrs optionals filterAttrs;
-  inherit (lib.options) unknownModule renderOptionValue showOption;
+  inherit (builtins) filter mapAttrs isPath isFunction functionArgs;
+  inherit (lib) evalModules trivial optionals filterAttrs;
+  inherit (lib.options) unknownModule renderOptionValue;
 
   # Dummy `pkgs`.
   pkgs = import (nixpkgs + "/pkgs/pkgs-lib") {
@@ -47,16 +47,90 @@ let
     };
   };
 
+  # https://github.com/NixOS/nixpkgs/blob/28c1aac72e3aef70b8c898ea9c16d5907f9eae22/lib/types.nix#L212
+  normalizeType = submoduleVisible: ty: let
+    elem = normalizeType submoduleVisible ty.nestedTypes.elemType;
+    ty' = rec {
+      anything.name = "any";
+      raw = anything;
+      unspecified = anything;
+
+      bool.name = "bool";
+
+      int.name = "int";
+      intBetween = int;
+      unsignedInt = int;
+      positiveInt = int;
+      signedInt8 = int;
+      signedInt16 = int;
+      signedInt32 = int;
+      unsignedInt8 = int;
+      unsignedInt16 = int;
+      unsignedInt32 = int;
+
+      float.name = "float";
+      number = float;
+      numberBetween = float;
+      numberNonnegative = float;
+      numberPositive = float;
+
+      str.name = "string";
+      nonEmptyStr = str;
+      singleLineStr = str;
+      # strMatching<regex>
+      separatedString = str;
+      string = str;
+      # passwdEntry<name>
+
+      attrs = { name = "attrset"; rest = anything; };
+      package.name = "derivation";
+      shellPackage.name = "derivation";
+
+      path.name = "path";
+
+      listOf = { name = "list"; inherit elem; };
+
+      attrOf = { name = "attrset"; rest = elem; };
+      lazyAttrOf = { name = "attrset"; rest = elem; };
+
+      uniq = elem;
+      unique = elem;
+
+      # FIXME: Union and null type.
+      nullOr = elem;
+
+      functionTo = { name = "lambda"; from = anything; to = elem; };
+
+      submodule = if submoduleVisible then {
+        name = "attrset";
+        fields = normalizeOptionSet (ty.getSubOptions [ ]);
+      } else {
+        name = "any";
+      };
+      deferredModule = submodule;
+
+      optionType = { name = "attrset"; rest = anything; };
+
+      # enum
+      # either
+      # oneOf
+      # coerceTo
+    }.${ty.name} or { name = "any"; };
+  in
+    assert ty._type or null == "option-type";
+    ty';
+
   # Modified from `lib.optionAttrSetToDocList`.
   normalizeOptions = opt: let
     # visible: true | false | "shallow"
     visible = (opt.visible or true != false) && !(opt.internal or false);
+    submoduleVisible = visible && (opt.visible or true == true);
 
     opt' = {
       description = opt.description or null;
       declarations = filter (x: x != unknownModule) opt.declarations;
       readOnly = opt.readOnly or false;
-      type = opt.type.description or "unspecified";
+      type = normalizeType submoduleVisible opt.type;
       example =
         if opt ? example then
           renderOptionValue opt.example
@@ -70,24 +144,24 @@ let
       relatedPackages =
         optionals (opt.relatedPackages or null != null)
           opt.relatedPackages;
-
-      # TODO: Submodules.
     };
   in
-    if visible then
-      opt'
-    else
-      null;
-
-  normalizeOptionOrSet = opts:
-    if opts._type or null == "option" then
-      normalizeOptions opts
+    if opt._type or null == "option" then
+      if visible then
+        opt'
+      else
+        null
     else {
-      children =
-        filterAttrs (k: v: !isNull v)
-          (mapAttrs (_: normalizeOptionOrSet) opts);
+      type = {
+        name = "attrset";
+        fields = normalizeOptionSet opt;
+      };
     };
 
+  normalizeOptionSet = opts:
+    filterAttrs (k: v: k != "_module" && k != "_freeformOptions" && !isNull v)
+      (mapAttrs (_: normalizeOptions) opts);
+
 in
-  normalizeOptionOrSet
+  normalizeOptionSet
     eval.options

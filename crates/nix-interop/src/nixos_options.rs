@@ -44,23 +44,22 @@ pub fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<Nixos
     Ok(val)
 }
 
+pub type NixosOptions = HashMap<String, NixosOption>;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NixosOptions {
+pub struct NixosOption {
     pub description: Option<Doc>,
     #[serde(default)]
     pub declarations: Vec<String>,
     #[serde(default)]
     pub read_only: bool,
     #[serde(rename = "type")]
-    pub ty: Option<String>,
+    pub ty: Ty,
     pub default: Option<Value>,
     pub example: Option<Value>,
     #[serde(default)]
     pub related_packages: Vec<RelatedPackage>,
-
-    #[serde(default)]
-    pub children: HashMap<String, NixosOptions>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -128,6 +127,31 @@ impl<'de> de::Deserialize<'de> for RelatedPackage {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "name")]
+pub enum Ty {
+    #[default]
+    Any,
+    Bool,
+    Int,
+    Float,
+    String,
+    Path,
+    Derivation,
+    List {
+        elem: Box<Ty>,
+    },
+    Lambda {
+        from: Box<Ty>,
+        to: Box<Ty>,
+    },
+    Attrset {
+        #[serde(default)]
+        fields: NixosOptions,
+        rest: Option<Box<Ty>>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,9 +178,12 @@ mod tests {
         let opts = eval_all_options("nix".as_ref(), nixpkgs_path.trim().as_ref()).unwrap();
 
         // Sanity check.
-        assert_eq!(
-            opts.children["nix"].children["enable"].ty.as_deref(),
-            Some("boolean"),
-        );
+        let Ty::Attrset { fields, .. } = &(&opts["nix"].ty) else { panic!("Invalid options: {opts:?}") };
+        let opt = &fields["enable"];
+        assert_eq!(opt.ty, Ty::Bool);
+        assert!(matches!(
+            &opt.description,
+            Some(Doc::Markdown { text }) if text.starts_with("Whether to enable Nix.")
+        ));
     }
 }

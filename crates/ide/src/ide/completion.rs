@@ -490,7 +490,7 @@ mod tests {
     use crate::base::SourceDatabase;
     use crate::tests::TestDB;
     use expect_test::{expect, Expect};
-    use nix_interop::nixos_options::NixosOptions;
+    use nix_interop::nixos_options::{self, NixosOption, NixosOptions};
 
     #[track_caller]
     fn check_no(fixture: &str, label: &str) {
@@ -503,22 +503,22 @@ mod tests {
     #[track_caller]
     fn check_trigger(fixture: &str, trigger_char: Option<char>, label: &str, expect: Expect) {
         let (mut db, f) = TestDB::from_fixture(fixture).unwrap();
-        db.set_nixos_options(Arc::new(NixosOptions {
-            children: <_>::from_iter([(
-                "nix".into(),
-                NixosOptions {
-                    children: <_>::from_iter([(
+        db.set_nixos_options(Arc::new(NixosOptions::from_iter([(
+            "nix".into(),
+            NixosOption {
+                ty: nixos_options::Ty::Attrset {
+                    fields: NixosOptions::from_iter([(
                         "enable".into(),
-                        NixosOptions {
-                            ty: Some("boolean".into()),
-                            ..NixosOptions::default()
+                        NixosOption {
+                            ty: nixos_options::Ty::Bool,
+                            ..NixosOption::default()
                         },
                     )]),
-                    ..NixosOptions::default()
+                    rest: None,
                 },
-            )]),
-            ..NixosOptions::default()
-        }));
+                ..NixosOption::default()
+            },
+        )])));
 
         let compes = super::completions(&db, f[0], trigger_char).expect("No completion");
         let item = compes
