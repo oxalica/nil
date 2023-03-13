@@ -4,7 +4,7 @@ use crate::ast::{self, AstChildren, AstNode, Attr, Expr, HasStringParts, StringP
 use crate::lexer::KEYWORDS;
 use crate::{SyntaxNode, SyntaxToken};
 use std::borrow::Cow;
-use std::str;
+use std::{fmt, str};
 
 /// Check if a name is a valid identifier.
 pub fn is_valid_ident(name: &str) -> bool {
@@ -20,15 +20,39 @@ pub fn is_valid_ident(name: &str) -> bool {
 /// Escape a literal Attr. Quote it if it's not a valid identifier.
 pub fn escape_literal_attr(name: &str) -> Cow<'_, str> {
     if is_valid_ident(name) {
-        return Cow::Borrowed(name);
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(escape_string(name))
     }
-    Cow::Owned(
-        std::iter::empty()
-            .chain(Some('"'))
-            .chain(name.chars().flat_map(|ch| ch.escape_default()))
-            .chain(Some('"'))
-            .collect(),
-    )
+}
+
+/// Escape the text in a string literal with double-quotes.
+pub fn escape_string(text: &str) -> String {
+    format!("\"{}\"", EscapeStringFragment(text))
+}
+
+#[derive(Debug, Clone)]
+pub struct EscapeStringFragment<'a>(pub &'a str);
+
+impl fmt::Display for EscapeStringFragment<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, ch) in self.0.char_indices() {
+            match ch {
+                '"' => "\\\"",
+                '\\' => "\\\\",
+                '\n' => "\\n",
+                '\r' => "\\r",
+                '\t' => "\\r",
+                '$' if self.0[i..].starts_with("${") => "\\$",
+                _ => {
+                    ch.fmt(f)?;
+                    continue;
+                }
+            }
+            .fmt(f)?;
+        }
+        Ok(())
+    }
 }
 
 /// Unescape a single string escape sequence.
@@ -348,6 +372,13 @@ mod tests {
         assert_eq!(escape_literal_attr("in"), r#""in""#);
         assert_eq!(escape_literal_attr(" "), r#"" ""#);
         assert_eq!(escape_literal_attr("\n"), r#""\n""#);
+        assert_eq!(escape_literal_attr("$ ${"), r#""$ \${""#);
+    }
+
+    #[test]
+    fn escape_string_() {
+        assert_eq!(escape_string(""), r#""""#);
+        assert_eq!(escape_string("n\"$a \n${b"), r#""n\"$a \n\${b""#);
     }
 
     #[test]

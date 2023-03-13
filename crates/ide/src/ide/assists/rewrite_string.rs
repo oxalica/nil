@@ -3,13 +3,14 @@
 //! - Attribute names <-> Double quoted strings
 //! - Double quoted strings <-> Indented strings
 use std::convert::Infallible;
+use std::fmt::Write;
 
 use super::{AssistKind, AssistsCtx};
 use crate::TextEdit;
 use syntax::ast::{self, AstNode};
 use syntax::semantic::{
     is_valid_ident, strip_indent, unescape_string, unescape_string_escape, unescape_string_literal,
-    StrippedStringPart, UnescapedStringPart,
+    EscapeStringFragment, StrippedStringPart, UnescapedStringPart,
 };
 use syntax::SyntaxKind;
 
@@ -220,22 +221,32 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
 /// ```
 pub(super) fn rewrite_indented_to_string(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let node = ctx.covering_node::<ast::IndentString>()?;
-    let mut text = String::from('"');
-    let _ = strip_indent::<Infallible>(&node, |part| {
+    let mut ret = String::from('"');
+
+    // Concatenate all contiguous fragments and escape them in a single run.
+    // This correctly handles `${` on two individual fragments/escapes.
+    // Eg. `''${` => [Escape("$"), Fragment("{")] => "${" => "\${"
+    // Note that either part alone doesn't require escaping.
+    let mut last_frag = String::new();
+    strip_indent::<Infallible>(&node, |part| {
         match part {
             StrippedStringPart::Fragment(frag) => {
-                escape_dquote_string(&mut text, frag);
+                last_frag += frag;
             }
             StrippedStringPart::Escape(esc) => {
-                escape_dquote_string(&mut text, unescape_string_escape(esc.text()));
+                last_frag += unescape_string_escape(esc.text());
             }
             StrippedStringPart::Dynamic(dyna) => {
-                text += &dyna.syntax().to_string();
+                write!(ret, "{}", EscapeStringFragment(&last_frag)).unwrap();
+                last_frag.clear();
+                ret += &dyna.syntax().to_string();
             }
         }
         Ok(())
-    });
-    text.push('"');
+    })
+    .unwrap();
+    write!(ret, "{}", EscapeStringFragment(&last_frag)).unwrap();
+    ret.push('"');
 
     ctx.add(
         "rewrite_indented_to_string",
@@ -243,39 +254,11 @@ pub(super) fn rewrite_indented_to_string(ctx: &mut AssistsCtx<'_>) -> Option<()>
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: node.syntax().text_range(),
-            insert: text.into(),
+            insert: ret.into(),
         }],
     );
 
     Some(())
-}
-
-/// Escape `text` and write to `out`,
-/// `text` may be only a fragment of the original Nix string.
-fn escape_dquote_string(out: &mut String, text: &str) {
-    let mut xs = text.chars();
-    while let Some(x) = xs.next() {
-        match x {
-            '"' | '\\' => {
-                out.push('\\');
-                out.push(x);
-            }
-            '$' => match xs.next() {
-                Some('{') => out.push_str("\\${"),
-                Some(y) => {
-                    out.push('$');
-                    out.push(y);
-                }
-                // It's impossible to know from this context whether the next
-                // character is '{' or not, so we assume it is just to be safe
-                None => out.push_str("\\$"),
-            },
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            _ => out.push(x),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -364,5 +347,9 @@ mod tests {
         check(r"$0''\n\r\t''", expect![r#""\\n\\r\\t""#]);
         check(r"'''''''$0", expect![r#""''""#]);
         check(r"$0''''${foo}''", expect![r#""\${foo}""#]);
+
+        // See comments in `rewrite_indented_to_string`.
+        check(r"$0'' ''${ ''", expect![[r#""\${ ""#]]);
+        check(r"$0'' ''$ ''", expect![[r#""$ ""#]]);
     }
 }
