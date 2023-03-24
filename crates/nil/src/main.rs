@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::term::termcolor::WriteColor;
 use ide::AnalysisHost;
-use lsp_server::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs, io, process};
@@ -80,8 +79,7 @@ fn main() {
 
     setup_logger();
 
-    let (conn, io_threads) = Connection::stdio();
-    match nil::main_loop(conn).and_then(|()| io_threads.join().map_err(Into::into)) {
+    match nil::run_server_stdio() {
         Ok(()) => {}
         Err(err) => {
             tracing::error!("Unexpected error: {err:#}");
