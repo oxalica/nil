@@ -776,34 +776,33 @@ impl StateSnapshot {
 
 #[cfg(target_os = "linux")]
 fn wait_for_pid(pid: u32) -> std::io::Result<()> {
-    use std::io;
-    use std::mem::MaybeUninit;
     use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-    use std::ptr::null_mut;
 
     let pidfd = unsafe {
         let ret = libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0 as libc::c_int);
-        if ret == -1 {
-            let err = io::Error::last_os_error();
+        if ret >= 0 {
+            OwnedFd::from_raw_fd(ret as RawFd)
+        } else {
+            let err = std::io::Error::last_os_error();
             if err.raw_os_error() == Some(libc::ESRCH) {
                 return Ok(());
             }
             return Err(err);
         }
-        OwnedFd::from_raw_fd(ret as RawFd)
     };
-    unsafe {
-        let mut fdset = MaybeUninit::uninit();
-        libc::FD_ZERO(fdset.as_mut_ptr());
-        libc::FD_SET(pidfd.as_raw_fd(), fdset.as_mut_ptr());
-        let nfds = pidfd.as_raw_fd() + 1;
-        let ret = libc::select(nfds, fdset.as_mut_ptr(), null_mut(), null_mut(), null_mut());
-        if ret == -1 {
-            return Err(io::Error::last_os_error());
-        }
+    let mut pollfd = libc::pollfd {
+        fd: pidfd.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let ret = unsafe {
+        libc::poll(&mut pollfd, 1, -1 /* No timeout */)
+    };
+    // 1 fds.
+    if ret == 1 {
+        return Ok(());
     }
-
-    Ok(())
+    Err(std::io::Error::last_os_error())
 }
 
 #[cfg(not(target_os = "linux"))]
