@@ -20,6 +20,10 @@ struct Args {
     /// print the version and exit
     #[argh(switch)]
     version: bool,
+    /// use stdin and stdout for the language server. This is the default but it suppress
+    /// warnings when either stdin or stdout is tty.
+    #[argh(switch)]
+    stdio: bool,
     #[argh(subcommand)]
     subcommand: Option<Subcommand>,
 }
@@ -78,6 +82,16 @@ fn main() {
     }
 
     setup_logger();
+
+    if !args.stdio && (atty::is(atty::Stream::Stdin) || atty::is(atty::Stream::Stdout)) {
+        // TODO: Make this a hard error.
+        eprintln!(
+            "\
+            WARNING: You are NOT supposed to run the language server in terminal. This will be a \
+            hard error in the future. Please configure it in your editor instead.\
+            "
+        );
+    }
 
     match nil::run_server_stdio() {
         Ok(()) => {}

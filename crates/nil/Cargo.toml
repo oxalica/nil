@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1.0.68"
 argh = "0.1.10"
+atty = "0.2.14"
 codespan-reporting = "0.11.1"
 crossbeam-channel = "0.5.6"
 ide = { path = "../ide" }
