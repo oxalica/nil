@@ -10,8 +10,8 @@ use lsp_server::{
 use lsp_types::notification::Notification as _;
 use lsp_types::{
     notification as notif, request as req, ConfigurationItem, ConfigurationParams, Diagnostic,
-    InitializeParams, MessageType, NumberOrString, PublishDiagnosticsParams, ShowMessageParams,
-    Url,
+    InitializeParams, InitializeResult, MessageType, NumberOrString, PublishDiagnosticsParams,
+    ServerInfo, ShowMessageParams, Url,
 };
 use nix_interop::nixos_options::NixosOptions;
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
@@ -23,6 +23,8 @@ use std::panic::UnwindSafe;
 use std::path::Path;
 use std::sync::{Arc, Once, RwLock};
 use std::{fs, panic, thread};
+
+const LSP_SERVER_NAME: &str = "nil";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
@@ -118,14 +120,55 @@ impl Server {
     }
 
     pub fn run(mut self) -> Result<()> {
-        let init_params = Connection {
-            sender: self.lsp_tx.clone(),
-            receiver: self.lsp_rx.clone(),
+        self.init()?;
+
+        loop {
+            crossbeam_channel::select! {
+                recv(self.lsp_rx) -> msg => {
+                    match msg.context("Channel closed")? {
+                        Message::Request(req) => self.dispatch_request(req),
+                        Message::Notification(notif) => {
+                            if notif.method == notif::Exit::METHOD {
+                                return Ok(());
+                            }
+                            self.dispatch_notification(notif);
+                        }
+                        Message::Response(resp) => {
+                            if let Some(callback) = self.req_queue.outgoing.complete(resp.id.clone()) {
+                                callback(&mut self, resp);
+                            }
+                        }
+                    }
+                }
+                recv(self.event_rx) -> event => {
+                    self.dispatch_event(event.context("Worker panicked")?)?;
+                }
+            }
         }
-        .initialize(serde_json::to_value(server_capabilities()).unwrap())?;
-        tracing::info!("Init params: {}", init_params);
-        let init_params = serde_json::from_value::<InitializeParams>(init_params)
-            .context("Invalid init_params")?;
+    }
+
+    fn init(&mut self) -> Result<()> {
+        let init_params = {
+            let conn = Connection {
+                sender: self.lsp_tx.clone(),
+                receiver: self.lsp_rx.clone(),
+            };
+            let (req_id, init_params) = conn.initialize_start()?;
+            tracing::info!("Init params: {}", init_params);
+            let init_params = serde_json::from_value::<InitializeParams>(init_params)
+                .context("Invalid init_params")?;
+
+            let init_ret = InitializeResult {
+                capabilities: server_capabilities(),
+                server_info: Some(ServerInfo {
+                    name: LSP_SERVER_NAME.into(),
+                    version: option_env!("CFG_RELEASE").map(Into::into),
+                }),
+            };
+            conn.initialize_finish(req_id, serde_json::to_value(init_ret).unwrap())?;
+
+            init_params
+        };
 
         let root_path = match init_params
             .root_uri
@@ -156,31 +199,8 @@ impl Server {
             st.load_flake();
         });
 
-        loop {
-            crossbeam_channel::select! {
-                recv(self.lsp_rx) -> msg => {
-                    match msg.context("Channel closed")? {
-                        Message::Request(req) => self.dispatch_request(req),
-                        Message::Notification(notif) => {
-                            if notif.method == notif::Exit::METHOD {
-                                return Ok(());
-                            }
-                            self.dispatch_notification(notif);
-                        }
-                        Message::Response(resp) => {
-                            if let Some(callback) = self.req_queue.outgoing.complete(resp.id.clone()) {
-                                callback(&mut self, resp);
-                            }
-                        }
-                    }
-                }
-                recv(self.event_rx) -> event => {
-                    self.dispatch_event(event.context("Worker panicked")?)?;
-                }
-            }
-        }
+        Ok(())
     }
-
     fn dispatch_event(&mut self, event: Event) -> Result<()> {
         match event {
             Event::Response(resp) => {
