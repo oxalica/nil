@@ -1,4 +1,4 @@
-{
+rec {
   description = "Language Server for Nix Expression Language";
 
   inputs = {
@@ -28,6 +28,12 @@
           nativeBuildInputs = [ nix.out ];
 
           CFG_RELEASE = "git-${rev}";
+
+          meta = {
+            inherit description;
+            homepage = "https://github.com/oxalica/nil";
+            license = with lib.licenses; [ mit asl20 ];
+          };
         };
 
       mkCocNil = { runCommand, nodejs, esbuild }:
