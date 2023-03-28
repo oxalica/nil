@@ -97,6 +97,8 @@ pub fn flake(inputs: &[&str]) -> Ty {
         inputs
             .iter()
             .copied()
+            // Don't duplicate.
+            .filter(|name| *name != "self")
             .chain(Some("self"))
             .map(|name| (name, FLAKE.clone(), AttrSource::Unknown)),
         None,

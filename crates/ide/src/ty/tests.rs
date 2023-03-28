@@ -253,3 +253,17 @@ fn builtins() {
     check("builtins.readDir ./.", expect!["{ …: string }"]);
     check("(builtins.readDir ./.).foo", expect!["string"]);
 }
+
+#[test]
+fn inputs_with_self() {
+    check_name(
+        "foo",
+        r"
+#- /flake.nix
+{
+    inputs.self.foo = 1;
+}
+        ",
+        expect!["int"],
+    );
+}
