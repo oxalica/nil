@@ -5,7 +5,7 @@ use builtin::{BuiltinKind, ALL_BUILTINS};
 use either::Either::{Left, Right};
 use smol_str::SmolStr;
 use syntax::ast::{self, AstNode, Attr};
-use syntax::semantic::AttrKind;
+use syntax::semantic::{escape_literal_attr, is_valid_ident, AttrKind};
 use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
 
 use super::hover::TY_DETAILED_DISPLAY;
@@ -228,6 +228,7 @@ fn complete_expr(
         .ancestors(scope_id)
         .filter_map(|scope| scope.as_definitions())
         .flatten()
+        .filter(|(text, _)| is_valid_ident(text))
         .map(|(text, &name)| CompletionItem {
             label: text.clone(),
             source_range,
@@ -321,14 +322,17 @@ fn complete_attrpath(
                         // We should not report current incomplete definition.
                         // This is covered by `no_incomplete_field`.
                         .filter(|name| *name != current_input)
-                        .map(|name| CompletionItem {
-                            label: name.clone(),
-                            source_range,
-                            replace: name,
-                            kind: CompletionItemKind::LetBinding,
-                            signature: None,
-                            description: None,
-                            documentation: None,
+                        .map(|name| {
+                            let escaped_name = escape_literal_attr(&name);
+                            CompletionItem {
+                                label: escaped_name.as_ref().into(),
+                                source_range,
+                                replace: escaped_name.into(),
+                                kind: CompletionItemKind::LetBinding,
+                                signature: None,
+                                description: None,
+                                documentation: None,
+                            }
                         }),
                 );
             }
@@ -373,10 +377,12 @@ fn complete_attrpath(
                 return builtin_to_completion(source_range, name);
             }
 
+            let escaped_name = escape_literal_attr(name);
+
             Some(CompletionItem {
-                label: name.clone(),
+                label: escaped_name.as_ref().into(),
                 source_range,
-                replace: name.clone(),
+                replace: escaped_name.into(),
                 kind: match src {
                     AttrSource::Unknown => CompletionItemKind::Field,
                     AttrSource::Name(name) => module[name].kind.into(),
@@ -834,5 +840,20 @@ stdenv.mkDerivation {
             ",
             "enable",
         );
+    }
+
+    #[test]
+    fn escape_attr() {
+        check(
+            r#"{ "foo/bar" = 1; }.f$0"#,
+            r#""foo/bar""#,
+            expect![[r#"(Field) { "foo/bar" = 1; }."foo/bar""#]],
+        );
+    }
+
+    #[test]
+    fn no_invalid_ident() {
+        check_no(r#"let "a b" = 1; in a$0"#, "a b");
+        check_no(r#"let "a b" = 1; in a$0"#, r#""a b""#);
     }
 }
