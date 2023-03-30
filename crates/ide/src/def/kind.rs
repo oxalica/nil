@@ -58,12 +58,13 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
     let mut explicit_inputs = HashMap::new();
     let mut param_inputs = HashMap::new();
     let mut outputs_expr = None;
-    if let Expr::Attrset(flake_set) = &module[module.entry_expr()] {
+    if let Expr::Attrset(flake_set) | Expr::RecAttrset(flake_set) = &module[module.entry_expr()] {
         for &(name_id, value) in flake_set.statics.iter() {
             let BindingValue::Expr(value_expr) = value else { continue };
             match &*module[name_id].text {
                 "inputs" => {
-                    let Expr::Attrset(inputs) = &module[value_expr] else { continue };
+                    let (Expr::Attrset(inputs) | Expr::RecAttrset(inputs)) = &module[value_expr]
+                    else { continue };
                     explicit_inputs = inputs
                         .statics
                         .iter()
@@ -189,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn flake_nix() {
+    fn flake_nix_normal() {
         check(
             r#"
 #- /flake.nix input:nixpkgs=/nix/store/eeee
@@ -199,6 +200,24 @@ mod tests {
 }
             "#,
             expect!["FlakeNix: explicit_inputs=nil param_inputs=nixpkgs outputs={ self, nixpkgs, ... }: { }"],
+        );
+    }
+
+    #[test]
+    fn flake_nix_rec() {
+        check(
+            r#"
+#- /flake.nix input:nixpkgs=/nix/store/eeee
+rec {
+    inputs = rec {
+        nil = rec {
+            url = "github:oxalica/nil";
+        };
+    };
+    outputs = { self, nixpkgs, ... }: rec { };
+}
+            "#,
+            expect!["FlakeNix: explicit_inputs=nil param_inputs=nixpkgs outputs={ self, nixpkgs, ... }: rec { }"],
         );
     }
 
