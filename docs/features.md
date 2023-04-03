@@ -38,6 +38,8 @@ This incomplete list tracks noteble features currently implemented or planned.
     - [x] Flake schema, including common inputs fields like `url` and
           output fields like `outPath`.
     - [ ] Real flake outputs from evaluation.
+    - [x] NixOS options.
+          Evaluated from the flake input named `nixpkgs`.
   - [x] Pat-parameter definition.
     - [x] Flake inputs in the parameter of `outputs`.
 
