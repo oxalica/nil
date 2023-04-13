@@ -168,7 +168,15 @@ pub(crate) fn liveness_check_query(
                 // `{ foo [, ...] }[@bar]: ...`
                 //    ^ Unused and removable, only for packages and configurations.
                 if let Some(pat) = pat {
-                    if must_use_params_expr == Some(expr) {
+                    if must_use_params_expr == Some(expr)
+                    // For flakes,
+                    // `outputs = { foo [, ...] }@bar: ...`
+                    //              ^ Always considered used.
+                    // It causes Nix to add inputs from registry automatically,
+                    // and user can access it via `var` elsewhere.
+                    // Tested in `flake_output_with_universal`.
+                        && (!is_flake_outputs || param.is_none())
+                    {
                         unused_defs.extend(pat.fields.iter().filter_map(|&(name, _)| {
                             let name = name?;
                             if visited_defs.get(name).is_some() {
@@ -298,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn unused_pat_param_flake_output() {
+    fn flake_output_self() {
         // Warn `self`.
         check(
             "
@@ -315,6 +323,31 @@ mod tests {
 #- /flake.nix
 {
     outputs = { self, $0nixpkgs }: { };
+}
+            ",
+        );
+    }
+
+    // https://github.com/oxalica/nil/issues/73
+    #[test]
+    fn flake_output_with_universal() {
+        // Don't warn pat parameters for automatic inputs.
+        check(
+            "
+#- /flake.nix
+{
+    outputs = { self, nixpkgs, ... }@inputs:
+        import ./foo.nix inputs;
+}
+            ",
+        );
+
+        // The universal parameter itself is still warned.
+        check(
+            "
+#- /flake.nix
+{
+    outputs = { self, nixpkgs, ... }@$0inputs: { };
 }
             ",
         );
