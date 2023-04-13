@@ -173,7 +173,7 @@ pub(crate) fn liveness_check_query(
                     // `outputs = { foo [, ...] }@bar: ...`
                     //              ^ Always considered used.
                     // It causes Nix to add inputs from registry automatically,
-                    // and user can access it via `var` elsewhere.
+                    // and user can access it via `bar` elsewhere.
                     // Tested in `flake_output_with_universal`.
                         && (!is_flake_outputs || param.is_none())
                     {
