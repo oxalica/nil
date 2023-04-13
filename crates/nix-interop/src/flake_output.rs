@@ -77,6 +77,8 @@ pub enum Type {
 
 #[cfg(test)]
 mod tests {
+    use crate::tests::NIX_SYSTEM;
+
     use super::*;
 
     #[test]
@@ -85,7 +87,7 @@ mod tests {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let output = eval_flake_output("nix".as_ref(), dir.as_ref()).unwrap();
         let leaf = (|| {
-            output.as_attrset()?["packages"].as_attrset()?["x86_64-linux"].as_attrset()?["nil"]
+            output.as_attrset()?["packages"].as_attrset()?[&*NIX_SYSTEM].as_attrset()?["nil"]
                 .as_leaf()
         })()
         .unwrap();

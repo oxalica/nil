@@ -350,6 +350,7 @@ name = "nix-interop"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "once_cell",
  "serde",
  "serde_json",
  "serde_repr",
