@@ -1,7 +1,7 @@
 use crate::capabilities::server_capabilities;
 use crate::config::{Config, CONFIG_KEY};
 use crate::{convert, handler, lsp_ext, UrlExt, Vfs, MAX_FILE_LEN};
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, ErrorCode, LanguageClient, ResponseError};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
@@ -9,8 +9,9 @@ use lsp_types::request::{self as req, Request};
 use lsp_types::{
     notification as notif, ConfigurationItem, ConfigurationParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeParams, InitializeResult, InitializedParams, MessageType, PublishDiagnosticsParams,
-    ServerInfo, ShowMessageParams, Url,
+    InitializeParams, InitializeResult, InitializedParams, MessageActionItem,
+    MessageActionItemProperty, MessageType, PublishDiagnosticsParams, ServerInfo,
+    ShowMessageParams, ShowMessageRequestParams, Url,
 };
 use nix_interop::nixos_options::{self, NixosOptions};
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
@@ -269,17 +270,61 @@ impl Server {
         };
         let Some(flake_info) = flake_info else { return };
 
-        if flake_info
-            .input_store_paths
-            .values()
-            .any(|path| !path.as_path().expect("Must be real paths").exists())
-        {
-            // TODO: Run it.
-            client.show_message_ext(
-                MessageType::WARNING,
-                "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs",
+        let missing_paths = || {
+            flake_info
+                .input_store_paths
+                .iter()
+                .filter(|(_, path)| !path.as_path().expect("Must be real paths").exists())
+        };
+
+        if missing_paths().next().is_some() {
+            tracing::debug!(
+                "Missing flake inputs: {:?}",
+                missing_paths().collect::<Vec<_>>()
             );
-            return;
+
+            let ret = client
+                .show_message_request(ShowMessageRequestParams {
+                    typ: MessageType::INFO,
+                    message: "Some flake inputs are not available. Fetch them now?".into(),
+                    actions: Some(vec![
+                        MessageActionItem {
+                            title: "Fetch".into(),
+                            // Matches below.
+                            properties: [("ok".into(), MessageActionItemProperty::Boolean(true))]
+                                .into(),
+                        },
+                        MessageActionItem {
+                            title: "Ignore missing ones".into(),
+                            properties: HashMap::new(),
+                        },
+                    ]),
+                })
+                .await;
+            if matches!(ret, Ok(Some(item)) if item.properties.contains_key("ok")) {
+                let ret = task::spawn_blocking({
+                    let nix_binary = config.nix_binary.clone();
+                    tracing::info!("Archiving flake");
+                    move || flake_lock::archive(&nix_binary)
+                })
+                .await
+                .expect("Panicked while archiving flake")
+                .and_then(|()| {
+                    let missing = missing_paths().collect::<Vec<_>>();
+                    ensure!(
+                        missing.is_empty(),
+                        "command succeeded but some paths are still missing: {missing:?}"
+                    );
+                    Ok(())
+                });
+                if let Err(err) = ret {
+                    client.show_message_ext(
+                        MessageType::ERROR,
+                        format_args!("Failed to archiving flake: {err:#}"),
+                    );
+                    // Fallthrough and load the rest if possible.
+                }
+            }
         }
 
         // TODO: A better way to retrieve the nixpkgs for options?
