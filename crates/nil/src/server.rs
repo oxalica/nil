@@ -36,7 +36,6 @@ type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 type Task = Box<dyn FnOnce() -> Event + Send + 'static>;
 
 enum Event {
-    LoadConfig(serde_json::Value),
     Diagnostics {
         uri: Url,
         version: u64,
@@ -44,6 +43,7 @@ enum Event {
     },
 }
 
+struct UpdateConfigEvent(serde_json::Value);
 struct SetFlakeInfoEvent(Option<FlakeInfo>);
 struct SetNixosOptionsEvent(NixosOptions);
 
@@ -111,6 +111,7 @@ impl Server {
             //// Events ////
             .event(Self::on_set_flake_info)
             .event(Self::on_set_nixos_options)
+            .event(Self::on_update_config)
             // TODO: Use individual event types instead.
             .event(Self::on_event);
         router
@@ -243,14 +244,6 @@ impl Server {
 
     fn on_event(&mut self, event: Event) -> NotifyResult {
         match event {
-            Event::LoadConfig(v) => {
-                self.update_config(v);
-                if !self.tried_flake_load {
-                    self.tried_flake_load = true;
-                    // TODO: Register file watcher for flake.lock.
-                    self.spawn_load_flake_workspace();
-                }
-            }
             Event::Diagnostics {
                 uri,
                 version,
@@ -464,13 +457,13 @@ impl Server {
             };
             tracing::debug!("Updating config: {:?}", v);
             let v = v.pop().unwrap_or_default();
-            let _: Result<_, _> = client.emit(Event::LoadConfig(v));
+            let _: Result<_, _> = client.emit(UpdateConfigEvent(v));
         });
     }
 
-    fn update_config(&mut self, value: serde_json::Value) {
+    fn on_update_config(&mut self, value: UpdateConfigEvent) -> NotifyResult {
         let mut config = Config::clone(&self.config);
-        let (errors, updated_diagnostics) = config.update(value);
+        let (errors, updated_diagnostics) = config.update(value.0);
         tracing::debug!("Updated config, errors: {errors:?}, config: {config:?}");
         self.config = Arc::new(config);
 
@@ -490,6 +483,15 @@ impl Server {
                 self.update_diagnostics(uri.clone(), version);
             }
         }
+
+        // If this is the first load, load the flake workspace, which depends on `nix.binary`.
+        if !self.tried_flake_load {
+            self.tried_flake_load = true;
+            // TODO: Register file watcher for flake.lock.
+            self.spawn_load_flake_workspace();
+        }
+
+        ControlFlow::Continue(())
     }
 
     fn update_diagnostics(&self, uri: Url, version: u64) {
