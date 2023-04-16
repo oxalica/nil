@@ -12,7 +12,7 @@ use lsp_types::{
     DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
     PublishDiagnosticsParams, ServerInfo, ShowMessageParams, Url,
 };
-use nix_interop::nixos_options::NixosOptions;
+use nix_interop::nixos_options::{self, NixosOptions};
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::backtrace::Backtrace;
 use std::borrow::BorrowMut;
@@ -22,10 +22,10 @@ use std::future::{ready, Future};
 use std::io::ErrorKind;
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
-use std::path::Path;
 use std::sync::{Arc, Once, RwLock};
-use std::{fmt, fs, panic};
-use tokio::task;
+use std::{fmt, panic};
+use tokio::task::JoinHandle;
+use tokio::{fs, task};
 
 const LSP_SERVER_NAME: &str = "nil";
 
@@ -42,17 +42,10 @@ enum Event {
         version: u64,
         diagnostics: Vec<Diagnostic>,
     },
-    LoadFlake(Result<LoadFlakeResult>),
-    NixosOptions(Result<NixosOptions>),
 }
 
-enum LoadFlakeResult {
-    IsFlake {
-        flake_info: FlakeInfo,
-        missing_inputs: bool,
-    },
-    NotFlake,
-}
+struct SetFlakeInfoEvent(Option<FlakeInfo>);
+struct SetNixosOptionsEvent(NixosOptions);
 
 pub struct Server {
     // States.
@@ -67,6 +60,10 @@ pub struct Server {
     /// This is used to reload flake only once after the configuration is first loaded.
     tried_flake_load: bool,
 
+    // Ongoing tasks.
+    load_flake_workspace_fut: Option<JoinHandle<()>>,
+
+    // Client socket.
     client: ClientSocket,
 }
 
@@ -112,6 +109,9 @@ impl Server {
             .request_snap::<req::DocumentHighlightRequest>(handler::document_highlight)
             .request_snap::<lsp_ext::ParentModule>(handler::parent_module)
             //// Events ////
+            .event(Self::on_set_flake_info)
+            .event(Self::on_set_nixos_options)
+            // TODO: Use individual event types instead.
             .event(Self::on_event);
         router
     }
@@ -125,6 +125,8 @@ impl Server {
             config: Arc::new(Config::new("/non-existing-path".into())),
             version_counter: 0,
             tried_flake_load: false,
+
+            load_flake_workspace_fut: None,
 
             client,
         }
@@ -246,7 +248,7 @@ impl Server {
                 if !self.tried_flake_load {
                     self.tried_flake_load = true;
                     // TODO: Register file watcher for flake.lock.
-                    self.spawn_load_flake();
+                    self.spawn_load_flake_workspace();
                 }
             }
             Event::Diagnostics {
@@ -274,142 +276,169 @@ impl Server {
                 }
                 _ => tracing::debug!("Ignore raced diagnostics of {uri}, version {version}"),
             },
-            Event::LoadFlake(ret) => match ret {
-                Err(err) => {
-                    self.client.show_message_ext(
-                        MessageType::ERROR,
-                        format!("Failed to load flake workspace: {err:#}"),
-                    );
-                }
-                Ok(LoadFlakeResult::IsFlake {
-                    flake_info,
-                    missing_inputs,
-                }) => {
-                    tracing::info!(
-                        "Workspace is a flake (missing_inputs = {missing_inputs}): {flake_info:?}"
-                    );
-                    if missing_inputs {
-                        self.client.show_message_ext(MessageType::WARNING,  "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs");
-                    }
-
-                    // TODO: A better way to retrieve the nixpkgs for options?
-                    if let Some(nixpkgs_path) = flake_info
-                        .input_store_paths
-                        .get(NIXOS_OPTIONS_FLAKE_INPUT)
-                        .and_then(VfsPath::as_path)
-                    {
-                        let nixpkgs_path = nixpkgs_path.to_owned();
-                        let nix_binary = self.config.nix_binary.clone();
-                        tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
-                        self.spawn_task(Box::new(move || {
-                            Event::NixosOptions(nix_interop::nixos_options::eval_all_options(
-                                &nix_binary,
-                                &nixpkgs_path,
-                            ))
-                        }));
-                    }
-
-                    self.vfs.write().unwrap().set_flake_info(Some(flake_info));
-                    self.apply_vfs_change();
-                }
-                Ok(LoadFlakeResult::NotFlake) => {
-                    tracing::info!("Workspace is not a flake");
-                    self.vfs.write().unwrap().set_flake_info(None);
-                    self.apply_vfs_change();
-                }
-            },
-            Event::NixosOptions(ret) => match ret {
-                // Sanity check.
-                Ok(opts) if !opts.is_empty() => {
-                    tracing::info!("Loaded NixOS options ({} top-level options)", opts.len());
-                    self.vfs.write().unwrap().set_nixos_options(opts);
-                    self.apply_vfs_change();
-                }
-                Ok(_) => {
-                    tracing::error!("Empty NixOS options?");
-                }
-                Err(err) => {
-                    tracing::error!("Failed to evalute NixOS options: {err}");
-                }
-            },
         }
         ControlFlow::Continue(())
     }
 
-    /// Spawn a task to reload the flake.{nix,lock} and the locked inputs.
-    fn spawn_load_flake(&self) {
-        tracing::info!("Loading flake configuration");
+    /// Spawn a task to (re)load the flake workspace via `flake.{nix,lock}`, including flake info,
+    /// NixOS options and outputs (TODO).
+    fn spawn_load_flake_workspace(&mut self) {
+        let fut = task::spawn(Self::load_flake_workspace(
+            self.vfs.clone(),
+            self.config.clone(),
+            self.client.clone(),
+        ));
+        if let Some(prev_fut) = self.load_flake_workspace_fut.replace(fut) {
+            prev_fut.abort();
+        }
+    }
 
-        let flake_path = self.config.root_path.join(FLAKE_FILE);
-        let lock_path = self.config.root_path.join(FLAKE_LOCK_FILE);
-        let nix_bin_path = self.config.nix_binary.clone();
+    async fn load_flake_workspace(
+        vfs: Arc<RwLock<Vfs>>,
+        config: Arc<Config>,
+        mut client: ClientSocket,
+    ) {
+        tracing::info!("Loading flake workspace");
 
-        let vfs = self.vfs.clone();
-        let task = move || {
-            let flake_vpath = VfsPath::new(&flake_path);
-            let flake_src = match fs::read_to_string(&flake_path) {
-                Ok(src) => src,
-                // Not a flake.
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    return Ok(LoadFlakeResult::NotFlake);
-                }
-                // Read failure.
-                Err(err) => {
-                    return Err(anyhow::Error::new(err)
-                        .context(format!("Failed to read flake root {flake_path:?}")));
-                }
-            };
-
-            // Load the flake file in Vfs.
-            let flake_file = {
-                let mut vfs = vfs.write().unwrap();
-                match vfs.file_for_path(&flake_vpath) {
-                    // If the file is already opened (transferred from client),
-                    // prefer the managed one. It contains more recent unsaved changes.
-                    Ok(file) => file,
-                    // Otherwise, cache the file content from disk.
-                    Err(_) => vfs.set_path_content(flake_vpath, flake_src),
-                }
-            };
-
-            let lock_src = match fs::read(&lock_path) {
-                Ok(lock_src) => lock_src,
-                // Flake without inputs.
-                Err(err) if err.kind() == ErrorKind::NotFound => {
-                    return Ok(LoadFlakeResult::IsFlake {
-                        missing_inputs: false,
-                        flake_info: FlakeInfo {
-                            flake_file,
-                            input_store_paths: HashMap::new(),
-                        },
-                    });
-                }
-                Err(err) => {
-                    return Err(anyhow::Error::new(err)
-                        .context(format!("Failed to read flake lock {lock_path:?}")));
-                }
-            };
-
-            let inputs = flake_lock::resolve_flake_locked_inputs(&nix_bin_path, &lock_src)
-                .context("Failed to resolve flake inputs from lock file")?;
-
-            // We only need the map for input -> store path.
-            let inputs_cnt = inputs.len();
-            let input_store_paths = inputs
-                .into_iter()
-                .filter(|(_, input)| Path::new(&input.store_path).exists())
-                .map(|(key, input)| (key, VfsPath::new(input.store_path)))
-                .collect::<HashMap<_, _>>();
-
-            Ok(LoadFlakeResult::IsFlake {
-                missing_inputs: input_store_paths.len() != inputs_cnt,
-                flake_info: FlakeInfo {
-                    flake_file,
-                    input_store_paths,
-                },
-            })
+        let flake_info = match Self::load_flake_info(&vfs, &config).await {
+            Ok(ret) => {
+                let _: Result<_, _> = client.emit(SetFlakeInfoEvent(ret.clone()));
+                ret
+            }
+            Err(err) => {
+                client.show_message_ext(
+                    MessageType::ERROR,
+                    format!("Failed to load flake workspace: {err:#}"),
+                );
+                return;
+            }
         };
-        self.spawn_task(Box::new(move || Event::LoadFlake(task())));
+        let Some(flake_info) = flake_info else { return };
+
+        if flake_info
+            .input_store_paths
+            .values()
+            .any(|path| !path.as_path().expect("Must be real paths").exists())
+        {
+            // TODO: Run it.
+            client.show_message_ext(
+                MessageType::WARNING,
+                "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs",
+            );
+            return;
+        }
+
+        // TODO: A better way to retrieve the nixpkgs for options?
+        if let Some(nixpkgs_path) = flake_info
+            .input_store_paths
+            .get(NIXOS_OPTIONS_FLAKE_INPUT)
+            .and_then(VfsPath::as_path)
+        {
+            tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
+
+            // TODO: Async process.
+            let ret = task::spawn_blocking({
+                let nixpkgs_path = nixpkgs_path.to_owned();
+                move || nixos_options::eval_all_options(&config.nix_binary, &nixpkgs_path)
+            })
+            .await
+            .expect("Panicked while evaluting NixOS options")
+            .context("Failed to evaluate NixOS options");
+            match ret {
+                // Sanity check.
+                Ok(opts) if !opts.is_empty() => {
+                    tracing::info!("Loaded NixOS options ({} top-level options)", opts.len());
+                    let _: Result<_, _> = client.emit(SetNixosOptionsEvent(opts));
+                }
+                Ok(_) => tracing::error!("Empty NixOS options?"),
+                Err(err) => {
+                    client.show_message_ext(MessageType::ERROR, format_args!("{err:#}"));
+                }
+            }
+        }
+    }
+
+    async fn load_flake_info(vfs: &RwLock<Vfs>, config: &Config) -> Result<Option<FlakeInfo>> {
+        tracing::info!("Loading flake info");
+
+        let flake_path = config.root_path.join(FLAKE_FILE);
+        let lock_path = config.root_path.join(FLAKE_LOCK_FILE);
+
+        let flake_vpath = VfsPath::new(&flake_path);
+        let flake_src = match fs::read_to_string(&flake_path).await {
+            Ok(src) => src,
+            // Not a flake.
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return Ok(None);
+            }
+            // Read failure.
+            Err(err) => {
+                return Err(anyhow::Error::new(err)
+                    .context(format!("Failed to read flake root {flake_path:?}")));
+            }
+        };
+
+        // Load the flake file in Vfs.
+        let flake_file = {
+            let mut vfs = vfs.write().unwrap();
+            match vfs.file_for_path(&flake_vpath) {
+                // If the file is already opened (transferred from client),
+                // prefer the managed one. It contains more recent unsaved changes.
+                Ok(file) => file,
+                // Otherwise, cache the file content from disk.
+                Err(_) => vfs.set_path_content(flake_vpath, flake_src),
+            }
+        };
+
+        let lock_src = match fs::read(&lock_path).await {
+            Ok(lock_src) => lock_src,
+            // Flake without inputs has no lock file.
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return Ok(Some(FlakeInfo {
+                    flake_file,
+                    input_store_paths: HashMap::new(),
+                }));
+            }
+            Err(err) => {
+                return Err(anyhow::Error::new(err)
+                    .context(format!("Failed to read flake lock {lock_path:?}")));
+            }
+        };
+
+        let inputs = task::spawn_blocking({
+            let nix_binary = config.nix_binary.clone();
+            move || {
+                // TODO: Async process.
+                flake_lock::resolve_flake_locked_inputs(&nix_binary, &lock_src)
+            }
+        })
+        .await
+        .expect("Panicked while resolving flake lock")
+        .context("Failed to resolve flake inputs from lock file")?;
+
+        // We only need the map for input -> store path.
+        let input_store_paths = inputs
+            .into_iter()
+            .map(|(key, input)| (key, VfsPath::new(input.store_path)))
+            .collect();
+        Ok(Some(FlakeInfo {
+            flake_file,
+            input_store_paths,
+        }))
+    }
+
+    fn on_set_flake_info(&mut self, info: SetFlakeInfoEvent) -> NotifyResult {
+        tracing::debug!("Set flake info: {:?}", info.0);
+        self.vfs.write().unwrap().set_flake_info(info.0);
+        self.apply_vfs_change();
+        ControlFlow::Continue(())
+    }
+
+    fn on_set_nixos_options(&mut self, opts: SetNixosOptionsEvent) -> NotifyResult {
+        tracing::debug!("Set NixOS options ({:?} top-levels)", opts.0.len());
+        self.vfs.write().unwrap().set_nixos_options(opts.0);
+        self.apply_vfs_change();
+        ControlFlow::Continue(())
     }
 
     fn spawn_reload_config(&self) {
