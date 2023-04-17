@@ -1,14 +1,35 @@
 use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use lsp_types::{
-    CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions, HoverProviderCapability,
-    OneOf, RenameOptions, SelectionRangeProviderCapability, SemanticTokensFullOptions,
-    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensServerCapabilities,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    WorkDoneProgressOptions,
+    ClientCapabilities, CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions,
+    HoverProviderCapability, OneOf, RenameOptions, SelectionRangeProviderCapability,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
 };
 
-pub(crate) fn server_capabilities() -> ServerCapabilities {
-    ServerCapabilities {
+macro_rules! test {
+    ($lhs:ident $(.$field:ident)*) => {
+        Some($lhs)
+            $(.and_then(|opt| opt.$field.as_ref()))*
+        == Some(&true)
+    };
+}
+
+pub(crate) fn negotiate_capabilities(
+    client_caps: &ClientCapabilities,
+) -> (ServerCapabilities, NegotiatedCapabilities) {
+    let final_caps = NegotiatedCapabilities {
+        client_show_message_request: test!(
+            client_caps
+                .window
+                .show_message
+                .message_action_item
+                // This is required for knowing which action is performed.
+                .additional_properties_support
+        ),
+    };
+
+    let server_caps = ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Options(
             TextDocumentSyncOptions {
                 open_close: Some(true),
@@ -50,5 +71,12 @@ pub(crate) fn server_capabilities() -> ServerCapabilities {
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
         document_highlight_provider: Some(OneOf::Left(true)),
         ..Default::default()
-    }
+    };
+
+    (server_caps, final_caps)
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NegotiatedCapabilities {
+    pub client_show_message_request: bool,
 }

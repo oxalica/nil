@@ -1,4 +1,4 @@
-use crate::capabilities::server_capabilities;
+use crate::capabilities::{negotiate_capabilities, NegotiatedCapabilities};
 use crate::config::{Config, CONFIG_KEY};
 use crate::{convert, handler, lsp_ext, UrlExt, Vfs, MAX_FILE_LEN};
 use anyhow::{bail, ensure, Context, Result};
@@ -52,8 +52,9 @@ pub struct Server {
     // Ongoing tasks.
     load_flake_workspace_fut: Option<JoinHandle<()>>,
 
-    // Client socket.
+    // Immutable (mostly).
     client: ClientSocket,
+    capabilities: NegotiatedCapabilities,
 }
 
 #[derive(Debug, Default)]
@@ -115,6 +116,8 @@ impl Server {
             load_flake_workspace_fut: None,
 
             client,
+            // Will be set during initialization.
+            capabilities: NegotiatedCapabilities::default(),
         }
     }
 
@@ -123,6 +126,9 @@ impl Server {
         params: InitializeParams,
     ) -> impl Future<Output = Result<InitializeResult, ResponseError>> {
         tracing::info!("Init params: {params:?}");
+
+        let (server_caps, final_caps) = negotiate_capabilities(&params.capabilities);
+        self.capabilities = final_caps;
 
         // TODO: Use `workspaceFolders`.
         let root_path = match params
@@ -137,7 +143,7 @@ impl Server {
         *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = Config::new(root_path);
 
         ready(Ok(InitializeResult {
-            capabilities: server_capabilities(),
+            capabilities: server_caps,
             server_info: Some(ServerInfo {
                 name: LSP_SERVER_NAME.into(),
                 version: option_env!("CFG_RELEASE").map(Into::into),
@@ -241,6 +247,7 @@ impl Server {
         let fut = task::spawn(Self::load_flake_workspace(
             self.vfs.clone(),
             self.config.clone(),
+            self.capabilities.clone(),
             self.client.clone(),
         ));
         if let Some(prev_fut) = self.load_flake_workspace_fut.replace(fut) {
@@ -251,6 +258,7 @@ impl Server {
     async fn load_flake_workspace(
         vfs: Arc<RwLock<Vfs>>,
         config: Arc<Config>,
+        caps: NegotiatedCapabilities,
         mut client: ClientSocket,
     ) {
         tracing::info!("Loading flake workspace");
@@ -283,25 +291,46 @@ impl Server {
                 missing_paths().collect::<Vec<_>>()
             );
 
-            let ret = client
-                .show_message_request(ShowMessageRequestParams {
-                    typ: MessageType::INFO,
-                    message: "Some flake inputs are not available. Fetch them now?".into(),
-                    actions: Some(vec![
-                        MessageActionItem {
-                            title: "Fetch".into(),
-                            // Matches below.
-                            properties: [("ok".into(), MessageActionItemProperty::Boolean(true))]
+            let do_fetch = if !caps.client_show_message_request {
+                client.show_message_ext(
+                    MessageType::WARNING,
+                    "\
+                    Some flake inputs are not available, please run `nix flake archive` to fetch them. \n\
+                    Your LSP client doesn't support confirmation. You can enable auto-fetch in configurations.\
+                    ",
+                );
+                false
+            } else {
+                let ret = client
+                    .show_message_request(ShowMessageRequestParams {
+                        typ: MessageType::INFO,
+                        message: "\
+                            Some flake inputs are not available. Fetch them now? \n\
+                            You can enable auto-fetch in configurations.\
+                        "
+                        .into(),
+                        actions: Some(vec![
+                            MessageActionItem {
+                                title: "Fetch".into(),
+                                properties: [(
+                                    // Matches below.
+                                    "ok".into(),
+                                    MessageActionItemProperty::Boolean(true),
+                                )]
                                 .into(),
-                        },
-                        MessageActionItem {
-                            title: "Ignore missing ones".into(),
-                            properties: HashMap::new(),
-                        },
-                    ]),
-                })
-                .await;
-            if matches!(ret, Ok(Some(item)) if item.properties.contains_key("ok")) {
+                            },
+                            MessageActionItem {
+                                title: "Ignore missing ones".into(),
+                                properties: HashMap::new(),
+                            },
+                        ]),
+                    })
+                    .await;
+                // Matches above.
+                matches!(ret, Ok(Some(item)) if item.properties.contains_key("ok"))
+            };
+
+            if do_fetch {
                 let ret = task::spawn_blocking({
                     let nix_binary = config.nix_binary.clone();
                     tracing::info!("Archiving flake");
@@ -332,6 +361,7 @@ impl Server {
             .input_store_paths
             .get(NIXOS_OPTIONS_FLAKE_INPUT)
             .and_then(VfsPath::as_path)
+            .filter(|path| path.exists())
         {
             tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
 
