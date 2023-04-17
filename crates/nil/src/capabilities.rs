@@ -27,6 +27,7 @@ pub(crate) fn negotiate_capabilities(
                 // This is required for knowing which action is performed.
                 .additional_properties_support
         ),
+        server_initiated_progress: test!(client_caps.window.work_done_progress),
     };
 
     let server_caps = ServerCapabilities {
@@ -79,4 +80,5 @@ pub(crate) fn negotiate_capabilities(
 #[derive(Clone, Debug, Default)]
 pub(crate) struct NegotiatedCapabilities {
     pub client_show_message_request: bool,
+    pub server_initiated_progress: bool,
 }

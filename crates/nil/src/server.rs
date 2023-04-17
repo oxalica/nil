@@ -10,8 +10,9 @@ use lsp_types::{
     notification as notif, ConfigurationItem, ConfigurationParams, DidChangeConfigurationParams,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, InitializeResult, InitializedParams, MessageActionItem,
-    MessageActionItemProperty, MessageType, PublishDiagnosticsParams, ServerInfo,
-    ShowMessageParams, ShowMessageRequestParams, Url,
+    MessageActionItemProperty, MessageType, NumberOrString, ProgressParams, ProgressParamsValue,
+    PublishDiagnosticsParams, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
+    WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
 };
 use nix_interop::nixos_options::{self, NixosOptions};
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
@@ -29,6 +30,7 @@ use tokio::task::{AbortHandle, JoinHandle};
 use tokio::{fs, task};
 
 const LSP_SERVER_NAME: &str = "nil";
+const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
@@ -331,6 +333,15 @@ impl Server {
             };
 
             if do_fetch {
+                let _progress = Progress::new(
+                    &client,
+                    &caps,
+                    FLAKE_ARCHIVE_PROGRESS_TOKEN,
+                    "Fetching flake with inputs",
+                    "nix flake archive".to_owned(),
+                )
+                .await;
+
                 let ret = task::spawn_blocking({
                     let nix_binary = config.nix_binary.clone();
                     tracing::info!("Archiving flake");
@@ -629,6 +640,57 @@ trait ClientExt: BorrowMut<ClientSocket> {
 }
 
 impl ClientExt for ClientSocket {}
+
+struct Progress {
+    client: ClientSocket,
+    token: Option<String>,
+}
+
+impl Progress {
+    async fn new(
+        client: &ClientSocket,
+        caps: &NegotiatedCapabilities,
+        token: impl fmt::Display,
+        title: impl fmt::Display,
+        message: impl Into<Option<String>>,
+    ) -> Self {
+        let token = token.to_string();
+        let created = caps.server_initiated_progress
+            && client
+                .request::<req::WorkDoneProgressCreate>(WorkDoneProgressCreateParams {
+                    token: NumberOrString::String(token.clone()),
+                })
+                .await
+                .is_ok();
+        let this = Self {
+            client: client.clone(),
+            token: created.then_some(token),
+        };
+        this.notify(WorkDoneProgress::Begin(WorkDoneProgressBegin {
+            title: title.to_string(),
+            cancellable: None,
+            message: message.into(),
+            percentage: None,
+        }));
+        this
+    }
+
+    fn notify(&self, progress: WorkDoneProgress) {
+        let Some(token) = &self.token else { return };
+        let _: Result<_, _> = self.client.notify::<notif::Progress>(ProgressParams {
+            token: NumberOrString::String(token.clone()),
+            value: ProgressParamsValue::WorkDone(progress),
+        });
+    }
+}
+
+impl Drop for Progress {
+    fn drop(&mut self) {
+        if self.token.is_some() {
+            self.notify(WorkDoneProgress::End(WorkDoneProgressEnd { message: None }));
+        }
+    }
+}
 
 fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -> Result<T> {
     static INSTALL_PANIC_HOOK: Once = Once::new();
