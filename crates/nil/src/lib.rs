@@ -8,7 +8,6 @@ mod server;
 mod vfs;
 
 use anyhow::Result;
-use async_lsp::client_monitor::ClientProcessMonitorLayer;
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::server::LifecycleLayer;
 use async_lsp::stdio::{PipeStdin, PipeStdout};
@@ -83,13 +82,16 @@ pub async fn run_server_stdio() -> Result<()> {
     }
 
     let (frontend, _) = async_lsp::Frontend::new_server(|client| {
-        ServiceBuilder::new()
+        let b = ServiceBuilder::new()
             .layer(TracingLayer::default())
             .layer(LifecycleLayer)
             // TODO: Use `CatchUnwindLayer`.
-            .layer(ConcurrencyLayer::new(concurrency))
-            .layer(ClientProcessMonitorLayer::new(client.clone()))
-            .service(Server::new_router(client, init_messages))
+            .layer(ConcurrencyLayer::new(concurrency));
+        #[cfg(target_os = "linux")]
+        let b = b.layer(async_lsp::client_monitor::ClientProcessMonitorLayer::new(
+            client.clone(),
+        ));
+        b.service(Server::new_router(client, init_messages))
     });
 
     let input = BufReader::new(tokio::io::stdin());
