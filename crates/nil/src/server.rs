@@ -350,21 +350,17 @@ impl Server {
                 )
                 .await;
 
-                let ret = task::spawn_blocking({
-                    let nix_binary = config.nix_binary.clone();
-                    tracing::info!("Archiving flake");
-                    move || flake_lock::archive(&nix_binary)
-                })
-                .await
-                .expect("Panicked while archiving flake")
-                .and_then(|()| {
-                    let missing = missing_paths().collect::<Vec<_>>();
-                    ensure!(
-                        missing.is_empty(),
-                        "command succeeded but some paths are still missing: {missing:?}"
-                    );
-                    Ok(())
-                });
+                tracing::info!("Archiving flake");
+                let ret = flake_lock::archive(&config.nix_binary)
+                    .await
+                    .and_then(|()| {
+                        let missing = missing_paths().collect::<Vec<_>>();
+                        ensure!(
+                            missing.is_empty(),
+                            "command succeeded but some paths are still missing: {missing:?}"
+                        );
+                        Ok(())
+                    });
                 if let Err(err) = ret {
                     client.show_message_ext(
                         MessageType::ERROR,
@@ -384,14 +380,9 @@ impl Server {
         {
             tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
 
-            // TODO: Async process.
-            let ret = task::spawn_blocking({
-                let nixpkgs_path = nixpkgs_path.to_owned();
-                move || nixos_options::eval_all_options(&config.nix_binary, &nixpkgs_path)
-            })
-            .await
-            .expect("Panicked while evaluting NixOS options")
-            .context("Failed to evaluate NixOS options");
+            let ret = nixos_options::eval_all_options(&config.nix_binary, nixpkgs_path)
+                .await
+                .context("Failed to evaluate NixOS options");
             match ret {
                 // Sanity check.
                 Ok(opts) if !opts.is_empty() => {
@@ -453,16 +444,9 @@ impl Server {
             }
         };
 
-        let inputs = task::spawn_blocking({
-            let nix_binary = config.nix_binary.clone();
-            move || {
-                // TODO: Async process.
-                flake_lock::resolve_flake_locked_inputs(&nix_binary, &lock_src)
-            }
-        })
-        .await
-        .expect("Panicked while resolving flake lock")
-        .context("Failed to resolve flake inputs from lock file")?;
+        let inputs = flake_lock::resolve_flake_locked_inputs(&config.nix_binary, &lock_src)
+            .await
+            .context("Failed to resolve flake inputs from lock file")?;
 
         // We only need the map for input -> store path.
         let input_store_paths = inputs

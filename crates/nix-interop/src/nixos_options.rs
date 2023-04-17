@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use anyhow::{ensure, Context, Result};
 use serde::{de, Deserialize};
 use syntax::semantic::escape_string;
+use tokio::process::Command;
 
-pub fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<NixosOptions> {
+pub async fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<NixosOptions> {
     let nixpkgs_path = nixpkgs_path
         .to_str()
         .with_context(|| format!("Invalid path to nixpkgs: {}", nixpkgs_path.display()))?;
 
     let output = Command::new(nix_command)
+        .kill_on_drop(true)
         .args([
             "eval",
             "--experimental-features",
@@ -28,9 +30,9 @@ pub fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<Nixos
             include_str!("./nixos_options.nix"),
         ])
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        // Configures stdout/stderr automatically.
         .output()
+        .await
         .context("Failed to spawn `nix`")?;
 
     ensure!(
@@ -156,10 +158,11 @@ pub enum Ty {
 mod tests {
     use super::*;
 
-    #[test]
+    #[tokio::test]
     #[ignore = "requires using 'nix' and 'nixpkgs'"]
-    fn nixos_options() {
+    async fn nixos_options() {
         let output = Command::new("nix")
+            .kill_on_drop(true)
             .args([
                 "eval",
                 "--experimental-features",
@@ -172,10 +175,13 @@ mod tests {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .output()
+            .await
             .unwrap();
         assert!(output.status.success());
         let nixpkgs_path = String::from_utf8(output.stdout).unwrap();
-        let opts = eval_all_options("nix".as_ref(), nixpkgs_path.trim().as_ref()).unwrap();
+        let opts = eval_all_options("nix".as_ref(), nixpkgs_path.trim().as_ref())
+            .await
+            .unwrap();
 
         // Sanity check.
         let Ty::Attrset { fields, .. } = &(&opts["nix"].ty) else { panic!("Invalid options: {opts:?}") };
