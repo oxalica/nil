@@ -1,9 +1,9 @@
-use crate::{semantic_tokens, LineMap, LspError, Result, Vfs};
+use crate::{semantic_tokens, LineMap, Result, Vfs};
+use async_lsp::{ErrorCode, ResponseError};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
     HlRange, HlRelated, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
-use lsp_server::ErrorCode;
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
     DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentSymbol,
@@ -164,11 +164,8 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
     }
 }
 
-pub(crate) fn to_rename_error(message: String) -> LspError {
-    LspError {
-        code: ErrorCode::InvalidRequest,
-        message,
-    }
+pub(crate) fn to_rename_error(message: String) -> ResponseError {
+    ResponseError::new(ErrorCode::REQUEST_FAILED, message)
 }
 
 pub(crate) fn to_prepare_rename_response(

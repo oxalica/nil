@@ -1,45 +1,47 @@
 use crate::capabilities::server_capabilities;
 use crate::config::{Config, CONFIG_KEY};
-use crate::{convert, handler, lsp_ext, LspError, UrlExt, Vfs, MAX_FILE_LEN};
-use anyhow::{anyhow, bail, Context, Result};
-use crossbeam_channel::{Receiver, Sender};
+use crate::{convert, handler, lsp_ext, UrlExt, Vfs, MAX_FILE_LEN};
+use anyhow::{bail, Context, Result};
+use async_lsp::router::Router;
+use async_lsp::{ClientSocket, ErrorCode, LanguageClient, ResponseError};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
-use lsp_server::{
-    Connection, ErrorCode, Message, Notification, ReqQueue, Request, RequestId, Response,
-};
-use lsp_types::notification::Notification as _;
+use lsp_types::request::{self as req, Request};
 use lsp_types::{
-    notification as notif, request as req, ConfigurationItem, ConfigurationParams, Diagnostic,
-    InitializeParams, InitializeResult, MessageType, NumberOrString, PublishDiagnosticsParams,
-    ServerInfo, ShowMessageParams, Url,
+    notification as notif, ConfigurationItem, ConfigurationParams, Diagnostic,
+    DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, InitializeParams, InitializeResult, InitializedParams, MessageType,
+    PublishDiagnosticsParams, ServerInfo, ShowMessageParams, Url,
 };
 use nix_interop::nixos_options::NixosOptions;
 use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::backtrace::Backtrace;
+use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::future::{ready, Future};
 use std::io::ErrorKind;
+use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
 use std::path::Path;
 use std::sync::{Arc, Once, RwLock};
-use std::{fs, panic, thread};
+use std::{fmt, fs, panic};
+use tokio::task;
 
 const LSP_SERVER_NAME: &str = "nil";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
-type ReqHandler = Box<dyn FnOnce(&mut Server, Response) + 'static>;
+type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
 type Task = Box<dyn FnOnce() -> Event + Send + 'static>;
 
 enum Event {
-    Response(Response),
+    LoadConfig(serde_json::Value),
     Diagnostics {
         uri: Url,
         version: u64,
         diagnostics: Vec<Diagnostic>,
     },
-    ClientExited,
     LoadFlake(Result<LoadFlakeResult>),
     NixosOptions(Result<NixosOptions>),
 }
@@ -59,17 +61,13 @@ pub struct Server {
     vfs: Arc<RwLock<Vfs>>,
     opened_files: HashMap<Url, FileData>,
     config: Arc<Config>,
-    is_shutdown: bool,
     /// Monotonic version counter for diagnostics calculation ordering.
     version_counter: u64,
+    /// Tried to load flake?
+    /// This is used to reload flake only once after the configuration is first loaded.
+    tried_flake_load: bool,
 
-    // Message passing.
-    req_queue: ReqQueue<(), ReqHandler>,
-    lsp_tx: Sender<Message>,
-    lsp_rx: Receiver<Message>,
-    task_tx: Sender<Task>,
-    event_tx: Sender<Event>,
-    event_rx: Receiver<Event>,
+    client: ClientSocket,
 }
 
 #[derive(Debug, Default)]
@@ -79,133 +77,176 @@ struct FileData {
 }
 
 impl Server {
-    pub fn new(lsp_tx: Sender<Message>, lsp_rx: Receiver<Message>) -> Self {
-        let (task_tx, task_rx) = crossbeam_channel::unbounded();
-        let (event_tx, event_rx) = crossbeam_channel::unbounded();
-        let worker_cnt = thread::available_parallelism().map_or(1, |n| n.get());
-        for _ in 0..worker_cnt {
-            let task_rx = task_rx.clone();
-            let event_tx = event_tx.clone();
-            thread::Builder::new()
-                .name("Worker".into())
-                .spawn(move || Self::worker(task_rx, event_tx))
-                .expect("Failed to spawn worker threads");
-        }
-        tracing::info!("Started {worker_cnt} workers");
+    pub fn new_router(client: ClientSocket) -> Router<Self> {
+        let this = Self::new(client);
+        let mut router = Router::new(this);
+        router
+            //// Lifecycle ////
+            .request::<req::Initialize, _>(Self::on_initialize)
+            .notification::<notif::Initialized>(Self::on_initialized)
+            .request::<req::Shutdown, _>(|_, _| ready(Ok(())))
+            .notification::<notif::Exit>(|_, _| ControlFlow::Break(Ok(())))
+            //// Notifications ////
+            .notification::<notif::DidOpenTextDocument>(Self::on_did_open)
+            .notification::<notif::DidCloseTextDocument>(Self::on_did_close)
+            .notification::<notif::DidChangeTextDocument>(Self::on_did_change)
+            .notification::<notif::DidChangeConfiguration>(Self::on_did_change_configuration)
+            // Workaround:
+            // > In former implementations clients pushed file events without the server actively asking for it.
+            // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
+            .notification::<notif::DidChangeWatchedFiles>(|_, _| ControlFlow::Continue(()))
+            //// Requests ////
+            .request_snap::<req::GotoDefinition>(handler::goto_definition)
+            .request_snap::<req::References>(handler::references)
+            .request_snap::<req::Completion>(handler::completion)
+            .request_snap::<req::SelectionRangeRequest>(handler::selection_range)
+            .request_snap::<req::PrepareRenameRequest>(handler::prepare_rename)
+            .request_snap::<req::Rename>(handler::rename)
+            .request_snap::<req::SemanticTokensFullRequest>(handler::semantic_token_full)
+            .request_snap::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
+            .request_snap::<req::HoverRequest>(handler::hover)
+            .request_snap::<req::DocumentSymbolRequest>(handler::document_symbol)
+            .request_snap::<req::Formatting>(handler::formatting)
+            .request_snap::<req::DocumentLinkRequest>(handler::document_links)
+            .request_snap::<req::CodeActionRequest>(handler::code_action)
+            .request_snap::<req::DocumentHighlightRequest>(handler::document_highlight)
+            .request_snap::<lsp_ext::ParentModule>(handler::parent_module)
+            //// Events ////
+            .event(Self::on_event);
+        router
+    }
 
+    pub fn new(client: ClientSocket) -> Self {
         Self {
             host: AnalysisHost::default(),
             vfs: Arc::new(RwLock::new(Vfs::new())),
             opened_files: HashMap::default(),
-            // Will be initialized in `Server::run`.
+            // Will be set during initialization.
             config: Arc::new(Config::new("/non-existing-path".into())),
-            is_shutdown: false,
             version_counter: 0,
+            tried_flake_load: false,
 
-            req_queue: ReqQueue::default(),
-            lsp_tx,
-            lsp_rx,
-            task_tx,
-            event_tx,
-            event_rx,
+            client,
         }
     }
 
-    fn worker(task_rx: Receiver<Task>, event_tx: Sender<Event>) {
-        while let Ok(task) = task_rx.recv() {
-            if event_tx.send(task()).is_err() {
-                break;
-            }
-        }
+    // TODO: Refactor blocking tasks into async tasks as possible.
+    fn spawn_task(&self, task: Task) {
+        let client = self.client.clone();
+        task::spawn(async move {
+            let ret: Event = task::spawn_blocking(task).await.expect("Task panicked");
+            let _: Result<_, _> = client.emit(ret);
+        });
     }
 
-    pub fn run(mut self) -> Result<()> {
-        self.init()?;
+    fn on_initialize(
+        &mut self,
+        params: InitializeParams,
+    ) -> impl Future<Output = Result<InitializeResult, ResponseError>> {
+        tracing::info!("Init params: {params:?}");
 
-        loop {
-            crossbeam_channel::select! {
-                recv(self.lsp_rx) -> msg => {
-                    match msg.context("Channel closed")? {
-                        Message::Request(req) => self.dispatch_request(req),
-                        Message::Notification(notif) => {
-                            if notif.method == notif::Exit::METHOD {
-                                return Ok(());
-                            }
-                            self.dispatch_notification(notif);
-                        }
-                        Message::Response(resp) => {
-                            if let Some(callback) = self.req_queue.outgoing.complete(resp.id.clone()) {
-                                callback(&mut self, resp);
-                            }
-                        }
-                    }
-                }
-                recv(self.event_rx) -> event => {
-                    self.dispatch_event(event.context("Worker panicked")?)?;
-                }
-            }
-        }
-    }
-
-    fn init(&mut self) -> Result<()> {
-        let init_params = {
-            let conn = Connection {
-                sender: self.lsp_tx.clone(),
-                receiver: self.lsp_rx.clone(),
-            };
-            let (req_id, init_params) = conn.initialize_start()?;
-            tracing::info!("Init params: {}", init_params);
-            let init_params = serde_json::from_value::<InitializeParams>(init_params)
-                .context("Invalid init_params")?;
-
-            let init_ret = InitializeResult {
-                capabilities: server_capabilities(),
-                server_info: Some(ServerInfo {
-                    name: LSP_SERVER_NAME.into(),
-                    version: option_env!("CFG_RELEASE").map(Into::into),
-                }),
-            };
-            conn.initialize_finish(req_id, serde_json::to_value(init_ret).unwrap())?;
-
-            init_params
-        };
-
-        let root_path = match init_params
+        // TODO: Use `workspaceFolders`.
+        let root_path = match params
             .root_uri
             .as_ref()
             .and_then(|uri| uri.to_file_path().ok())
         {
             Some(path) => path,
-            None => std::env::current_dir().context("Failed to the current directory")?,
+            None => std::env::current_dir().expect("Failed to the current directory"),
         };
+
         *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = Config::new(root_path);
 
-        if let Some(pid) = init_params.process_id {
-            let event_tx = self.event_tx.clone();
-            thread::spawn(move || match wait_for_pid(pid as _) {
-                Ok(()) => {
-                    let _ = event_tx.send(Event::ClientExited);
-                }
-                Err(err) => {
-                    tracing::warn!("Failed to monitor parent pid {}: {}", pid, err);
-                }
-            });
-        }
+        ready(Ok(InitializeResult {
+            capabilities: server_capabilities(),
+            server_info: Some(ServerInfo {
+                name: LSP_SERVER_NAME.into(),
+                version: option_env!("CFG_RELEASE").map(Into::into),
+            }),
+        }))
+    }
 
+    fn on_initialized(&mut self, _params: InitializedParams) -> NotifyResult {
         // Load configurations before loading flake.
         // The latter depends on `nix.binary`.
-        self.load_config(|st| {
-            // TODO: Register file watcher for flake.lock.
-            st.load_flake();
-        });
+        self.spawn_reload_config();
 
-        Ok(())
+        ControlFlow::Continue(())
     }
-    fn dispatch_event(&mut self, event: Event) -> Result<()> {
+
+    fn on_did_open(&mut self, params: DidOpenTextDocumentParams) -> NotifyResult {
+        // Ignore the open event for unsupported files, thus all following interactions
+        // will error due to unopened files.
+        let len = params.text_document.text.len();
+        if len > MAX_FILE_LEN {
+            self.client.show_message_ext(
+                MessageType::WARNING,
+                "Disable LSP functionalities for too large file ({len} > {MAX_FILE_LEN})",
+            );
+            return ControlFlow::Continue(());
+        }
+
+        let uri = &params.text_document.uri;
+        self.set_vfs_file_content(uri, params.text_document.text);
+        self.opened_files.insert(uri.clone(), FileData::default());
+        ControlFlow::Continue(())
+    }
+
+    fn on_did_close(&mut self, params: DidCloseTextDocumentParams) -> NotifyResult {
+        // N.B. Don't clear text here.
+        self.opened_files.remove(&params.text_document.uri);
+        ControlFlow::Continue(())
+    }
+
+    fn on_did_change(&mut self, params: DidChangeTextDocumentParams) -> NotifyResult {
+        let mut vfs = self.vfs.write().unwrap();
+        let uri = &params.text_document.uri;
+        // Ignore files not maintained in Vfs.
+        let Ok(file) = vfs.file_for_uri(uri) else { return ControlFlow::Continue(()) };
+        for change in params.content_changes {
+            let ret = (|| {
+                let del_range = match change.range {
+                    None => None,
+                    Some(range) => Some(convert::from_range(&vfs, file, range).ok()?.1),
+                };
+                vfs.change_file_content(file, del_range, &change.text)
+                    .ok()?;
+                Some(())
+            })();
+            if ret.is_none() {
+                tracing::error!(
+                    "File is out of sync! Failed to apply change for {uri}: {change:?}"
+                );
+
+                // Clear file states to minimize pollution of the broken state.
+                self.opened_files.remove(uri);
+                // TODO: Remove the file from Vfs.
+            }
+        }
+        drop(vfs);
+        // FIXME: This blocks.
+        self.apply_vfs_change();
+        ControlFlow::Continue(())
+    }
+
+    fn on_did_change_configuration(
+        &mut self,
+        _params: DidChangeConfigurationParams,
+    ) -> NotifyResult {
+        // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
+        // this notification's parameters should be ignored and the actual config queried separately.
+        self.spawn_reload_config();
+        ControlFlow::Continue(())
+    }
+
+    fn on_event(&mut self, event: Event) -> NotifyResult {
         match event {
-            Event::Response(resp) => {
-                if let Some(()) = self.req_queue.incoming.complete(resp.id.clone()) {
-                    self.lsp_tx.send(resp.into()).unwrap();
+            Event::LoadConfig(v) => {
+                self.update_config(v);
+                if !self.tried_flake_load {
+                    self.tried_flake_load = true;
+                    // TODO: Register file watcher for flake.lock.
+                    self.spawn_load_flake();
                 }
             }
             Event::Diagnostics {
@@ -220,20 +261,22 @@ impl Server {
                         "Push {} diagnostics of {uri}, version {version}",
                         diagnostics.len(),
                     );
-                    self.send_notification::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                        uri,
-                        diagnostics,
-                        version: None,
+                    task::spawn({
+                        let mut client = self.client.clone();
+                        async move {
+                            client.publish_diagnostics(PublishDiagnosticsParams {
+                                uri,
+                                diagnostics,
+                                version: None,
+                            })
+                        }
                     });
                 }
                 _ => tracing::debug!("Ignore raced diagnostics of {uri}, version {version}"),
             },
-            Event::ClientExited => {
-                bail!("The process initializing this server is exited. Exit now")
-            }
             Event::LoadFlake(ret) => match ret {
                 Err(err) => {
-                    self.show_message(
+                    self.client.show_message_ext(
                         MessageType::ERROR,
                         format!("Failed to load flake workspace: {err:#}"),
                     );
@@ -246,7 +289,7 @@ impl Server {
                         "Workspace is a flake (missing_inputs = {missing_inputs}): {flake_info:?}"
                     );
                     if missing_inputs {
-                        self.show_message(MessageType::WARNING, "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs");
+                        self.client.show_message_ext(MessageType::WARNING,  "Some flake inputs are not available, please run `nix flake archive` to fetch all inputs");
                     }
 
                     // TODO: A better way to retrieve the nixpkgs for options?
@@ -258,14 +301,12 @@ impl Server {
                         let nixpkgs_path = nixpkgs_path.to_owned();
                         let nix_binary = self.config.nix_binary.clone();
                         tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
-                        self.task_tx
-                            .send(Box::new(move || {
-                                Event::NixosOptions(nix_interop::nixos_options::eval_all_options(
-                                    &nix_binary,
-                                    &nixpkgs_path,
-                                ))
-                            }))
-                            .unwrap();
+                        self.spawn_task(Box::new(move || {
+                            Event::NixosOptions(nix_interop::nixos_options::eval_all_options(
+                                &nix_binary,
+                                &nixpkgs_path,
+                            ))
+                        }));
                     }
 
                     self.vfs.write().unwrap().set_flake_info(Some(flake_info));
@@ -292,115 +333,11 @@ impl Server {
                 }
             },
         }
-        Ok(())
+        ControlFlow::Continue(())
     }
 
-    fn dispatch_request(&mut self, req: Request) {
-        if self.is_shutdown {
-            let resp = Response::new_err(
-                req.id,
-                ErrorCode::InvalidRequest as i32,
-                "Shutdown already requested.".into(),
-            );
-            self.lsp_tx.send(resp.into()).unwrap();
-            return;
-        }
-
-        RequestDispatcher(self, Some(req))
-            .on_sync_mut::<req::Shutdown>(|st, ()| {
-                st.is_shutdown = true;
-                Ok(())
-            })
-            .on::<req::GotoDefinition>(handler::goto_definition)
-            .on::<req::References>(handler::references)
-            .on::<req::Completion>(handler::completion)
-            .on::<req::SelectionRangeRequest>(handler::selection_range)
-            .on::<req::PrepareRenameRequest>(handler::prepare_rename)
-            .on::<req::Rename>(handler::rename)
-            .on::<req::SemanticTokensFullRequest>(handler::semantic_token_full)
-            .on::<req::SemanticTokensRangeRequest>(handler::semantic_token_range)
-            .on::<req::HoverRequest>(handler::hover)
-            .on::<req::DocumentSymbolRequest>(handler::document_symbol)
-            .on::<req::Formatting>(handler::formatting)
-            .on::<req::DocumentLinkRequest>(handler::document_links)
-            .on::<req::CodeActionRequest>(handler::code_action)
-            .on::<req::DocumentHighlightRequest>(handler::document_highlight)
-            .on::<lsp_ext::ParentModule>(handler::parent_module)
-            .finish();
-    }
-
-    fn dispatch_notification(&mut self, notif: Notification) {
-        NotificationDispatcher(self, Some(notif))
-            .on_sync_mut::<notif::Cancel>(|st, params| {
-                let id: RequestId = match params.id {
-                    NumberOrString::Number(id) => id.into(),
-                    NumberOrString::String(id) => id.into(),
-                };
-                if let Some(resp) = st.req_queue.incoming.cancel(id) {
-                    st.lsp_tx.send(resp.into()).unwrap();
-                }
-            })
-            .on_sync_mut::<notif::DidOpenTextDocument>(|st, params| {
-                // Ignore the open event for unsupported files, thus all following interactions
-                // will error due to unopened files.
-                let len = params.text_document.text.len();
-                if len > MAX_FILE_LEN {
-                    st.show_message(
-                        MessageType::WARNING,
-                        "Disable LSP functionalities for too large file ({len} > {MAX_FILE_LEN})",
-                    );
-                    return;
-                }
-                let uri = &params.text_document.uri;
-                st.set_vfs_file_content(uri, params.text_document.text);
-                st.opened_files.insert(uri.clone(), FileData::default());
-            })
-            .on_sync_mut::<notif::DidCloseTextDocument>(|st, params| {
-                // N.B. Don't clear text here.
-                st.opened_files.remove(&params.text_document.uri);
-            })
-            .on_sync_mut::<notif::DidChangeTextDocument>(|st, params| {
-                let mut vfs = st.vfs.write().unwrap();
-                let uri = &params.text_document.uri;
-                // Ignore files not maintained in Vfs.
-                let Ok(file) = vfs.file_for_uri(uri) else { return };
-                for change in params.content_changes {
-                    let ret = (|| {
-                        let del_range = match change.range {
-                            None => None,
-                            Some(range) => Some(convert::from_range(&vfs, file, range).ok()?.1),
-                        };
-                        vfs.change_file_content(file, del_range, &change.text)
-                            .ok()?;
-                        Some(())
-                    })();
-                    if ret.is_none() {
-                        tracing::error!(
-                            "File is out of sync! Failed to apply change for {uri}: {change:?}"
-                        );
-
-                        // Clear file states to minimize pollution of the broken state.
-                        st.opened_files.remove(uri);
-                        // TODO: Remove the file from Vfs.
-                    }
-                }
-                drop(vfs);
-                st.apply_vfs_change();
-            })
-            // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
-            // this notification's parameters should be ignored and the actual config queried separately.
-            .on_sync_mut::<notif::DidChangeConfiguration>(|st, _params| {
-                st.load_config(|_| {});
-            })
-            // Workaround:
-            // > In former implementations clients pushed file events without the server actively asking for it.
-            // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
-            .on_sync_mut::<notif::DidChangeWatchedFiles>(|_st, _params| {})
-            .finish();
-    }
-
-    /// Enqueue a task to reload the flake.{nix,lock} and the locked inputs.
-    fn load_flake(&self) {
+    /// Spawn a task to reload the flake.{nix,lock} and the locked inputs.
+    fn spawn_load_flake(&self) {
         tracing::info!("Loading flake configuration");
 
         let flake_path = self.config.root_path.join(FLAKE_FILE);
@@ -472,70 +409,34 @@ impl Server {
                 },
             })
         };
-        self.task_tx
-            .send(Box::new(move || Event::LoadFlake(task())))
-            .unwrap();
+        self.spawn_task(Box::new(move || Event::LoadFlake(task())));
     }
 
-    fn send_request<R: req::Request>(
-        &mut self,
-        params: R::Params,
-        callback: impl FnOnce(&mut Self, Result<R::Result>) + 'static,
-    ) {
-        let callback = |this: &mut Self, resp: Response| {
-            let ret = match resp.error {
-                None => serde_json::from_value(resp.result.unwrap_or_default()).map_err(Into::into),
-                Some(err) => Err(anyhow!(
-                    "Request failed with {}: {}, data: {:?}",
-                    err.code,
-                    err.message,
-                    err.data
-                )),
-            };
-            callback(this, ret);
-        };
-        let req = self
-            .req_queue
-            .outgoing
-            .register(R::METHOD.into(), params, Box::new(callback));
-        self.lsp_tx.send(req.into()).unwrap();
-    }
-
-    fn send_notification<N: notif::Notification>(&self, params: N::Params) {
-        self.lsp_tx
-            .send(Notification::new(N::METHOD.into(), params).into())
-            .unwrap();
-    }
-
-    // Maybe connect all tracing::* to LSP ShowMessage?
-    fn show_message(&self, typ: MessageType, message: impl Into<String>) {
-        let message = message.into();
-        if typ == MessageType::ERROR {
-            tracing::error!("{message}");
-        }
-
-        self.send_notification::<notif::ShowMessage>(ShowMessageParams { typ, message });
-    }
-
-    fn load_config(&mut self, callback: impl FnOnce(&mut Self) + 'static) {
-        self.send_request::<req::WorkspaceConfiguration>(
-            ConfigurationParams {
-                items: vec![ConfigurationItem {
-                    scope_uri: None,
-                    section: Some(CONFIG_KEY.into()),
-                }],
-            },
-            move |st, resp| {
-                match resp {
-                    Ok(mut v) => {
-                        tracing::debug!("Updating config: {:?}", v);
-                        st.update_config(v.pop().unwrap_or_default());
-                    }
-                    Err(err) => tracing::error!("Failed to update config: {}", err),
+    fn spawn_reload_config(&self) {
+        let mut client = self.client.clone();
+        tokio::spawn(async move {
+            let ret = client
+                .configuration(ConfigurationParams {
+                    items: vec![ConfigurationItem {
+                        scope_uri: None,
+                        section: Some(CONFIG_KEY.into()),
+                    }],
+                })
+                .await;
+            let mut v = match ret {
+                Ok(v) => v,
+                Err(err) => {
+                    client.show_message_ext(
+                        MessageType::ERROR,
+                        format_args!("Failed to update config: {err}"),
+                    );
+                    return;
                 }
-                callback(st);
-            },
-        );
+            };
+            tracing::debug!("Updating config: {:?}", v);
+            let v = v.pop().unwrap_or_default();
+            let _: Result<_, _> = client.emit(Event::LoadConfig(v));
+        });
     }
 
     fn update_config(&mut self, value: serde_json::Value) {
@@ -549,7 +450,7 @@ impl Server {
                 .into_iter()
                 .chain(errors.iter().flat_map(|s| ["\n- ", s]))
                 .collect::<String>();
-            self.show_message(MessageType::ERROR, msg);
+            self.client.show_message_ext(MessageType::ERROR, msg);
         }
 
         // Refresh all diagnostics since the filter may be changed.
@@ -581,7 +482,7 @@ impl Server {
                 diagnostics,
             }
         };
-        self.task_tx.send(Box::new(task)).unwrap();
+        self.spawn_task(Box::new(task));
     }
 
     fn next_version(&mut self) -> u64 {
@@ -625,96 +526,51 @@ impl Server {
                 self.update_diagnostics(uri, version);
             } else {
                 // Clear diagnostics.
-                self.event_tx
-                    .send(Event::Diagnostics {
-                        uri,
-                        version,
-                        diagnostics: Vec::new(),
-                    })
-                    .unwrap();
-            }
-        }
-    }
-}
-
-#[must_use = "RequestDispatcher::finish not called"]
-struct RequestDispatcher<'s>(&'s mut Server, Option<Request>);
-
-impl<'s> RequestDispatcher<'s> {
-    fn on_sync_mut<R: req::Request>(
-        mut self,
-        f: fn(&mut Server, R::Params) -> Result<R::Result>,
-    ) -> Self {
-        if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
-            let req = self.1.take().unwrap();
-            let ret = (|| {
-                let params = serde_json::from_value::<R::Params>(req.params)?;
-                let v = f(self.0, params)?;
-                Ok(serde_json::to_value(v).unwrap())
-            })();
-            let resp = result_to_response(req.id, ret);
-            self.0.lsp_tx.send(resp.into()).unwrap();
-        }
-        self
-    }
-
-    fn on<R>(mut self, f: fn(StateSnapshot, R::Params) -> Result<R::Result>) -> Self
-    where
-        R: req::Request,
-        R::Params: 'static,
-        R::Result: 'static,
-    {
-        if matches!(&self.1, Some(notif) if notif.method == R::METHOD) {
-            let req = self.1.take().unwrap();
-            let snap = self.0.snapshot();
-            self.0.req_queue.incoming.register(req.id.clone(), ());
-            let task = move || {
-                let ret = with_catch_unwind(R::METHOD, || {
-                    let params = serde_json::from_value::<R::Params>(req.params)?;
-                    let resp = f(snap, params)?;
-                    Ok(serde_json::to_value(resp)?)
+                let _: Result<_, _> = self.client.emit(Event::Diagnostics {
+                    uri,
+                    version,
+                    diagnostics: Vec::new(),
                 });
-                Event::Response(result_to_response(req.id, ret))
-            };
-            self.0.task_tx.send(Box::new(task)).unwrap();
-        }
-        self
-    }
-
-    fn finish(self) {
-        if let Some(req) = self.1 {
-            let resp = Response::new_err(req.id, ErrorCode::MethodNotFound as _, String::new());
-            self.0.lsp_tx.send(resp.into()).unwrap();
-        }
-    }
-}
-
-#[must_use = "NotificationDispatcher::finish not called"]
-struct NotificationDispatcher<'s>(&'s mut Server, Option<Notification>);
-
-impl<'s> NotificationDispatcher<'s> {
-    fn on_sync_mut<N: notif::Notification>(mut self, f: fn(&mut Server, N::Params)) -> Self {
-        if matches!(&self.1, Some(notif) if notif.method == N::METHOD) {
-            match serde_json::from_value::<N::Params>(self.1.take().unwrap().params) {
-                Ok(params) => {
-                    f(self.0, params);
-                }
-                Err(err) => {
-                    tracing::error!("Failed to parse notification {}: {}", N::METHOD, err);
-                }
-            }
-        }
-        self
-    }
-
-    fn finish(self) {
-        if let Some(notif) = self.1 {
-            if !notif.method.starts_with("$/") {
-                tracing::error!("Unhandled notification: {:?}", notif);
             }
         }
     }
 }
+
+trait RouterExt: BorrowMut<Router<Server>> {
+    fn request_snap<R: Request>(
+        &mut self,
+        f: impl Fn(StateSnapshot, R::Params) -> Result<R::Result> + Send + Copy + UnwindSafe + 'static,
+    ) -> &mut Self
+    where
+        R::Params: Send + UnwindSafe + 'static,
+        R::Result: Send + 'static,
+    {
+        self.borrow_mut().request::<R, _>(move |this, params| {
+            let snap = this.snapshot();
+            async move {
+                task::spawn_blocking(move || with_catch_unwind(R::METHOD, move || f(snap, params)))
+                    .await
+                    .expect("Already catch_unwind")
+                    .map_err(error_to_response)
+            }
+        });
+        self
+    }
+}
+
+impl RouterExt for Router<Server> {}
+
+trait ClientExt: BorrowMut<ClientSocket> {
+    fn show_message_ext(&mut self, typ: MessageType, msg: impl fmt::Display) {
+        // Maybe connect all tracing::* to LSP ShowMessage?
+        let _: Result<_, _> = self.borrow_mut().show_message(ShowMessageParams {
+            typ,
+            message: msg.to_string(),
+        });
+    }
+}
+
+impl ClientExt for ClientSocket {}
 
 fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -> Result<T> {
     static INSTALL_PANIC_HOOK: Once = Once::new();
@@ -755,30 +611,14 @@ fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -
     }
 }
 
-fn result_to_response(id: RequestId, ret: Result<serde_json::Value>) -> Response {
-    let err = match ret {
-        Ok(v) => {
-            return Response {
-                id,
-                result: Some(v),
-                error: None,
-            }
-        }
-        Err(err) => err,
-    };
-
+fn error_to_response(err: anyhow::Error) -> ResponseError {
     if err.is::<Cancelled>() {
-        // When client cancelled a request, a response is immediately sent back,
-        // and the response will be ignored.
-        return Response::new_err(id, ErrorCode::ServerCancelled as i32, "Cancelled".into());
+        return ResponseError::new(ErrorCode::REQUEST_CANCELLED, "Client cancelled");
     }
-    if let Some(err) = err.downcast_ref::<LspError>() {
-        return Response::new_err(id, err.code as i32, err.to_string());
+    match err.downcast::<ResponseError>() {
+        Ok(resp) => resp,
+        Err(err) => ResponseError::new(ErrorCode::INTERNAL_ERROR, err),
     }
-    if let Some(err) = err.downcast_ref::<serde_json::Error>() {
-        return Response::new_err(id, ErrorCode::InvalidParams as i32, err.to_string());
-    }
-    Response::new_err(id, ErrorCode::InternalError as i32, err.to_string())
 }
 
 #[derive(Debug)]
@@ -792,43 +632,4 @@ impl StateSnapshot {
     pub(crate) fn vfs(&self) -> impl std::ops::Deref<Target = Vfs> + '_ {
         self.vfs.read().unwrap()
     }
-}
-
-#[cfg(target_os = "linux")]
-fn wait_for_pid(pid: u32) -> std::io::Result<()> {
-    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-
-    let pidfd = unsafe {
-        let ret = libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0 as libc::c_int);
-        if ret >= 0 {
-            OwnedFd::from_raw_fd(ret as RawFd)
-        } else {
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() == Some(libc::ESRCH) {
-                return Ok(());
-            }
-            return Err(err);
-        }
-    };
-    let mut pollfd = libc::pollfd {
-        fd: pidfd.as_raw_fd(),
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    let ret = unsafe {
-        libc::poll(&mut pollfd, 1, -1 /* No timeout */)
-    };
-    // 1 fds.
-    if ret == 1 {
-        return Ok(());
-    }
-    Err(std::io::Error::last_os_error())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn wait_for_pid(_pid: u32) -> std::io::Result<()> {
-    Err(std::io::Error::new(
-        ErrorKind::Other,
-        "Waiting for arbitrary PID is not supported on this platform",
-    ))
 }

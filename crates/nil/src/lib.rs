@@ -8,10 +8,14 @@ mod server;
 mod vfs;
 
 use anyhow::Result;
+use async_lsp::client_monitor::ClientProcessMonitorLayer;
+use async_lsp::concurrency::ConcurrencyLayer;
+use async_lsp::server::LifecycleLayer;
+use async_lsp::tracing::TracingLayer;
 use ide::VfsPath;
-use lsp_server::{Connection, ErrorCode};
 use lsp_types::Url;
-use std::fmt;
+use tokio::io::BufReader;
+use tower::ServiceBuilder;
 
 pub(crate) use server::{Server, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
@@ -26,21 +30,6 @@ pub(crate) use vfs::{LineMap, Vfs};
 ///
 /// If you have any real world usages for files larger than this, please file an issue.
 pub const MAX_FILE_LEN: usize = 128 << 20;
-
-#[derive(Debug)]
-pub(crate) struct LspError {
-    code: ErrorCode,
-    message: String,
-}
-
-impl fmt::Display for LspError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // NB. This will be displayed in the editor.
-        self.message.fmt(f)
-    }
-}
-
-impl std::error::Error for LspError {}
 
 pub(crate) trait UrlExt: Sized {
     fn to_vfs_path(&self) -> VfsPath;
@@ -67,14 +56,27 @@ impl UrlExt for Url {
     }
 }
 
-pub fn run_server_stdio() -> Result<()> {
-    let (conn, io_threads) = Connection::stdio();
+pub async fn run_server_stdio() -> Result<()> {
+    let concurrency = match std::thread::available_parallelism() {
+        Ok(n) => n.get(),
+        Err(err) => {
+            tracing::error!("Failed to get available parallelism: {err}");
+            1
+        }
+    };
+    tracing::info!("Max concurrent requests: {concurrency}");
 
-    let server = Server::new(conn.sender, conn.receiver);
-    server.run()?;
+    let (frontend, _) = async_lsp::Frontend::new_server(|client| {
+        ServiceBuilder::new()
+            .layer(TracingLayer::default())
+            .layer(LifecycleLayer)
+            // TODO: Use `CatchUnwindLayer`.
+            .layer(ConcurrencyLayer::new(concurrency))
+            .layer(ClientProcessMonitorLayer::new(client.clone()))
+            .service(Server::new_router(client))
+    });
 
-    tracing::info!("Leaving main loop");
-
-    io_threads.join()?;
-    Ok(())
+    let input = BufReader::new(tokio::io::stdin());
+    let output = tokio::io::stdout();
+    Ok(frontend.run(input, output).await?)
 }
