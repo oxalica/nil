@@ -57,6 +57,8 @@ pub struct Server {
     // Immutable (mostly).
     client: ClientSocket,
     capabilities: NegotiatedCapabilities,
+    /// Messages to show once initialized.
+    init_messages: Vec<ShowMessageParams>,
 }
 
 #[derive(Debug, Default)]
@@ -65,8 +67,8 @@ struct FileData {
 }
 
 impl Server {
-    pub fn new_router(client: ClientSocket) -> Router<Self> {
-        let this = Self::new(client);
+    pub fn new_router(client: ClientSocket, init_messages: Vec<ShowMessageParams>) -> Router<Self> {
+        let this = Self::new(client, init_messages);
         let mut router = Router::new(this);
         router
             //// Lifecycle ////
@@ -106,7 +108,7 @@ impl Server {
         router
     }
 
-    pub fn new(client: ClientSocket) -> Self {
+    pub fn new(client: ClientSocket, init_messages: Vec<ShowMessageParams>) -> Self {
         Self {
             host: AnalysisHost::default(),
             vfs: Arc::new(RwLock::new(Vfs::new())),
@@ -120,6 +122,7 @@ impl Server {
             client,
             // Will be set during initialization.
             capabilities: NegotiatedCapabilities::default(),
+            init_messages,
         }
     }
 
@@ -154,6 +157,11 @@ impl Server {
     }
 
     fn on_initialized(&mut self, _params: InitializedParams) -> NotifyResult {
+        for msg in std::mem::take(&mut self.init_messages) {
+            tracing::warn!("Init message ({:?}): {}", msg.typ, msg.message);
+            let _: Result<_, _> = self.client.show_message(msg);
+        }
+
         // Load configurations before loading flake.
         // The latter depends on `nix.binary`.
         self.spawn_reload_config();

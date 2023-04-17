@@ -11,9 +11,10 @@ use anyhow::Result;
 use async_lsp::client_monitor::ClientProcessMonitorLayer;
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::server::LifecycleLayer;
+use async_lsp::stdio::{PipeStdin, PipeStdout};
 use async_lsp::tracing::TracingLayer;
 use ide::VfsPath;
-use lsp_types::Url;
+use lsp_types::{MessageType, ShowMessageParams, Url};
 use tokio::io::BufReader;
 use tower::ServiceBuilder;
 
@@ -66,6 +67,21 @@ pub async fn run_server_stdio() -> Result<()> {
     };
     tracing::info!("Max concurrent requests: {concurrency}");
 
+    let mut init_messages = Vec::new();
+    if let Some(err) = PipeStdin::lock().err().or_else(|| PipeStdout::lock().err()) {
+        init_messages.push(ShowMessageParams {
+            typ: MessageType::WARNING,
+            message: format!(
+                "\
+                Invalid stdin/stdout fd mode: {err}. \n\
+                This will become a hard error in the future. \n\
+                Please file an issue with your editor configurations: \n\
+                https://github.com/oxalica/nil/issues
+                ",
+            ),
+        });
+    }
+
     let (frontend, _) = async_lsp::Frontend::new_server(|client| {
         ServiceBuilder::new()
             .layer(TracingLayer::default())
@@ -73,7 +89,7 @@ pub async fn run_server_stdio() -> Result<()> {
             // TODO: Use `CatchUnwindLayer`.
             .layer(ConcurrencyLayer::new(concurrency))
             .layer(ClientProcessMonitorLayer::new(client.clone()))
-            .service(Server::new_router(client))
+            .service(Server::new_router(client, init_messages))
     });
 
     let input = BufReader::new(tokio::io::stdin());
