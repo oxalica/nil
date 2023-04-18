@@ -38,12 +38,13 @@ checksum = "64cb94155d965e3d37ffbbe7cc5b82c3dd79dd33bd48e536f73d2cfb8d85506f"
 
 [[package]]
 name = "async-lsp"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "235a67c68380eb12886ddc31ef58011f75ce6396a95bfe6604f87929c6176c46"
+checksum = "409b9aef54434cc513cf7258bf6ad623854b13e3c5930a066c899af0a7a1c6fc"
 dependencies = [
  "either",
  "futures",
+ "libc",
  "lsp-types",
  "pin-project-lite",
  "rustix",
