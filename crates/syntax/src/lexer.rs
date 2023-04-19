@@ -104,9 +104,10 @@ regex_dfa! {
         // We can assume the input is already a valid UTF-8 string.
         STRING_ESCAPE = r#"\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)"#,
         DOLLAR_L_CURLY = r"\$\{",
-        STRING_FRAGMENT = r#"([^"$\\]|\$[^{"\\])+"#,
-        // For '$' before ending.
-        STRING_FRAGMENT = r#"\$"#,
+        // `$$` makes the second `$` loses the special meaning.
+        STRING_FRAGMENT = r"\$\$",
+        // Otherwise, treat it literally.
+        STRING_FRAGMENT = r"(?s).",
     }
 }
 
@@ -117,9 +118,10 @@ regex_dfa! {
         STRING_ESCAPE = r#"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''"#,
         QUOTE2 = r"''",
         DOLLAR_L_CURLY = r"\$\{",
-        STRING_FRAGMENT = r"([^'$]|\$[^{']|'[^'])+",
-        // For '$' before ending.
-        STRING_FRAGMENT = r"\$",
+        // `$$` makes the second `$` loses the special meaning.
+        STRING_FRAGMENT = r"\$\$",
+        // Otherwise, treat it literally.
+        STRING_FRAGMENT = r"(?s).",
     }
 }
 
@@ -201,6 +203,14 @@ pub fn lex(src: &[u8]) -> LexTokens {
                 ctxs.push(path_ctx);
                 out.push((PATH_START, TextRange::empty(offset)));
                 tok = PATH_FRAGMENT;
+            }
+            STRING_FRAGMENT => {
+                // Merge continuous fragments.
+                if let Some((STRING_FRAGMENT, range)) = out.last_mut() {
+                    offset += len;
+                    *range = TextRange::new(range.start(), offset);
+                    continue;
+                }
             }
             _ => {}
         }
@@ -438,8 +448,7 @@ mod tests {
                 DQUOTE "\""
                 STRING_FRAGMENT "$${ $$"
                 STRING_ESCAPE "\\\""
-                STRING_FRAGMENT " $$x $ "
-                STRING_FRAGMENT "$"
+                STRING_FRAGMENT " $$x $ $"
                 DQUOTE "\""
             "#]],
         );
@@ -491,8 +500,7 @@ mod tests {
                 QUOTE2 "''"
                 STRING_FRAGMENT "$${ $$"
                 STRING_ESCAPE "''$"
-                STRING_FRAGMENT " $$x $ "
-                STRING_FRAGMENT "$"
+                STRING_FRAGMENT " $$x $ $"
                 QUOTE2 "''"
             "#]],
         );
@@ -555,6 +563,21 @@ mod tests {
                 ERROR "ह"
                 INT "4"
                 ERROR "𐍈"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn indent_string_single_quote() {
+        check_lex(
+            "'''${x}''",
+            expect![[r#"
+                QUOTE2 "''"
+                STRING_FRAGMENT "'"
+                DOLLAR_L_CURLY "${"
+                IDENT "x"
+                R_CURLY "}"
+                QUOTE2 "''"
             "#]],
         );
     }
