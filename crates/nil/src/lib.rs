@@ -59,10 +59,10 @@ impl UrlExt for Url {
 
 pub async fn run_server_stdio() -> Result<()> {
     let concurrency = match std::thread::available_parallelism() {
-        Ok(n) => n.get(),
+        Ok(n) => n,
         Err(err) => {
             tracing::error!("Failed to get available parallelism: {err}");
-            1
+            1.try_into().expect("1 is not 0")
         }
     };
     tracing::info!("Max concurrent requests: {concurrency}");
@@ -85,7 +85,7 @@ pub async fn run_server_stdio() -> Result<()> {
     let (frontend, _) = async_lsp::Frontend::new_server(|client| {
         ServiceBuilder::new()
             .layer(TracingLayer::default())
-            .layer(LifecycleLayer)
+            .layer(LifecycleLayer::default())
             // TODO: Use `CatchUnwindLayer`.
             .layer(ConcurrencyLayer::new(concurrency))
             .layer(ClientProcessMonitorLayer::new(client.clone()))
