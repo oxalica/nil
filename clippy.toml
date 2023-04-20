@@ -1,0 +1,5 @@
+doc-valid-idents = [
+    "Nix",
+    "NixOS",
+    "..",
+]

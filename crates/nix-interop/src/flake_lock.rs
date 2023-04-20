@@ -6,10 +6,12 @@
 //! <https://github.com/NixOS/nix/blob/2.13.1/src/nix/flake.md#lock-files>
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::process::Stdio;
 
 use anyhow::{ensure, Context, Result};
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
+use tokio::process::Command;
 
 use crate::eval::nix_eval_expr_json;
 
@@ -20,7 +22,7 @@ pub struct ResolvedInput {
 }
 
 /// Resolve all root inputs from a flake lock.
-pub fn resolve_flake_locked_inputs(
+pub async fn resolve_flake_locked_inputs(
     nix_command: &Path,
     lock_src: &[u8],
 ) -> Result<HashMap<String, ResolvedInput>> {
@@ -69,7 +71,8 @@ pub fn resolve_flake_locked_inputs(
             }}).outPath) [ {hashes} ]
             "#
         ),
-    )?;
+    )
+    .await?;
 
     let resolved = std::iter::zip(inputs, store_paths)
         .map(|((input_name, node), store_path)| {
@@ -183,13 +186,40 @@ struct LockedFlakeRef {
     // ...
 }
 
+// NB. The output of `nix flake archive` doesn't contain followed inputs. We should still use
+// call `resolve_flake_locked_inputs` for all resolved inputs.
+pub async fn archive(nix_command: &Path) -> Result<()> {
+    let output = Command::new(nix_command)
+        .kill_on_drop(true)
+        .args([
+            "flake",
+            "archive",
+            "--experimental-features",
+            "nix-command flakes",
+            "--json",
+        ])
+        .stdin(Stdio::null())
+        // Configures stdout/stderr automatically.
+        .output()
+        .await
+        .context("Failed to spawn `nix`")?;
+
+    ensure!(
+        output.status.success(),
+        "`nix flake archive` failed with {}. Stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr),
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
+    #[tokio::test]
     #[ignore = "requires calling 'nix'"]
-    fn test_resolve_flake_lock_inputs() {
+    async fn resolve_flake_lock_inputs() {
         // {
         //   inputs.nixpkgs.url = "github:NixOS/nixpkgs/5ed481943351e9fd354aeb557679624224de38d5";
         //   inputs.flake-utils = {
@@ -245,7 +275,9 @@ mod tests {
   "version": 7
 }
         "#;
-        let got = resolve_flake_locked_inputs("nix".as_ref(), lock_src).unwrap();
+        let got = resolve_flake_locked_inputs("nix".as_ref(), lock_src)
+            .await
+            .unwrap();
         let expect = HashMap::from_iter([
             (
                 "nixpkgs".to_owned(),
@@ -263,5 +295,11 @@ mod tests {
             ),
         ]);
         assert_eq!(got, expect);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires calling 'nix'"]
+    async fn archive() {
+        super::archive("nix".as_ref()).await.unwrap();
     }
 }

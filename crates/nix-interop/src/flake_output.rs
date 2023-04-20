@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use anyhow::{ensure, Context, Result};
 use serde::Deserialize;
+use tokio::process::Command;
 
-pub fn eval_flake_output(nix_command: &Path, flake_path: &Path) -> Result<FlakeOutput> {
+pub async fn eval_flake_output(nix_command: &Path, flake_path: &Path) -> Result<FlakeOutput> {
     let output = Command::new(nix_command)
+        .kill_on_drop(true)
         .args([
             "flake",
             "show",
@@ -17,9 +19,9 @@ pub fn eval_flake_output(nix_command: &Path, flake_path: &Path) -> Result<FlakeO
         ])
         .arg(flake_path)
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        // Configures stdout/stderr automatically.
         .output()
+        .await
         .context("Failed to spawn `nix`")?;
 
     ensure!(
@@ -77,18 +79,18 @@ pub enum Type {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::NIX_SYSTEM;
-
     use super::*;
 
-    #[test]
+    #[tokio::test]
     #[ignore = "requires calling 'nix'"]
-    fn self_() {
+    async fn self_() {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let output = eval_flake_output("nix".as_ref(), dir.as_ref()).unwrap();
+        let output = eval_flake_output("nix".as_ref(), dir.as_ref())
+            .await
+            .unwrap();
+        let system = crate::tests::get_nix_system().await;
         let leaf = (|| {
-            output.as_attrset()?["packages"].as_attrset()?[&*NIX_SYSTEM].as_attrset()?["nil"]
-                .as_leaf()
+            output.as_attrset()?["packages"].as_attrset()?[&system].as_attrset()?["nil"].as_leaf()
         })()
         .unwrap();
         assert_eq!(leaf.type_, Type::Derivation);

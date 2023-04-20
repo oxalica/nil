@@ -23,7 +23,11 @@ rec {
           pname = "nil";
           version = "unstable-${date}";
           src = self;
-          cargoLock.lockFile = self + "/Cargo.lock";
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
 
           nativeBuildInputs = [ nix.out ];
 

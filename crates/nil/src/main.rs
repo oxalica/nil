@@ -93,7 +93,12 @@ fn main() {
         );
     }
 
-    match nil::run_server_stdio() {
+    let ret = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to spawn tokio runtime")
+        .block_on(nil::run_server_stdio());
+    match ret {
         Ok(()) => {}
         Err(err) => {
             tracing::error!("Unexpected error: {err:#}");
