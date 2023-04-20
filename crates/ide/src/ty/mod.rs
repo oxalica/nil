@@ -68,10 +68,10 @@ macro_rules! ty {
     };
 }
 
+mod convert;
 mod display;
 mod infer;
 pub mod known;
-mod options;
 mod union_find;
 
 #[cfg(test)]
@@ -94,7 +94,7 @@ pub trait TyDatabase: DefDatabase {
     #[salsa::invoke(infer::infer_query)]
     fn infer(&self, file: FileId) -> Arc<InferenceResult>;
 
-    #[salsa::invoke(options::options_to_config_ty)]
+    #[salsa::invoke(convert::options_to_config_ty)]
     fn nixos_config_ty(&self) -> Ty;
 }
 
