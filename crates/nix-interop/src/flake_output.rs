@@ -4,14 +4,17 @@ use std::process::Stdio;
 
 use anyhow::{ensure, Context, Result};
 use serde::Deserialize;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio::sync::watch;
 
 pub async fn eval_flake_output(
     nix_command: &Path,
     flake_path: &Path,
+    watcher_tx: Option<watch::Sender<String>>,
     legacy: bool,
 ) -> Result<FlakeOutput> {
-    let output = Command::new(nix_command)
+    let mut child = Command::new(nix_command)
         .kill_on_drop(true)
         .args([
             "flake",
@@ -20,19 +23,47 @@ pub async fn eval_flake_output(
             "nix-command flakes",
             "--json",
         ])
+        .args(watcher_tx.is_some().then_some("-v"))
         .args(legacy.then_some("--legacy"))
         .arg(flake_path)
         .stdin(Stdio::null())
-        // Configures stdout/stderr automatically.
-        .output()
-        .await
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .context("Failed to spawn `nix`")?;
+
+    let stderr = child.stderr.take().expect("Piped");
+    let mut error_msg = String::new();
+    let consume_stderr_fut = async {
+        let mut stderr = BufReader::new(stderr);
+        let mut line = String::new();
+        while {
+            line.clear();
+            matches!(stderr.read_line(&mut line).await, Ok(n) if n != 0)
+        } {
+            if let Some(inner) = line.trim().strip_prefix("evaluating '") {
+                if let Some(inner) = inner.strip_suffix("'...") {
+                    if let Some(tx) = &watcher_tx {
+                        tx.send_modify(|buf| {
+                            buf.clear();
+                            buf.push_str(inner);
+                        });
+                    }
+                }
+            } else {
+                error_msg.push_str(&line);
+            }
+        }
+    };
+    let wait_fut = child.wait_with_output();
+    let output = tokio::join!(consume_stderr_fut, wait_fut).1?;
 
     ensure!(
         output.status.success(),
-        "`nix flake show` failed with {}. Stderr:\n{}",
+        "`nix flake show {}` failed with {}. Stderr:\n{}",
+        flake_path.display(),
         output.status,
-        String::from_utf8_lossy(&output.stderr),
+        error_msg,
     );
 
     let val = serde_json::from_slice(&output.stdout)?;
@@ -89,9 +120,13 @@ mod tests {
     #[ignore = "requires calling 'nix'"]
     async fn self_() {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let output = eval_flake_output("nix".as_ref(), dir.as_ref(), false)
+        let (tx, rx) = watch::channel(String::new());
+        let output = eval_flake_output("nix".as_ref(), dir.as_ref(), Some(tx), false)
             .await
             .unwrap();
+        // Even if the system is omitted, the attrpath is still printed in progress.
+        assert_eq!(*rx.borrow(), "packages.x86_64-linux.nil");
+
         let system = crate::tests::get_nix_system().await;
         let leaf = (|| {
             output.as_attrset()?["packages"].as_attrset()?[&system].as_attrset()?["nil"].as_leaf()

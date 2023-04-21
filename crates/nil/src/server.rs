@@ -26,7 +26,9 @@ use std::io::ErrorKind;
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
 use std::sync::{Arc, Once, RwLock};
+use std::time::Duration;
 use std::{fmt, panic};
+use tokio::sync::watch;
 use tokio::task::{AbortHandle, JoinHandle};
 use tokio::{fs, task};
 
@@ -35,6 +37,8 @@ const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
 const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
+
+const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
 
 type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
@@ -454,15 +458,32 @@ impl Server {
 
         let mut error_cnt = 0;
         for (i, (input_name, path)) in input_paths.iter().copied().enumerate() {
-            progress.report(
-                (i * 100 / input_cnt) as u32,
-                format!("[{i}/{input_cnt}] {input_name}"),
-            );
+            let report = |path: &str| {
+                let dot = if path.is_empty() { "" } else { "." };
+                progress.report(
+                    (i * 100 / input_cnt) as u32,
+                    format!("[{i}/{input_cnt}] {input_name}{dot}{path}"),
+                );
+            };
+            report("");
 
             tracing::info!("Evaluating flake input {input_name:?}");
 
-            let ret =
-                flake_output::eval_flake_output(&config.nix_binary, path, include_legacy).await;
+            let (watcher_tx, watcher_rx) = watch::channel(String::new());
+            let eval_fut = flake_output::eval_flake_output(
+                &config.nix_binary,
+                path,
+                Some(watcher_tx),
+                include_legacy,
+            );
+            tokio::pin!(eval_fut);
+            let ret = loop {
+                match tokio::time::timeout(PROGRESS_REPORT_PERIOD, eval_fut.as_mut()).await {
+                    Ok(ret) => break ret,
+                    Err(_) => report(&watcher_rx.borrow()),
+                }
+            };
+
             let output = match ret {
                 Ok(output) => output,
                 Err(err) => {
