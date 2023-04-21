@@ -418,7 +418,8 @@ impl Server {
             .iter()
             .filter_map(|(input_name, path)| {
                 let path = path.as_path().expect("Must be real paths");
-                path.exists().then_some((input_name, path))
+                // FIXME: Filter `flake = true` inputs.
+                path.join(FLAKE_FILE).exists().then_some((input_name, path))
             })
             .collect::<Vec<_>>();
 
