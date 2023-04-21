@@ -25,6 +25,7 @@ use std::future::{ready, Future};
 use std::io::ErrorKind;
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
+use std::pin::pin;
 use std::sync::{Arc, Once, RwLock};
 use std::time::Duration;
 use std::{fmt, panic};
@@ -471,13 +472,12 @@ impl Server {
             tracing::info!("Evaluating flake input {input_name:?}");
 
             let (watcher_tx, watcher_rx) = watch::channel(String::new());
-            let eval_fut = flake_output::eval_flake_output(
+            let mut eval_fut = pin!(flake_output::eval_flake_output(
                 &config.nix_binary,
                 path,
                 Some(watcher_tx),
                 include_legacy,
-            );
-            tokio::pin!(eval_fut);
+            ));
             let ret = loop {
                 match tokio::time::timeout(PROGRESS_REPORT_PERIOD, eval_fut.as_mut()).await {
                     Ok(ret) => break ret,

@@ -39,7 +39,7 @@ jobs:
         include:
           - os: ubuntu-latest
             # Should be sync with Cargo.toml
-            channel: '1.66'
+            channel: '1.68'
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
