@@ -169,6 +169,7 @@ fn source_root_flake() {
                 "nixpkgs".into(),
                 VfsPath::new("/nix/store/eeee"),
             )]),
+            input_flake_outputs: HashMap::new(),
         },
     );
 }

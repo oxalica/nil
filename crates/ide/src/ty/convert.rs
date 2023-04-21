@@ -1,7 +1,11 @@
 //! Convert structures from Nix evaluation result into `Ty`s.
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use nix_interop::flake_output::{FlakeOutput, Type as OutputTy};
 use nix_interop::nixos_options::Ty as OptionTy;
 
-use crate::TyDatabase;
+use crate::{SourceRootId, TyDatabase};
 
 use super::{AttrSource, Attrset, Ty};
 
@@ -32,6 +36,32 @@ fn from_raw_ty(ty: &OptionTy) -> Ty {
                 .as_deref()
                 .map(|raw_ty| (from_raw_ty(raw_ty), AttrSource::Unknown));
             Ty::Attrset(Attrset::from_internal(fields, rest))
+        }
+    }
+}
+
+pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<HashMap<String, Ty>> {
+    let Some(info) = db.source_root_flake_info(sid) else { return Arc::default() };
+    let tys = info
+        .input_flake_outputs
+        .iter()
+        .map(|(name, output)| (name.clone(), from_flake_output(output)))
+        .collect();
+    Arc::new(tys)
+}
+
+fn from_flake_output(out: &FlakeOutput) -> Ty {
+    match out {
+        FlakeOutput::Leaf(leaf) => match leaf.type_ {
+            OutputTy::NixosModule => ty!({}),
+            OutputTy::Derivation => ty!(derivation),
+            OutputTy::Unknown => ty!(?),
+        },
+        FlakeOutput::Attrset(set) => {
+            let fields = set
+                .iter()
+                .map(|(key, output)| (&**key, from_flake_output(output), AttrSource::Unknown));
+            Ty::Attrset(Attrset::from_internal(fields, None))
         }
     }
 }

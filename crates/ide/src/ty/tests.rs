@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use crate::tests::TestDB;
-use crate::{DefDatabase, InferenceResult, Module, TyDatabase};
+use crate::{
+    DefDatabase, FlakeGraph, FlakeInfo, InferenceResult, Module, SourceDatabase, TyDatabase,
+};
 use expect_test::{expect, Expect};
+use nix_interop::flake_output::{FlakeOutput, Type};
 
 use super::Ty;
 
@@ -266,4 +272,49 @@ fn inputs_with_self() {
         ",
         expect!["int"],
     );
+}
+
+#[test]
+fn input_flake_ty() {
+    let src = r#"
+#- /flake.nix
+{
+    inputs.nixpkgs = "...";
+    outputs = { self, nixpkgs }: {
+        export = nixpkgs.hello;
+    };
+}
+    "#;
+
+    let nixpkgs_output = FlakeOutput::Attrset(HashMap::from_iter([(
+        "hello".into(),
+        FlakeOutput::Leaf(nix_interop::flake_output::Leaf {
+            type_: Type::Derivation,
+            name: None,
+            description: None,
+        }),
+    )]));
+
+    let expect = expect!["{ args: [string], builder: string, name: string, system: string }"];
+
+    let (mut db, file) = TestDB::single_file(src).unwrap();
+    let sid = db.file_source_root(file);
+    db.set_flake_graph(Arc::new(FlakeGraph {
+        nodes: HashMap::from_iter([(
+            sid,
+            FlakeInfo {
+                flake_file: file,
+                input_store_paths: HashMap::new(),
+                input_flake_outputs: HashMap::from_iter([("nixpkgs".into(), nixpkgs_output)]),
+            },
+        )]),
+    }));
+    let name = db
+        .module(file)
+        .names()
+        .find(|(_, n)| n.text == "export")
+        .expect("Name not found")
+        .0;
+    let ty = db.infer(file).ty_for_name(name).debug().to_string();
+    expect.assert_eq(&ty);
 }

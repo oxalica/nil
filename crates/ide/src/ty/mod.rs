@@ -78,7 +78,8 @@ mod union_find;
 mod tests;
 
 use crate::def::NameId;
-use crate::{DefDatabase, FileId, ModuleKind};
+use crate::{DefDatabase, FileId, ModuleKind, SourceRootId};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -96,6 +97,9 @@ pub trait TyDatabase: DefDatabase {
 
     #[salsa::invoke(convert::options_to_config_ty)]
     fn nixos_config_ty(&self) -> Ty;
+
+    #[salsa::invoke(convert::flake_input_tys)]
+    fn flake_input_tys(&self, sid: SourceRootId) -> Arc<HashMap<String, Ty>>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -234,13 +238,23 @@ fn module_expected_ty(db: &dyn TyDatabase, file: FileId) -> Option<Ty> {
             param_inputs,
             ..
         } => {
+            let sid = db.file_source_root(file);
+            let input_tys = db.flake_input_tys(sid);
             let mut inputs = explicit_inputs
                 .keys()
                 .chain(param_inputs.keys())
-                .map(|s| &**s)
+                .map(|s| {
+                    let input_ty = input_tys
+                        .get(&**s)
+                        .cloned()
+                        // NB. This must be an `Attrset`, so that `known::flake` will merge it
+                        // normally without panicking.
+                        .unwrap_or_else(|| Ty::Attrset(Attrset::default()));
+                    (&**s, input_ty)
+                })
                 .collect::<Vec<_>>();
-            inputs.sort();
-            inputs.dedup();
+            inputs.sort_by_key(|(name, _)| *name);
+            inputs.dedup_by_key(|(name, _)| *name);
             Some(known::flake(&inputs))
         }
         ModuleKind::Package { .. } => Some(known::PACKAGE.clone()),

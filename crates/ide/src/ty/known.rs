@@ -41,7 +41,7 @@ pub static FETCH_TREE_RET: Lazy<Ty> = Lazy::new(|| {
     })
 });
 
-pub static FLAKE: Lazy<Ty> = Lazy::new(|| {
+pub static GENERIC_FLAKE: Lazy<Ty> = Lazy::new(|| {
     merge_attrset(
         &FETCH_TREE_RET,
         &ty!({
@@ -71,10 +71,9 @@ fn merge_attrset(lhs: &Ty, rhs: &Ty) -> Ty {
     })
 }
 
-/// <https://nixos.wiki/wiki/Flakes>
-pub fn flake(inputs: &[&str]) -> Ty {
-    // https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references
-    let input_ty = merge_attrset(
+// https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references
+static GENERIC_INPUT_DECL: Lazy<Ty> = Lazy::new(|| {
+    merge_attrset(
         &FETCH_TREE_ARG,
         &ty!({
             "inputs": {
@@ -83,31 +82,36 @@ pub fn flake(inputs: &[&str]) -> Ty {
                 }
             },
         }),
-    );
+    )
+});
 
-    let inputs_ty = Ty::Attrset(Attrset::from_internal(
-        inputs
-            .iter()
-            .copied()
-            .map(|name| (name, input_ty.clone(), AttrSource::Unknown)),
+/// <https://nixos.wiki/wiki/Flakes>
+pub fn flake(inputs: &[(&str, Ty)]) -> Ty {
+    let inputs_decl_ty = Ty::Attrset(Attrset::from_internal(
+        inputs.iter().map(|(name, ty)| {
+            let ty = merge_attrset(ty, &GENERIC_INPUT_DECL);
+            (*name, ty, AttrSource::Unknown)
+        }),
         None,
     ));
 
     let outputs_param_ty = Ty::Attrset(Attrset::from_internal(
         inputs
             .iter()
-            .copied()
             // Don't duplicate.
-            .filter(|name| *name != "self")
-            .chain(Some("self"))
-            .map(|name| (name, FLAKE.clone(), AttrSource::Unknown)),
+            .filter(|(name, _)| *name != "self")
+            .map(|(name, ty)| {
+                let ty = merge_attrset(ty, &GENERIC_FLAKE);
+                (*name, ty, AttrSource::Unknown)
+            })
+            .chain(Some(("self", ty!({}), AttrSource::Unknown))),
         None,
     ));
 
     ty!({
         "description": string,
         "nixConfig": { _: ? },
-        "inputs": (#inputs_ty),
+        "inputs": (#inputs_decl_ty),
         // https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-develop.html?highlight=flake#flake-output-attributes
         "outputs": ((#outputs_param_ty) -> {
             "apps": {
@@ -285,7 +289,7 @@ fn builtins() -> Ty {
         "getAttr": (forall a, string -> { _: a } -> a),
         "getContext": (string -> { _: { "outputs": [string] } }),
         "getEnv": (string -> string),
-        "getFlake": (string -> (#FLAKE.clone())),
+        "getFlake": (string -> (#GENERIC_FLAKE.clone())),
         "groupBy": (forall a, (a -> string) -> [a] -> { _: [a] }),
         "hasAttr": (string -> { } -> bool),
         "hasContext": (string -> bool),

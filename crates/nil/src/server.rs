@@ -436,6 +436,7 @@ impl Server {
                 return Ok(Some(FlakeInfo {
                     flake_file,
                     input_store_paths: HashMap::new(),
+                    input_flake_outputs: HashMap::new(),
                 }));
             }
             Err(err) => {
@@ -456,6 +457,7 @@ impl Server {
         Ok(Some(FlakeInfo {
             flake_file,
             input_store_paths,
+            input_flake_outputs: HashMap::new(),
         }))
     }
 

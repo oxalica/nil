@@ -117,6 +117,7 @@ impl Fixture {
                     let flake_info = this.flake_info.insert(FlakeInfo {
                         flake_file: cur_file,
                         input_store_paths: HashMap::new(),
+                        input_flake_outputs: HashMap::new(),
                     });
                     for prop in iter {
                         if let Some((name, target)) = prop

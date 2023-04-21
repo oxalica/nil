@@ -1,3 +1,4 @@
+use nix_interop::flake_output::FlakeOutput;
 use nix_interop::nixos_options::NixosOptions;
 use salsa::Durability;
 use std::collections::HashMap;
@@ -172,10 +173,12 @@ pub struct FlakeGraph {
     pub nodes: HashMap<SourceRootId, FlakeInfo>,
 }
 
+// FIXME: Make this a tree structure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlakeInfo {
     pub flake_file: FileId,
     pub input_store_paths: HashMap<String, VfsPath>,
+    pub input_flake_outputs: HashMap<String, FlakeOutput>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
