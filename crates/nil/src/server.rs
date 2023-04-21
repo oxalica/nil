@@ -438,6 +438,20 @@ impl Server {
         )
         .await;
 
+        let include_legacy = match nix_interop::version::get(&config.nix_binary).await {
+            Ok(info) => {
+                tracing::debug!("Nix version info: {info:?}");
+                info.flake_show_filter_systems
+            }
+            Err(err) => {
+                client.show_message_ext(
+                    MessageType::ERROR,
+                    format!("Failed to get version of Nix: {err:#}"),
+                );
+                false
+            }
+        };
+
         let mut error_cnt = 0;
         for (i, (input_name, path)) in input_paths.iter().copied().enumerate() {
             progress.report(
@@ -447,10 +461,8 @@ impl Server {
 
             tracing::info!("Evaluating flake input {input_name:?}");
 
-            // FIXME: Nix < 2.14 doesn't support filter for the current system, which makes
-            // `--legacy` cost too much time (~1min 20s). Thus we disable it by default.
-            let legacy = false;
-            let ret = flake_output::eval_flake_output(&config.nix_binary, path, legacy).await;
+            let ret =
+                flake_output::eval_flake_output(&config.nix_binary, path, include_legacy).await;
             let output = match ret {
                 Ok(output) => output,
                 Err(err) => {
