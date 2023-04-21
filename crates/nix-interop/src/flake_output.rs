@@ -6,7 +6,11 @@ use anyhow::{ensure, Context, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-pub async fn eval_flake_output(nix_command: &Path, flake_path: &Path) -> Result<FlakeOutput> {
+pub async fn eval_flake_output(
+    nix_command: &Path,
+    flake_path: &Path,
+    legacy: bool,
+) -> Result<FlakeOutput> {
     let output = Command::new(nix_command)
         .kill_on_drop(true)
         .args([
@@ -15,8 +19,8 @@ pub async fn eval_flake_output(nix_command: &Path, flake_path: &Path) -> Result<
             "--experimental-features",
             "nix-command flakes",
             "--json",
-            "--legacy",
         ])
+        .args(legacy.then_some("--legacy"))
         .arg(flake_path)
         .stdin(Stdio::null())
         // Configures stdout/stderr automatically.
@@ -85,7 +89,7 @@ mod tests {
     #[ignore = "requires calling 'nix'"]
     async fn self_() {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let output = eval_flake_output("nix".as_ref(), dir.as_ref())
+        let output = eval_flake_output("nix".as_ref(), dir.as_ref(), false)
             .await
             .unwrap();
         let system = crate::tests::get_nix_system().await;

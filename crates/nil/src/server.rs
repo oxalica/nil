@@ -446,7 +446,11 @@ impl Server {
             );
 
             tracing::info!("Evaluating flake input {input_name:?}");
-            let ret = flake_output::eval_flake_output(&config.nix_binary, path).await;
+
+            // FIXME: Nix < 2.14 doesn't support filter for the current system, which makes
+            // `--legacy` cost too much time (~1min 20s). Thus we disable it by default.
+            let legacy = false;
+            let ret = flake_output::eval_flake_output(&config.nix_binary, path, legacy).await;
             let output = match ret {
                 Ok(output) => output,
                 Err(err) => {
