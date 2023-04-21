@@ -20,12 +20,15 @@ let
         cmp_luasnip
         cmp-nvim-lsp
         nvim-lspconfig
+        fidget-nvim
       ];
     };
   };
 
   # lua
   luaRc = ''
+    require('fidget').setup {}
+
     local cmp = require('cmp')
     cmp.setup {
       snippet = {
