@@ -100,8 +100,14 @@ pub fn flake(inputs: &[(&str, Ty)]) -> Ty {
             .iter()
             // Don't duplicate.
             .filter(|(name, _)| *name != "self")
-            .map(|(name, ty)| {
-                let ty = merge_attrset(ty, &GENERIC_FLAKE);
+            .map(|(name, output_ty)| {
+                let ty = merge_attrset(output_ty, &GENERIC_FLAKE);
+                let ty = merge_attrset(
+                    &ty,
+                    &ty!({
+                        "outputs": (#output_ty.clone()),
+                    }),
+                );
                 (*name, ty, AttrSource::Unknown)
             })
             .chain(Some(("self", ty!({}), AttrSource::Unknown))),

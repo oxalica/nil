@@ -281,7 +281,8 @@ fn input_flake_ty() {
 {
     inputs.nixpkgs = "...";
     outputs = { self, nixpkgs }: {
-        export = nixpkgs.hello;
+        export1 = nixpkgs.outputs.hello;
+        export2 = nixpkgs.hello;
     };
 }
     "#;
@@ -309,12 +310,17 @@ fn input_flake_ty() {
             },
         )]),
     }));
-    let name = db
-        .module(file)
-        .names()
-        .find(|(_, n)| n.text == "export")
-        .expect("Name not found")
-        .0;
-    let ty = db.infer(file).ty_for_name(name).debug().to_string();
-    expect.assert_eq(&ty);
+    let ty_for_name = |name: &str| {
+        let name = db
+            .module(file)
+            .names()
+            .find(|(_, n)| n.text == name)
+            .expect("Name not found")
+            .0;
+        db.infer(file).ty_for_name(name).debug().to_string()
+    };
+    let ty1 = ty_for_name("export1");
+    let ty2 = ty_for_name("export2");
+    assert_eq!(ty1, ty2);
+    expect.assert_eq(&ty1);
 }
