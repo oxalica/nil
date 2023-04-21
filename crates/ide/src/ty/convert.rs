@@ -7,7 +7,11 @@ use nix_interop::nixos_options::Ty as OptionTy;
 
 use crate::{SourceRootId, TyDatabase};
 
+use super::known::FLAKE_OUTPUT_GENERIC_SYSTEM_FIELDS;
 use super::{AttrSource, Attrset, Ty};
+
+// TODO: Get this at runtime.
+const NIX_SYSTEM: &str = "x86_64-linux";
 
 pub(crate) fn options_to_config_ty(db: &dyn TyDatabase) -> Ty {
     let opts = db.nixos_options();
@@ -51,6 +55,21 @@ pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<Has
 }
 
 fn from_flake_output(out: &FlakeOutput) -> Ty {
+    let FlakeOutput::Attrset(set) = out else { return from_flake_output_inner(out, None) };
+    let fields = set.iter().map(|(key, output)| {
+        let generic_system_depth = FLAKE_OUTPUT_GENERIC_SYSTEM_FIELDS
+            .iter()
+            .find_map(|&(k, depth)| (k == key).then_some(depth));
+        (
+            &**key,
+            from_flake_output_inner(output, generic_system_depth),
+            AttrSource::Unknown,
+        )
+    });
+    Ty::Attrset(Attrset::from_internal(fields, None))
+}
+
+fn from_flake_output_inner(out: &FlakeOutput, generic_system_depth: Option<usize>) -> Ty {
     match out {
         FlakeOutput::Leaf(leaf) => match leaf.type_ {
             OutputTy::NixosModule => ty!({}),
@@ -58,10 +77,22 @@ fn from_flake_output(out: &FlakeOutput) -> Ty {
             OutputTy::Unknown => ty!(?),
         },
         FlakeOutput::Attrset(set) => {
-            let fields = set
-                .iter()
-                .map(|(key, output)| (&**key, from_flake_output(output), AttrSource::Unknown));
-            Ty::Attrset(Attrset::from_internal(fields, None))
+            let set_rest = generic_system_depth == Some(0);
+            let generic_system_depth = generic_system_depth.and_then(|i| i.checked_sub(1));
+            let fields = set.iter().map(|(key, output)| {
+                (
+                    &**key,
+                    from_flake_output_inner(output, generic_system_depth),
+                    AttrSource::Unknown,
+                )
+            });
+            let mut set = Attrset::from_internal(fields, None);
+            if set_rest {
+                if let Some(ty) = set.get(NIX_SYSTEM) {
+                    set.rest = Some(Arc::new((ty.clone(), AttrSource::Unknown)));
+                }
+            }
+            Ty::Attrset(set)
         }
     }
 }

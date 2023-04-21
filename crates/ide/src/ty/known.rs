@@ -203,6 +203,28 @@ pub fn flake(inputs: &[(&str, Ty)]) -> Ty {
     })
 }
 
+/// Flake output fields which are generic over systems.
+///
+/// This is used to spread one fields (current system) into Attrset's rest type, so that
+/// `packages.${nonStaticSystem}` can fallback to a specific field type for any non-static
+/// attributes.
+///
+/// The first `&str` is the field name of flake output attrset, the second `usize` is the depth
+/// of the system field under that the former field. Eg.
+/// - `("packages", 0)` means "outputs.packages.<system>".
+///                                              ^ 0
+/// - `("hydraJobs", 1)` means "outputs.hydraJobs.<name>.<system>".
+///                                               ^0     ^1
+pub const FLAKE_OUTPUT_GENERIC_SYSTEM_FIELDS: &[(&str, usize)] = &[
+    ("apps", 0),
+    ("checks", 0),
+    ("devShells", 0),
+    ("formatter", 0),
+    ("hydraJobs", 1),
+    ("legacyPackages", 0),
+    ("packages", 0),
+];
+
 pub static BUILTINS: Lazy<Ty> = Lazy::new(|| {
     // Unfold one layer.
     // This is necessary since the top-level `builtins` is accessed via

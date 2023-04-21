@@ -315,22 +315,29 @@ fn input_flake_ty() {
 {
     inputs.nixpkgs = "...";
     outputs = { self, nixpkgs }: {
-        export1 = nixpkgs.outputs.hello;
-        export2 = nixpkgs.hello;
+        export_output = nixpkgs.outputs;
+        export_pkg_name = nixpkgs.legacyPackages.x86_64-linux.hello.name;
     };
 }
     "#;
 
     let nixpkgs_output = FlakeOutput::Attrset(HashMap::from_iter([(
-        "hello".into(),
-        FlakeOutput::Leaf(nix_interop::flake_output::Leaf {
-            type_: Type::Derivation,
-            name: None,
-            description: None,
-        }),
+        "legacyPackages".into(),
+        FlakeOutput::Attrset(HashMap::from_iter([(
+            "x86_64-linux".into(),
+            FlakeOutput::Attrset(HashMap::from_iter([(
+                "hello".into(),
+                FlakeOutput::Leaf(nix_interop::flake_output::Leaf {
+                    type_: Type::Derivation,
+                    name: None,
+                    description: None,
+                }),
+            )])),
+        )])),
     )]));
 
-    let expect = expect!["{ args: [string], builder: string, name: string, system: string }"];
+    let expect_output =
+        expect!["{ legacyPackages: { x86_64-linux: { hello: { args: [string], builder: string, name: string, system: string } }, …: { hello: { args: [string], builder: string, name: string, system: string } } } }"];
 
     let (mut db, file) = TestDB::single_file(src).unwrap();
     let sid = db.file_source_root(file);
@@ -353,8 +360,6 @@ fn input_flake_ty() {
             .0;
         db.infer(file).ty_for_name(name).debug().to_string()
     };
-    let ty1 = ty_for_name("export1");
-    let ty2 = ty_for_name("export2");
-    assert_eq!(ty1, ty2);
-    expect.assert_eq(&ty1);
+    expect_output.assert_eq(&ty_for_name("export_output"));
+    assert_eq!(ty_for_name("export_pkg_name"), "string");
 }
