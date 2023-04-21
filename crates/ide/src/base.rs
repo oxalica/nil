@@ -174,11 +174,21 @@ pub struct FlakeGraph {
 }
 
 // FIXME: Make this a tree structure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FlakeInfo {
     pub flake_file: FileId,
     pub input_store_paths: HashMap<String, VfsPath>,
     pub input_flake_outputs: HashMap<String, FlakeOutput>,
+}
+
+impl fmt::Debug for FlakeInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FlakeInfo")
+            .field("flake_file", &self.flake_file)
+            .field("input_store_paths", &self.input_store_paths)
+            .field("input_flake_outputs", &self.input_flake_outputs.keys())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
