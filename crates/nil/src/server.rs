@@ -444,15 +444,15 @@ impl Server {
         )
         .await;
 
-        let include_legacy = match nix_interop::version::get(&config.nix_binary).await {
+        let include_legacy = match nix_interop::info::get(&config.nix_binary).await {
             Ok(info) => {
-                tracing::debug!("Nix version info: {info:?}");
+                tracing::debug!("Nix info: {info:?}");
                 info.flake_show_filter_systems
             }
             Err(err) => {
                 client.show_message_ext(
                     MessageType::ERROR,
-                    format!("Failed to get version of Nix: {err:#}"),
+                    format!("Failed to get information about Nix: {err:#}"),
                 );
                 false
             }

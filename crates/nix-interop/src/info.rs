@@ -1,10 +1,11 @@
+//! Various information about Nix itself and environment.
 use std::path::Path;
 
 use anyhow::Result;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct NixVersionInfo {
+pub struct NixInfo {
     /// The version string reported by `builtins.nixVersion`.
     /// Note that this does not follow semver.
     pub version: String,
@@ -16,7 +17,7 @@ pub struct NixVersionInfo {
     pub flake_show_filter_systems: bool,
 }
 
-pub async fn get(nix_command: &Path) -> Result<NixVersionInfo> {
+pub async fn get(nix_command: &Path) -> Result<NixInfo> {
     crate::eval::nix_eval_expr_json(
         nix_command,
         r#"
