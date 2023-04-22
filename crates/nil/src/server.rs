@@ -5,13 +5,17 @@ use anyhow::{bail, ensure, Context, Result};
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, ErrorCode, LanguageClient, ResponseError};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
+use lsp_types::notification::Notification;
 use lsp_types::request::{self as req, Request};
 use lsp_types::{
     notification as notif, ConfigurationItem, ConfigurationParams, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
+    DidChangeWatchedFilesRegistrationOptions, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, FileChangeType, FileEvent, FileSystemWatcher, GlobPattern,
     InitializeParams, InitializeResult, InitializedParams, MessageActionItem,
-    MessageActionItemProperty, MessageType, NumberOrString, ProgressParams, ProgressParamsValue,
-    PublishDiagnosticsParams, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
+    MessageActionItemProperty, MessageType, NumberOrString, OneOf, ProgressParams,
+    ProgressParamsValue, PublishDiagnosticsParams, Registration, RegistrationParams,
+    RelativePattern, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
     WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
     WorkDoneProgressReport,
 };
@@ -24,6 +28,7 @@ use std::collections::HashMap;
 use std::future::{ready, Future};
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
+use std::path::Path;
 use std::pin::pin;
 use std::sync::{Arc, Once, RwLock};
 use std::time::Duration;
@@ -89,10 +94,10 @@ impl Server {
             .notification::<notif::DidCloseTextDocument>(Self::on_did_close)
             .notification::<notif::DidChangeTextDocument>(Self::on_did_change)
             .notification::<notif::DidChangeConfiguration>(Self::on_did_change_configuration)
-            // Workaround:
+            // NB. This handler is mandatory.
             // > In former implementations clients pushed file events without the server actively asking for it.
             // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
-            .notification::<notif::DidChangeWatchedFiles>(|_, _| ControlFlow::Continue(()))
+            .notification::<notif::DidChangeWatchedFiles>(Self::on_did_change_watched_files)
             //// Requests ////
             .request_snap::<req::GotoDefinition>(handler::goto_definition)
             .request_snap::<req::References>(handler::references)
@@ -112,7 +117,9 @@ impl Server {
             //// Events ////
             .event(Self::on_set_flake_info)
             .event(Self::on_set_nixos_options)
-            .event(Self::on_update_config);
+            .event(Self::on_update_config)
+            // Loopback event.
+            .event(Self::on_did_change_watched_files);
         router
     }
 
@@ -171,25 +178,76 @@ impl Server {
             let _: Result<_, _> = self.client.show_message(msg);
         }
 
-        // Always load flake.{nix,lock} for flake info.
-        for path in [
-            self.config.root_path.join(FLAKE_LOCK_FILE),
-            self.config.root_path.join(FLAKE_FILE),
-        ] {
-            // TODO: Move file loading into a dedicated thread.
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                let url = Url::from_vfs_path(&path.into());
-                self.set_vfs_file_content(&url, text);
-            }
-        }
-
         // Load configurations before loading flake.
         // The latter depends on `nix.binary`.
         // FIXME: This is still racy since `on_did_open` can also trigger flake reloading and would
         // read uninitialized configs.
         self.spawn_reload_config();
 
+        // Make a virtual event to trigger loading of flake files for flake info.
+        let flake_files_changed_event = DidChangeWatchedFilesParams {
+            changes: [FLAKE_LOCK_FILE, FLAKE_FILE]
+                .into_iter()
+                .map(|name| {
+                    let uri = Url::from_file_path(self.config.root_path.join(name))
+                        .expect("Root must be absolute");
+                    let typ = FileChangeType::CREATED;
+                    FileEvent { uri, typ }
+                })
+                .collect(),
+        };
+        if self.capabilities.watch_files {
+            tokio::spawn({
+                let config = self.config.clone();
+                let caps = self.capabilities.clone();
+                let mut client = self.client.clone();
+                async move {
+                    Self::register_watched_files(&config, &caps, &mut client).await;
+                    let _: Result<_, _> = client.emit(flake_files_changed_event);
+                }
+            });
+        } else {
+            self.on_did_change_watched_files(flake_files_changed_event)?;
+        }
+
         ControlFlow::Continue(())
+    }
+
+    async fn register_watched_files(
+        config: &Config,
+        caps: &NegotiatedCapabilities,
+        client: &mut ClientSocket,
+    ) {
+        let to_watcher = |pat: &str| FileSystemWatcher {
+            glob_pattern: if caps.watch_files_relative_pattern {
+                let root_uri = Url::from_file_path(&config.root_path).expect("Must be absolute");
+                GlobPattern::Relative(RelativePattern {
+                    base_uri: OneOf::Right(root_uri),
+                    pattern: pat.into(),
+                })
+            } else {
+                GlobPattern::String(format!("{}/{}", config.root_path.display(), pat))
+            },
+            // All events.
+            kind: None,
+        };
+        let register_options = DidChangeWatchedFilesRegistrationOptions {
+            watchers: [FLAKE_LOCK_FILE, FLAKE_FILE].map(to_watcher).into(),
+        };
+        let params = RegistrationParams {
+            registrations: vec![Registration {
+                id: notif::DidChangeWatchedFiles::METHOD.into(),
+                method: notif::DidChangeWatchedFiles::METHOD.into(),
+                register_options: Some(serde_json::to_value(register_options).unwrap()),
+            }],
+        };
+        if let Err(err) = client.register_capability(params).await {
+            client.show_message_ext(
+                MessageType::ERROR,
+                format!("Failed to watch flake files: {err:#}"),
+            );
+        }
+        tracing::info!("Registered file watching for flake files");
     }
 
     fn on_did_open(&mut self, params: DidOpenTextDocumentParams) -> NotifyResult {
@@ -283,6 +341,41 @@ impl Server {
         // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
         // this notification's parameters should be ignored and the actual config queried separately.
         self.spawn_reload_config();
+        ControlFlow::Continue(())
+    }
+
+    fn on_did_change_watched_files(&mut self, params: DidChangeWatchedFilesParams) -> NotifyResult {
+        tracing::debug!("Watched files changed: {params:?}");
+
+        let mut flake_files_changed = true;
+        for FileEvent { uri, typ } in &params.changes {
+            // Don't reload files maintained by the client.
+            if self.opened_files.contains_key(uri) {
+                continue;
+            }
+            let Ok(path) = uri.to_file_path() else { continue };
+            match *typ {
+                FileChangeType::CREATED | FileChangeType::CHANGED => {
+                    if let Ok(text) = std::fs::read_to_string(&path) {
+                        self.set_vfs_file_content(uri, text);
+                    }
+                }
+                FileChangeType::DELETED => {
+                    // TODO: Vfs file removal.
+                }
+                _ => continue,
+            }
+            if let Ok(relative) = path.strip_prefix(&self.config.root_path) {
+                if relative == Path::new(FLAKE_FILE) || relative == Path::new(FLAKE_LOCK_FILE) {
+                    flake_files_changed = true;
+                }
+            }
+        }
+
+        if flake_files_changed {
+            self.spawn_load_flake_workspace();
+        }
+
         ControlFlow::Continue(())
     }
 
@@ -650,7 +743,6 @@ impl Server {
         // If this is the first load, load the flake workspace, which depends on `nix.binary`.
         if !self.tried_flake_load {
             self.tried_flake_load = true;
-            // TODO: Register file watcher for flake.lock.
             self.spawn_load_flake_workspace();
         }
 
