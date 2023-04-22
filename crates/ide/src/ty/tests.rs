@@ -235,7 +235,7 @@ fn flake_file() {
 }
 
 #[test]
-fn rest_type() {
+fn rest_type_decl_site() {
     check_name(
         "bar",
         r"
@@ -249,6 +249,40 @@ fn rest_type() {
 }
         ",
         expect!["{ program: string, type: string }"],
+    );
+}
+
+#[test]
+fn rest_type_use_site_missing() {
+    check_name(
+        "export",
+        r#"
+#- /flake.nix
+rec {
+    inputs.a.url = "url:url";
+    outputs = { ... }: {
+        export = inputs.a.inputs.missing.follows;
+    };
+}
+        "#,
+        expect!["string"],
+    );
+}
+
+#[test]
+fn rest_type_use_site_dynamic() {
+    check_name(
+        "export",
+        r#"
+#- /flake.nix
+rec {
+    inputs.a.url = "url:url";
+    outputs = { ... }: {
+        export = inputs.a.inputs.${builtins.getEnv "dynamic"}.follows;
+    };
+}
+        "#,
+        expect!["string"],
     );
 }
 
