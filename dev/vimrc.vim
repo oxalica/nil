@@ -12,4 +12,8 @@ set autoindent
 
 " Always show statusline.
 set laststatus=2
-set statusline=%<%f\ %m%r%y\ %LL\ %=\ 0x%-4.B\ %-16.(%lL,%cC%V,%oB%)\ %P
+set statusline=%f\ %m%r%y\ %LL\ %{LspStatus()}%<%=\ 0x%-4.B\ %-16.(%lL,%cC%V,%oB%)\ %P
+
+function LspStatus()
+  return ''
+endfunction

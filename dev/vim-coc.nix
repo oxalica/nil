@@ -22,6 +22,11 @@ let
     set termguicolors
     syntax on
 
+    function! LspStatus()
+      return coc#status()
+    endfunction
+    autocmd User CocStatusChange redrawstatus
+
     " Semantic highlighting.
     autocmd CursorHold * silent call CocActionAsync('highlight')
 

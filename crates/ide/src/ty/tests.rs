@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use crate::tests::TestDB;
-use crate::{DefDatabase, InferenceResult, Module, TyDatabase};
+use crate::{
+    DefDatabase, FlakeGraph, FlakeInfo, InferenceResult, Module, SourceDatabase, TyDatabase,
+};
 use expect_test::{expect, Expect};
+use nix_interop::flake_output::{FlakeOutput, Type};
 
 use super::Ty;
 
@@ -229,7 +235,7 @@ fn flake_file() {
 }
 
 #[test]
-fn rest_type() {
+fn rest_type_decl_site() {
     check_name(
         "bar",
         r"
@@ -243,6 +249,40 @@ fn rest_type() {
 }
         ",
         expect!["{ program: string, type: string }"],
+    );
+}
+
+#[test]
+fn rest_type_use_site_missing() {
+    check_name(
+        "export",
+        r#"
+#- /flake.nix
+rec {
+    inputs.a.url = "url:url";
+    outputs = { ... }: {
+        export = inputs.a.inputs.missing.follows;
+    };
+}
+        "#,
+        expect!["string"],
+    );
+}
+
+#[test]
+fn rest_type_use_site_dynamic() {
+    check_name(
+        "export",
+        r#"
+#- /flake.nix
+rec {
+    inputs.a.url = "url:url";
+    outputs = { ... }: {
+        export = inputs.a.inputs.${builtins.getEnv "dynamic"}.follows;
+    };
+}
+        "#,
+        expect!["string"],
     );
 }
 
@@ -266,4 +306,60 @@ fn inputs_with_self() {
         ",
         expect!["int"],
     );
+}
+
+#[test]
+fn input_flake_ty() {
+    let src = r#"
+#- /flake.nix
+{
+    inputs.nixpkgs = "...";
+    outputs = { self, nixpkgs }: {
+        export_output = nixpkgs.outputs;
+        export_pkg_name = nixpkgs.legacyPackages.x86_64-linux.hello.name;
+    };
+}
+    "#;
+
+    let nixpkgs_output = FlakeOutput::Attrset(HashMap::from_iter([(
+        "legacyPackages".into(),
+        FlakeOutput::Attrset(HashMap::from_iter([(
+            "x86_64-linux".into(),
+            FlakeOutput::Attrset(HashMap::from_iter([(
+                "hello".into(),
+                FlakeOutput::Leaf(nix_interop::flake_output::Leaf {
+                    type_: Type::Derivation,
+                    name: None,
+                    description: None,
+                }),
+            )])),
+        )])),
+    )]));
+
+    let expect_output =
+        expect!["{ legacyPackages: { x86_64-linux: { hello: { args: [string], builder: string, name: string, system: string } }, …: { hello: { args: [string], builder: string, name: string, system: string } } } }"];
+
+    let (mut db, file) = TestDB::single_file(src).unwrap();
+    let sid = db.file_source_root(file);
+    db.set_flake_graph(Arc::new(FlakeGraph {
+        nodes: HashMap::from_iter([(
+            sid,
+            FlakeInfo {
+                flake_file: file,
+                input_store_paths: HashMap::new(),
+                input_flake_outputs: HashMap::from_iter([("nixpkgs".into(), nixpkgs_output)]),
+            },
+        )]),
+    }));
+    let ty_for_name = |name: &str| {
+        let name = db
+            .module(file)
+            .names()
+            .find(|(_, n)| n.text == name)
+            .expect("Name not found")
+            .0;
+        db.infer(file).ty_for_name(name).debug().to_string()
+    };
+    expect_output.assert_eq(&ty_for_name("export_output"));
+    assert_eq!(ty_for_name("export_pkg_name"), "string");
 }

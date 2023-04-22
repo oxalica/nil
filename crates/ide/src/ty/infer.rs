@@ -50,7 +50,12 @@ impl Ty {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-struct Attrset(BTreeMap<SmolStr, (TyVar, AttrSource)>);
+struct Attrset {
+    fields: BTreeMap<SmolStr, (TyVar, AttrSource)>,
+    // This is the type for all non-static fields.
+    // Is this really the same as `super::Attrset::rest`?
+    dyn_ty: Option<TyVar>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferenceResult {
@@ -180,8 +185,11 @@ impl<'db> InferCtx<'db> {
                             self.unify_var(name_ty, default_ty);
                         }
                         let field_text = self.module[name].text.clone();
-                        let param_field_ty =
-                            self.infer_set_field(param_ty, field_text, AttrSource::Name(name));
+                        let param_field_ty = self.infer_set_field(
+                            param_ty,
+                            Some(field_text),
+                            AttrSource::Name(name),
+                        );
                         self.unify_var(param_field_ty, name_ty);
                     }
                 }
@@ -283,15 +291,11 @@ impl<'db> InferCtx<'db> {
                 let ret_ty = path.iter().fold(set_ty, |set_ty, &attr| {
                     let attr_ty = self.infer_expr(attr);
                     self.unify_var_ty(attr_ty, Ty::String);
-                    match &self.module[attr] {
-                        Expr::Literal(Literal::String(key)) => {
-                            self.infer_set_field(set_ty, key.clone(), AttrSource::Unknown)
-                        }
-                        _ => {
-                            self.unify_var_ty(set_ty, Ty::Attrset(Attrset::default()));
-                            self.new_ty_var()
-                        }
-                    }
+                    let opt_key = match &self.module[attr] {
+                        Expr::Literal(Literal::String(key)) => Some(key.clone()),
+                        _ => None,
+                    };
+                    self.infer_set_field(set_ty, opt_key, AttrSource::Unknown)
                 });
                 if let Some(default_expr) = *default_expr {
                     let default_ty = self.infer_expr(default_expr);
@@ -335,7 +339,7 @@ impl<'db> InferCtx<'db> {
             Expr::LetAttrset(bindings) => {
                 let set = self.infer_bindings(bindings);
                 let set_ty = Ty::Attrset(set).intern(self);
-                self.infer_set_field(set_ty, "body".into(), AttrSource::Unknown)
+                self.infer_set_field(set_ty, Some("body".into()), AttrSource::Unknown)
             }
         }
     }
@@ -355,7 +359,7 @@ impl<'db> InferCtx<'db> {
                 BindingValue::Inherit(e) | BindingValue::Expr(e) => self.infer_expr(e),
                 BindingValue::InheritFrom(i) => self.infer_set_field(
                     inherit_from_tys[i],
-                    name_text.clone(),
+                    Some(name_text.clone()),
                     AttrSource::Name(name),
                 ),
             };
@@ -364,35 +368,64 @@ impl<'db> InferCtx<'db> {
             fields.insert(name_text, (value_ty, src));
         }
 
-        for &(k, v) in bindings.dynamics.iter() {
-            let name_ty = self.infer_expr(k);
-            self.unify_var_ty(name_ty, Ty::String);
-            self.infer_expr(v);
-        }
+        let dyn_ty = (!bindings.dynamics.is_empty()).then(|| {
+            let dyn_ty = self.new_ty_var();
+            for &(k, v) in bindings.dynamics.iter() {
+                let name_ty = self.infer_expr(k);
+                self.unify_var_ty(name_ty, Ty::String);
+                let value_ty = self.infer_expr(v);
+                self.unify_var(value_ty, dyn_ty);
+            }
+            dyn_ty
+        });
 
-        Attrset(fields)
+        Attrset { fields, dyn_ty }
     }
 
-    fn infer_set_field(&mut self, set_ty: TyVar, field: SmolStr, src: AttrSource) -> TyVar {
+    /// `field` is `None` for dynamic fields.
+    fn infer_set_field(&mut self, set_ty: TyVar, field: Option<SmolStr>, src: AttrSource) -> TyVar {
         let next_ty = TyVar(self.table.len() as u32);
         match self.table.get_mut(set_ty.0) {
-            Ty::Attrset(set) => match set.0.entry(field) {
-                Entry::Occupied(mut ent) => {
-                    let (ty, prev_src) = ent.get_mut();
-                    prev_src.unify(src);
-                    return *ty;
+            Ty::Attrset(set) => match field {
+                Some(field) => match set.fields.entry(field) {
+                    Entry::Occupied(mut ent) => {
+                        let (ty, prev_src) = ent.get_mut();
+                        prev_src.unify(src);
+                        return *ty;
+                    }
+                    Entry::Vacant(ent) => {
+                        ent.insert((next_ty, src));
+                    }
+                },
+                None => match set.dyn_ty {
+                    Some(dyn_ty) => return dyn_ty,
+                    None => set.dyn_ty = Some(next_ty),
+                },
+            },
+            Ty::External(super::Ty::Attrset(set)) => match field {
+                Some(field) => {
+                    if let Some(ty) = set.get(&field).cloned() {
+                        return self.import_external(ty);
+                    }
                 }
-                Entry::Vacant(ent) => {
-                    ent.insert((next_ty, src));
+                None => {
+                    if let Some(rest) = &set.rest {
+                        let rest_ty = rest.0.clone();
+                        return self.import_external(rest_ty);
+                    }
                 }
             },
-            Ty::External(super::Ty::Attrset(set)) => {
-                if let Some(ty) = set.get(&field).cloned() {
-                    return self.import_external(ty);
-                }
-            }
             k @ Ty::Unknown => {
-                *k = Ty::Attrset(Attrset([(field, (next_ty, src))].into_iter().collect()));
+                *k = Ty::Attrset(match field {
+                    Some(field) => Attrset {
+                        fields: [(field, (next_ty, src))].into_iter().collect(),
+                        dyn_ty: None,
+                    },
+                    None => Attrset {
+                        fields: BTreeMap::new(),
+                        dyn_ty: Some(next_ty),
+                    },
+                });
             }
             _ => {}
         }
@@ -424,8 +457,8 @@ impl<'db> InferCtx<'db> {
                 Ty::Lambda(arg1, ret1)
             }
             (Ty::Attrset(mut a), Ty::Attrset(b)) => {
-                for (field, (ty2, src2)) in b.0 {
-                    match a.0.entry(field) {
+                for (field, (ty2, src2)) in b.fields {
+                    match a.fields.entry(field) {
                         Entry::Vacant(ent) => {
                             ent.insert((ty2, src2));
                         }
@@ -447,11 +480,20 @@ impl<'db> InferCtx<'db> {
                         self.unify_var(ret1, ret2);
                     }
                     (Ty::Attrset(a), super::Ty::Attrset(b)) => {
-                        for (field, (ty, _)) in &a.0 {
+                        let rest_ty_var = b
+                            .rest
+                            .as_ref()
+                            .map(|rest| self.import_external(rest.0.clone()));
+                        for (field, (ty, _)) in &a.fields {
                             if let Some(field_ty) = b.get(field) {
                                 let var = self.import_external(field_ty.clone());
                                 self.unify_var(*ty, var);
+                            } else if let Some(var) = rest_ty_var {
+                                self.unify_var(*ty, var);
                             }
+                        }
+                        if let (Some(dyn_ty_var), Some(var)) = (a.dyn_ty, rest_ty_var) {
+                            self.unify_var(dyn_ty_var, var);
                         }
                     }
                     _ => {}
@@ -529,7 +571,7 @@ impl<'a> Collector<'a> {
             }
             Ty::Attrset(fields) => {
                 let fields = fields
-                    .0
+                    .fields
                     .into_iter()
                     .map(|(name, (ty, src))| (name, self.collect(ty), src))
                     .collect();

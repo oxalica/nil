@@ -2,6 +2,7 @@
 pub mod eval;
 pub mod flake_lock;
 pub mod flake_output;
+pub mod info;
 pub mod nixos_options;
 
 pub const DEFAULT_IMPORT_FILE: &str = "default.nix";

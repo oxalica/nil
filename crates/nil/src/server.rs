@@ -13,9 +13,10 @@ use lsp_types::{
     MessageActionItemProperty, MessageType, NumberOrString, ProgressParams, ProgressParamsValue,
     PublishDiagnosticsParams, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
     WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+    WorkDoneProgressReport,
 };
 use nix_interop::nixos_options::{self, NixosOptions};
-use nix_interop::{flake_lock, FLAKE_FILE, FLAKE_LOCK_FILE};
+use nix_interop::{flake_lock, flake_output, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::backtrace::Backtrace;
 use std::borrow::BorrowMut;
 use std::cell::Cell;
@@ -24,15 +25,21 @@ use std::future::{ready, Future};
 use std::io::ErrorKind;
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
+use std::pin::pin;
 use std::sync::{Arc, Once, RwLock};
+use std::time::Duration;
 use std::{fmt, panic};
+use tokio::sync::watch;
 use tokio::task::{AbortHandle, JoinHandle};
 use tokio::{fs, task};
 
 const LSP_SERVER_NAME: &str = "nil";
 const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
+const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
+
+const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
 
 type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
@@ -341,7 +348,8 @@ impl Server {
             };
 
             if do_fetch {
-                let _progress = Progress::new(
+                tracing::info!("Archiving flake");
+                let progress = Progress::new(
                     &client,
                     &caps,
                     FLAKE_ARCHIVE_PROGRESS_TOKEN,
@@ -349,8 +357,6 @@ impl Server {
                     "nix flake archive".to_owned(),
                 )
                 .await;
-
-                tracing::info!("Archiving flake");
                 let ret = flake_lock::archive(&config.nix_binary)
                     .await
                     .and_then(|()| {
@@ -361,6 +367,8 @@ impl Server {
                         );
                         Ok(())
                     });
+                progress.done(None);
+
                 if let Err(err) = ret {
                     client.show_message_ext(
                         MessageType::ERROR,
@@ -395,6 +403,112 @@ impl Server {
                 }
             }
         }
+
+        Self::load_input_flakes(flake_info, &config, &caps, &mut client).await;
+    }
+
+    async fn load_input_flakes(
+        mut flake_info: FlakeInfo,
+        config: &Config,
+        caps: &NegotiatedCapabilities,
+        client: &mut ClientSocket,
+    ) {
+        // Filter out missing paths.
+        let mut input_paths = flake_info
+            .input_store_paths
+            .iter()
+            .filter_map(|(input_name, path)| {
+                let path = path.as_path().expect("Must be real paths");
+                // FIXME: Filter `flake = true` inputs.
+                path.join(FLAKE_FILE).exists().then_some((input_name, path))
+            })
+            .collect::<Vec<_>>();
+
+        // Fast path.
+        if input_paths.is_empty() {
+            return;
+        }
+
+        // Sort by input names to keep evaluation order stable.
+        input_paths.sort_by_key(|&(name, _)| name);
+
+        let input_cnt = input_paths.len();
+        tracing::info!("Evaluating {input_cnt} flake inputs");
+
+        let progress = Progress::new(
+            client,
+            caps,
+            LOAD_INPUT_FLAKE_PROGRESS_TOKEN,
+            "Evaluating input flakes",
+            format!("[0/{input_cnt}]"),
+        )
+        .await;
+
+        let include_legacy = match nix_interop::info::get(&config.nix_binary).await {
+            Ok(info) => {
+                tracing::debug!("Nix info: {info:?}");
+                info.flake_show_filter_systems
+            }
+            Err(err) => {
+                client.show_message_ext(
+                    MessageType::ERROR,
+                    format!("Failed to get information about Nix: {err:#}"),
+                );
+                false
+            }
+        };
+
+        let mut error_cnt = 0;
+        for (i, (input_name, path)) in input_paths.iter().copied().enumerate() {
+            let report = |path: &str| {
+                let dot = if path.is_empty() { "" } else { "." };
+                progress.report(
+                    (i * 100 / input_cnt) as u32,
+                    format!("[{i}/{input_cnt}] {input_name}{dot}{path}"),
+                );
+            };
+            report("");
+
+            tracing::info!("Evaluating flake input {input_name:?}");
+
+            let (watcher_tx, watcher_rx) = watch::channel(String::new());
+            let mut eval_fut = pin!(flake_output::eval_flake_output(
+                &config.nix_binary,
+                path,
+                Some(watcher_tx),
+                include_legacy,
+            ));
+            let ret = loop {
+                match tokio::time::timeout(PROGRESS_REPORT_PERIOD, eval_fut.as_mut()).await {
+                    Ok(ret) => break ret,
+                    Err(_) => report(&watcher_rx.borrow()),
+                }
+            };
+
+            let output = match ret {
+                Ok(output) => output,
+                Err(err) => {
+                    // Don't spam on configuration errors (eg. bad Nix path).
+                    if error_cnt == 0 {
+                        client.show_message_ext(
+                            MessageType::ERROR,
+                            format!("Flake input {input_name:?} cannot be evaluated: {err:#}"),
+                        );
+                    }
+                    error_cnt += 1;
+                    continue;
+                }
+            };
+            flake_info
+                .input_flake_outputs
+                .insert(input_name.clone(), output);
+            let _: Result<_, _> = client.emit(SetFlakeInfoEvent(Some(flake_info.clone())));
+        }
+
+        tracing::info!("Finished loading flake inputs. {error_cnt}/{input_cnt} failed");
+        let msg =
+            (error_cnt != 0).then(|| format!("{error_cnt}/{input_cnt} input(s) failed to load"));
+        progress.done(msg);
     }
 
     async fn load_flake_info(vfs: &RwLock<Vfs>, config: &Config) -> Result<Option<FlakeInfo>> {
@@ -436,6 +550,7 @@ impl Server {
                 return Ok(Some(FlakeInfo {
                     flake_file,
                     input_store_paths: HashMap::new(),
+                    input_flake_outputs: HashMap::new(),
                 }));
             }
             Err(err) => {
@@ -456,6 +571,7 @@ impl Server {
         Ok(Some(FlakeInfo {
             flake_file,
             input_store_paths,
+            input_flake_outputs: HashMap::new(),
         }))
     }
 
@@ -674,13 +790,26 @@ impl Progress {
             value: ProgressParamsValue::WorkDone(progress),
         });
     }
+
+    fn report(&self, percentage: u32, message: String) {
+        assert!((0..=100).contains(&percentage));
+        self.notify(WorkDoneProgress::Report(WorkDoneProgressReport {
+            cancellable: None,
+            message: Some(message),
+            percentage: Some(percentage),
+        }));
+    }
+
+    fn done(mut self, message: Option<String>) {
+        self.notify(WorkDoneProgress::End(WorkDoneProgressEnd { message }));
+        // Don't drop again.
+        self.token = None;
+    }
 }
 
 impl Drop for Progress {
     fn drop(&mut self) {
-        if self.token.is_some() {
-            self.notify(WorkDoneProgress::End(WorkDoneProgressEnd { message: None }));
-        }
+        self.notify(WorkDoneProgress::End(WorkDoneProgressEnd { message: None }));
     }
 }
 
