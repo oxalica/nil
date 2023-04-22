@@ -651,10 +651,9 @@ impl Server {
     }
 
     fn spawn_update_diagnostics(&mut self, uri: Url) {
-        let snap = self.snapshot();
-        let task = task::spawn_blocking({
+        let task = self.spawn_with_snapshot({
             let uri = uri.clone();
-            move || {
+            move |snap| {
                 // Return empty diagnostics for ignored files.
                 (!snap.config.diagnostics_excluded_files.contains(&uri))
                     .then(|| {
@@ -689,12 +688,21 @@ impl Server {
         });
     }
 
-    fn snapshot(&self) -> StateSnapshot {
-        StateSnapshot {
+    /// Create a blocking task with a database snapshot as the input.
+    // NB. `spawn_blocking` must be called immediately after snapshotting, so that the read guard
+    // held in `Analysis` is sent out of the async runtime worker. Otherwise, the read guard
+    // is held by the async runtime, and the next `apply_change` acquiring the write guard would
+    // deadlock.
+    fn spawn_with_snapshot<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(StateSnapshot) -> T + Send + 'static,
+    ) -> JoinHandle<T> {
+        let snap = StateSnapshot {
             analysis: self.host.snapshot(),
             vfs: Arc::clone(&self.vfs),
             config: Arc::clone(&self.config),
-        }
+        };
+        task::spawn_blocking(move || f(snap))
     }
 
     fn set_vfs_file_content(&mut self, uri: &Url, text: String) {
@@ -723,10 +731,11 @@ trait RouterExt: BorrowMut<Router<Server>> {
         R::Result: Send + 'static,
     {
         self.borrow_mut().request::<R, _>(move |this, params| {
-            let snap = this.snapshot();
+            let task = this.spawn_with_snapshot(move |snap| {
+                with_catch_unwind(R::METHOD, move || f(snap, params))
+            });
             async move {
-                task::spawn_blocking(move || with_catch_unwind(R::METHOD, move || f(snap, params)))
-                    .await
+                task.await
                     .expect("Already catch_unwind")
                     .map_err(error_to_response)
             }
