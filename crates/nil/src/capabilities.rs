@@ -28,6 +28,18 @@ pub(crate) fn negotiate_capabilities(
                 .additional_properties_support
         ),
         server_initiated_progress: test!(client_caps.window.work_done_progress),
+        watch_files: test!(
+            client_caps
+                .workspace
+                .did_change_watched_files
+                .dynamic_registration
+        ),
+        watch_files_relative_pattern: test!(
+            client_caps
+                .workspace
+                .did_change_watched_files
+                .relative_pattern_support
+        ),
     };
 
     let server_caps = ServerCapabilities {
@@ -81,4 +93,6 @@ pub(crate) fn negotiate_capabilities(
 pub(crate) struct NegotiatedCapabilities {
     pub client_show_message_request: bool,
     pub server_initiated_progress: bool,
+    pub watch_files: bool,
+    pub watch_files_relative_pattern: bool,
 }

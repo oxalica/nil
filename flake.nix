@@ -110,6 +110,7 @@ rec {
               # nix.out
 
               nodejs
+              watchman # Required by coc.nvim for file watching.
 
               jq
               pre-commit
