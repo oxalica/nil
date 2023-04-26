@@ -16,7 +16,7 @@ use lsp_types::{
     WorkDoneProgressReport,
 };
 use nix_interop::nixos_options::{self, NixosOptions};
-use nix_interop::{flake_lock, flake_output, FLAKE_FILE, FLAKE_LOCK_FILE};
+use nix_interop::{flake_lock, flake_output, FlakeUrl, FLAKE_FILE, FLAKE_LOCK_FILE};
 use std::backtrace::Backtrace;
 use std::borrow::BorrowMut;
 use std::cell::Cell;
@@ -472,9 +472,10 @@ impl Server {
             tracing::info!("Evaluating flake input {input_name:?}");
 
             let (watcher_tx, watcher_rx) = watch::channel(String::new());
+            let flake_url = FlakeUrl::new_path(path);
             let mut eval_fut = pin!(flake_output::eval_flake_output(
                 &config.nix_binary,
-                path,
+                &flake_url,
                 Some(watcher_tx),
                 include_legacy,
             ));

@@ -8,9 +8,11 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
 
+use crate::FlakeUrl;
+
 pub async fn eval_flake_output(
     nix_command: &Path,
-    flake_path: &Path,
+    flake_url: &FlakeUrl,
     watcher_tx: Option<watch::Sender<String>>,
     legacy: bool,
 ) -> Result<FlakeOutput> {
@@ -25,7 +27,7 @@ pub async fn eval_flake_output(
         ])
         .args(watcher_tx.is_some().then_some("-v"))
         .args(legacy.then_some("--legacy"))
-        .arg(flake_path)
+        .arg(flake_url)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -61,7 +63,7 @@ pub async fn eval_flake_output(
     ensure!(
         output.status.success(),
         "`nix flake show {}` failed with {}. Stderr:\n{}",
-        flake_path.display(),
+        flake_url,
         output.status,
         error_msg,
     );
@@ -121,7 +123,7 @@ mod tests {
     async fn self_() {
         let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let (tx, rx) = watch::channel(String::new());
-        let output = eval_flake_output("nix".as_ref(), dir.as_ref(), Some(tx), false)
+        let output = eval_flake_output("nix".as_ref(), &FlakeUrl::new_path(dir), Some(tx), false)
             .await
             .unwrap();
         // Even if the system is omitted, the attrpath is still printed in progress.
