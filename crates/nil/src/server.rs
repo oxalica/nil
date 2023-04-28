@@ -285,6 +285,8 @@ impl Server {
 
     fn on_did_close(&mut self, params: DidCloseTextDocumentParams) -> NotifyResult {
         // N.B. Don't clear text here.
+        // `DidCloseTextDocument` means the client ends its maintainance to a file but
+        // not deletes it.
         self.opened_files.remove(&params.text_document.uri);
 
         // Clear diagnostics for closed files.
@@ -321,7 +323,7 @@ impl Server {
 
                 // Clear file states to minimize pollution of the broken state.
                 self.opened_files.remove(&uri);
-                // TODO: Remove the file from Vfs.
+                let _: Result<_, _> = vfs.remove_uri(&uri);
             }
         }
         drop(vfs);
@@ -361,7 +363,7 @@ impl Server {
                     }
                 }
                 FileChangeType::DELETED => {
-                    // TODO: Vfs file removal.
+                    let _: Result<_> = self.vfs.write().unwrap().remove_uri(uri);
                 }
                 _ => continue,
             }

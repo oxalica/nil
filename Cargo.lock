@@ -481,6 +481,7 @@ dependencies = [
  "lsp-types",
  "nix-interop",
  "serde_json",
+ "slab",
  "syntax",
  "text-size",
  "tokio",
