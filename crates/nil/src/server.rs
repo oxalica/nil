@@ -357,7 +357,8 @@ impl Server {
                     "nix flake archive".to_owned(),
                 )
                 .await;
-                let ret = flake_lock::archive(&config.nix_binary)
+                let flake_url = FlakeUrl::new_path(&config.root_path);
+                let ret = flake_lock::archive(&config.nix_binary, &flake_url)
                     .await
                     .and_then(|()| {
                         let missing = missing_paths().collect::<Vec<_>>();

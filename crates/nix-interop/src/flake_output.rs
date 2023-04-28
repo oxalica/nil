@@ -119,28 +119,23 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "requires calling 'nix'"]
-    async fn self_() {
-        let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    #[ignore = "requires calling 'nix' and network access"]
+    async fn eval_outputs() {
+        let flake_url = FlakeUrl::new_path("./tests/test_flake");
         let (tx, rx) = watch::channel(String::new());
-        let output = eval_flake_output("nix".as_ref(), &FlakeUrl::new_path(dir), Some(tx), false)
+        let output = eval_flake_output("nix".as_ref(), &flake_url, Some(tx), false)
             .await
             .unwrap();
         // Even if the system is omitted, the attrpath is still printed in progress.
-        assert_eq!(*rx.borrow(), "packages.x86_64-linux.nil");
+        assert_eq!(*rx.borrow(), "packages.x86_64-linux.hello");
 
         let system = crate::tests::get_nix_system().await;
         let leaf = (|| {
-            output.as_attrset()?["packages"].as_attrset()?[&system].as_attrset()?["nil"].as_leaf()
+            output.as_attrset()?["packages"].as_attrset()?[&system].as_attrset()?["hello"].as_leaf()
         })()
         .unwrap();
         assert_eq!(leaf.type_, Type::Derivation);
-        assert!(leaf.name.as_ref().unwrap().starts_with("nil-unstable-"));
-        assert!(leaf
-            .description
-            .as_ref()
-            .unwrap()
-            .to_lowercase()
-            .contains("language server"));
+        assert_eq!(leaf.name.as_ref().unwrap(), "hello-1.2.3");
+        assert_eq!(leaf.description.as_deref(), Some("A test derivation"));
     }
 }

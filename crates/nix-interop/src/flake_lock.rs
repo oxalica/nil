@@ -14,6 +14,7 @@ use serde_repr::Deserialize_repr;
 use tokio::process::Command;
 
 use crate::eval::nix_eval_expr_json;
+use crate::FlakeUrl;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResolvedInput {
@@ -188,7 +189,7 @@ struct LockedFlakeRef {
 
 // NB. The output of `nix flake archive` doesn't contain followed inputs. We should still use
 // call `resolve_flake_locked_inputs` for all resolved inputs.
-pub async fn archive(nix_command: &Path) -> Result<()> {
+pub async fn archive(nix_command: &Path, flake_url: &FlakeUrl) -> Result<()> {
     let output = Command::new(nix_command)
         .kill_on_drop(true)
         .args([
@@ -198,6 +199,7 @@ pub async fn archive(nix_command: &Path) -> Result<()> {
             "nix-command flakes",
             "--json",
         ])
+        .arg(flake_url)
         .stdin(Stdio::null())
         // Configures stdout/stderr automatically.
         .output()
@@ -206,7 +208,8 @@ pub async fn archive(nix_command: &Path) -> Result<()> {
 
     ensure!(
         output.status.success(),
-        "`nix flake archive` failed with {}. Stderr:\n{}",
+        "`nix flake archive {}` failed with {}. Stderr:\n{}",
+        flake_url,
         output.status,
         String::from_utf8_lossy(&output.stderr),
     );
@@ -220,62 +223,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires calling 'nix'"]
     async fn resolve_flake_lock_inputs() {
-        // {
-        //   inputs.nixpkgs.url = "github:NixOS/nixpkgs/5ed481943351e9fd354aeb557679624224de38d5";
-        //   inputs.flake-utils = {
-        //     url = "github:numtide/flake-utils/5aed5285a952e0b949eb3ba02c12fa4fcfef535f";
-        //     flake = false;
-        //   };
-        //   outputs = { ... }: { };
-        // }
-        let lock_src = br#"
-{
-  "nodes": {
-    "flake-utils": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1667395993,
-        "narHash": "sha256-nuEHfE/LcWyuSWnS8t12N1wc105Qtau+/OdUAjtQ0rA=",
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "5aed5285a952e0b949eb3ba02c12fa4fcfef535f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "5aed5285a952e0b949eb3ba02c12fa4fcfef535f",
-        "type": "github"
-      }
-    },
-    "nixpkgs": {
-      "locked": {
-        "lastModified": 1674211260,
-        "narHash": "sha256-xU6Rv9sgnwaWK7tgCPadV6HhI2Y/fl4lKxJoG2+m9qs=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "5ed481943351e9fd354aeb557679624224de38d5",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "5ed481943351e9fd354aeb557679624224de38d5",
-        "type": "github"
-      }
-    },
-    "root": {
-      "inputs": {
-        "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
-      }
-    }
-  },
-  "root": "root",
-  "version": 7
-}
-        "#;
-        let got = resolve_flake_locked_inputs("nix".as_ref(), lock_src)
+        let lock_src = std::fs::read("./tests/test_flake/flake.lock").unwrap();
+        let got = resolve_flake_locked_inputs("nix".as_ref(), &lock_src)
             .await
             .unwrap();
         let expect = HashMap::from_iter([
@@ -287,9 +236,9 @@ mod tests {
                 },
             ),
             (
-                "flake-utils".to_owned(),
+                "nix".to_owned(),
                 ResolvedInput {
-                    store_path: "/nix/store/sk4ga2wy0b02k7pnzakwq4r3jdknda4g-source".to_owned(),
+                    store_path: "/nix/store/5598lqiaw5qjgn661w74q2a6kivgiksa-source".to_owned(),
                     is_flake: false,
                 },
             ),
@@ -298,8 +247,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires calling 'nix'"]
+    #[ignore = "requires calling 'nix' and network access"]
     async fn archive() {
-        super::archive("nix".as_ref()).await.unwrap();
+        let flake = FlakeUrl::new_path("./tests/test_flake");
+        super::archive("nix".as_ref(), &flake).await.unwrap();
     }
 }

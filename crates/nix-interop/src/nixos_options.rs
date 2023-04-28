@@ -10,6 +10,7 @@ use tokio::process::Command;
 pub async fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<NixosOptions> {
     let nixpkgs_path = nixpkgs_path
         .to_str()
+        .filter(|path| path.starts_with('/'))
         .with_context(|| format!("Invalid path to nixpkgs: {}", nixpkgs_path.display()))?;
 
     let output = Command::new(nix_command)
@@ -159,7 +160,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "requires using 'nix' and 'nixpkgs'"]
+    #[ignore = "requires using 'nix' and '<nixpkgs>'"]
     async fn nixos_options() {
         let output = Command::new("nix")
             .kill_on_drop(true)
