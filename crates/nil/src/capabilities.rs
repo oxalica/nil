@@ -1,7 +1,7 @@
 use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use lsp_types::{
-    ClientCapabilities, CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions,
-    HoverProviderCapability, OneOf, RenameOptions, SelectionRangeProviderCapability,
+    CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions, HoverProviderCapability,
+    InitializeParams, OneOf, RenameOptions, SelectionRangeProviderCapability,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
     SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
@@ -16,8 +16,14 @@ macro_rules! test {
 }
 
 pub(crate) fn negotiate_capabilities(
-    client_caps: &ClientCapabilities,
+    init_params: &InitializeParams,
 ) -> (ServerCapabilities, NegotiatedCapabilities) {
+    let client_caps = &init_params.capabilities;
+    let is_neovim = init_params
+        .client_info
+        .as_ref()
+        .map_or(false, |info| info.name == "Neovim");
+
     let final_caps = NegotiatedCapabilities {
         client_show_message_request: test!(
             client_caps
@@ -34,12 +40,14 @@ pub(crate) fn negotiate_capabilities(
                 .did_change_watched_files
                 .dynamic_registration
         ),
-        watch_files_relative_pattern: test!(
-            client_caps
-                .workspace
-                .did_change_watched_files
-                .relative_pattern_support
-        ),
+        // Workaround: https://github.com/neovim/neovim/issues/23380
+        watch_files_relative_pattern: !is_neovim
+            && test!(
+                client_caps
+                    .workspace
+                    .did_change_watched_files
+                    .relative_pattern_support
+            ),
     };
 
     let server_caps = ServerCapabilities {
