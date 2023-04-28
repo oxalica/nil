@@ -44,6 +44,7 @@ const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
 const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
+const LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION: Duration = Duration::from_millis(100);
 
 type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
@@ -401,6 +402,9 @@ impl Server {
         caps: NegotiatedCapabilities,
         mut client: ClientSocket,
     ) {
+        // Delay the loading to debounce. Later triggers will cancel previous tasks at here.
+        tokio::time::sleep(LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION).await;
+
         tracing::info!("Loading flake workspace");
 
         let flake_info = match Self::load_flake_info(&vfs, &config).await {
