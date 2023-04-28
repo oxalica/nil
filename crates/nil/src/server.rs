@@ -149,7 +149,7 @@ impl Server {
     ) -> impl Future<Output = Result<InitializeResult, ResponseError>> {
         tracing::info!("Init params: {params:?}");
 
-        let (server_caps, final_caps) = negotiate_capabilities(&params.capabilities);
+        let (server_caps, final_caps) = negotiate_capabilities(&params);
         self.capabilities = final_caps;
 
         // TODO: Use `workspaceFolders`.

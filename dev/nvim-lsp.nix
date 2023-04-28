@@ -69,10 +69,14 @@ let
     vim.keymap.set('x', '\\a', function() vim.lsp.buf.code_action() end)
 
     -- https://github.com/neovim/nvim-lspconfig/wiki/Autocompletion
-    local caps = vim.tbl_extend(
-      'keep',
+    -- https://github.com/hrsh7th/cmp-nvim-lsp/issues/42#issuecomment-1283825572
+    local caps = vim.tbl_deep_extend(
+      'force',
       vim.lsp.protocol.make_client_capabilities(),
-      require('cmp_nvim_lsp').default_capabilities()
+      require('cmp_nvim_lsp').default_capabilities(),
+      -- File watching is disabled by default for neovim.
+      -- See: https://github.com/neovim/neovim/pull/22405
+      { workspace = { didChangeWatchedFiles = { dynamicRegistration = true } } }
     );
 
     local lsp_path = vim.env.NIL_PATH or 'target/debug/nil'
