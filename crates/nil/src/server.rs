@@ -22,7 +22,6 @@ use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::{ready, Future};
-use std::io::ErrorKind;
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
 use std::pin::pin;
@@ -30,8 +29,8 @@ use std::sync::{Arc, Once, RwLock};
 use std::time::Duration;
 use std::{fmt, panic};
 use tokio::sync::watch;
+use tokio::task;
 use tokio::task::{AbortHandle, JoinHandle};
-use tokio::{fs, task};
 
 const LSP_SERVER_NAME: &str = "nil";
 const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
@@ -57,6 +56,8 @@ pub struct Server {
     /// Tried to load flake?
     /// This is used to reload flake only once after the configuration is first loaded.
     tried_flake_load: bool,
+    /// Is this workspace a flake?
+    workspace_is_flake: bool,
 
     // Ongoing tasks.
     load_flake_workspace_fut: Option<JoinHandle<()>>,
@@ -123,6 +124,7 @@ impl Server {
             // Will be set during initialization.
             config: Arc::new(Config::new("/non-existing-path".into())),
             tried_flake_load: false,
+            workspace_is_flake: false,
 
             load_flake_workspace_fut: None,
 
@@ -169,8 +171,22 @@ impl Server {
             let _: Result<_, _> = self.client.show_message(msg);
         }
 
+        // Always load flake.{nix,lock} for flake info.
+        for path in [
+            self.config.root_path.join(FLAKE_LOCK_FILE),
+            self.config.root_path.join(FLAKE_FILE),
+        ] {
+            // TODO: Move file loading into a dedicated thread.
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                let url = Url::from_vfs_path(&path.into());
+                self.set_vfs_file_content(&url, text);
+            }
+        }
+
         // Load configurations before loading flake.
         // The latter depends on `nix.binary`.
+        // FIXME: This is still racy since `on_did_open` can also trigger flake reloading and would
+        // read uninitialized configs.
         self.spawn_reload_config();
 
         ControlFlow::Continue(())
@@ -191,6 +207,18 @@ impl Server {
         let uri = params.text_document.uri;
         self.opened_files.insert(uri.clone(), FileData::default());
         self.set_vfs_file_content(&uri, params.text_document.text);
+
+        // We created a new flake.nix
+        if !self.workspace_is_flake
+            && uri
+                .to_file_path()
+                .ok()
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .map_or(false, |name| name == FLAKE_FILE)
+        {
+            self.spawn_load_flake_workspace();
+        }
 
         self.spawn_update_diagnostics(uri);
 
@@ -516,54 +544,30 @@ impl Server {
     async fn load_flake_info(vfs: &RwLock<Vfs>, config: &Config) -> Result<Option<FlakeInfo>> {
         tracing::info!("Loading flake info");
 
-        let flake_path = config.root_path.join(FLAKE_FILE);
-        let lock_path = config.root_path.join(FLAKE_LOCK_FILE);
+        let (flake_file, lock_src) = {
+            let vfs = vfs.read().unwrap();
 
-        let flake_vpath = VfsPath::new(&flake_path);
-        let flake_src = match fs::read_to_string(&flake_path).await {
-            Ok(src) => src,
-            // Not a flake.
-            Err(err) if err.kind() == ErrorKind::NotFound => {
-                return Ok(None);
-            }
-            // Read failure.
-            Err(err) => {
-                return Err(anyhow::Error::new(err)
-                    .context(format!("Failed to read flake root {flake_path:?}")));
-            }
-        };
+            let flake_vpath = VfsPath::new(config.root_path.join(FLAKE_FILE));
+            // We always load flake.nix when initialized. If there's none in Vfs, there's none.
+            let Ok(flake_file) = vfs.file_for_path(&flake_vpath) else { return Ok(None) };
 
-        // Load the flake file in Vfs.
-        let flake_file = {
-            let mut vfs = vfs.write().unwrap();
-            match vfs.file_for_path(&flake_vpath) {
-                // If the file is already opened (transferred from client),
-                // prefer the managed one. It contains more recent unsaved changes.
-                Ok(file) => file,
-                // Otherwise, cache the file content from disk.
-                Err(_) => vfs.set_path_content(flake_vpath, flake_src),
-            }
-        };
-
-        let lock_src = match fs::read(&lock_path).await {
-            Ok(lock_src) => lock_src,
-            // Flake without inputs has no lock file.
-            Err(err) if err.kind() == ErrorKind::NotFound => {
+            let lock_vpath = VfsPath::new(config.root_path.join(FLAKE_LOCK_FILE));
+            let Ok(lock_file) = vfs.file_for_path(&lock_vpath)
+            else {
                 return Ok(Some(FlakeInfo {
                     flake_file,
                     input_store_paths: HashMap::new(),
                     input_flake_outputs: HashMap::new(),
                 }));
-            }
-            Err(err) => {
-                return Err(anyhow::Error::new(err)
-                    .context(format!("Failed to read flake lock {lock_path:?}")));
-            }
+            };
+            let lock_src = vfs.content_for_file(lock_file);
+            (flake_file, lock_src)
         };
 
-        let inputs = flake_lock::resolve_flake_locked_inputs(&config.nix_binary, &lock_src)
-            .await
-            .context("Failed to resolve flake inputs from lock file")?;
+        let inputs =
+            flake_lock::resolve_flake_locked_inputs(&config.nix_binary, lock_src.as_bytes())
+                .await
+                .context("Failed to resolve flake inputs from lock file")?;
 
         // We only need the map for input -> store path.
         let input_store_paths = inputs
@@ -579,6 +583,7 @@ impl Server {
 
     fn on_set_flake_info(&mut self, info: SetFlakeInfoEvent) -> NotifyResult {
         tracing::debug!("Set flake info: {:?}", info.0);
+        self.workspace_is_flake = info.0.is_some();
         self.vfs.write().unwrap().set_flake_info(info.0);
         self.apply_vfs_change();
         ControlFlow::Continue(())
