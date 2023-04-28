@@ -1,4 +1,5 @@
-import { ExtensionContext, services, LanguageClient, workspace } from 'coc.nvim';
+import { ExtensionContext, services, LanguageClient, workspace, commands } from 'coc.nvim';
+import * as lsp_ext from './lsp_ext';
 
 const ROOT_SECTION = 'nil';
 
@@ -16,4 +17,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
   };
   const client = new LanguageClient('nil', 'nil Language Server', serverOptions, clientOptions);
   context.subscriptions.push(services.registLanguageClient(client));
+  context.subscriptions.push(commands.registerCommand('nil.reloadFlake', () => onReloadFlake(client)));
+}
+
+function onReloadFlake(client: LanguageClient) {
+  client.sendNotification(lsp_ext.reloadFlake);
 }

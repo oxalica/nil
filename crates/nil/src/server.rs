@@ -99,6 +99,7 @@ impl Server {
             // > In former implementations clients pushed file events without the server actively asking for it.
             // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
             .notification::<notif::DidChangeWatchedFiles>(Self::on_did_change_watched_files)
+            .notification::<lsp_ext::ReloadFlake>(Self::on_reload_flake)
             //// Requests ////
             .request_snap::<req::GotoDefinition>(handler::goto_definition)
             .request_snap::<req::References>(handler::references)
@@ -379,6 +380,11 @@ impl Server {
             self.spawn_load_flake_workspace();
         }
 
+        ControlFlow::Continue(())
+    }
+
+    fn on_reload_flake(&mut self, (): ()) -> NotifyResult {
+        self.spawn_load_flake_workspace();
         ControlFlow::Continue(())
     }
 

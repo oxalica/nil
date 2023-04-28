@@ -95,6 +95,12 @@
         }
       }
     },
-    "commands": []
+    "commands": [
+      {
+        "command": "nil.reloadFlake",
+        "title": "Reload the flake setup of the workspace",
+        "category": "nil"
+      }
+    ]
   }
 }
