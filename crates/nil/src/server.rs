@@ -26,6 +26,7 @@ use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::{ready, Future};
+use std::io::{ErrorKind, Read};
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
 use std::path::Path;
@@ -352,23 +353,57 @@ impl Server {
         tracing::debug!("Watched files changed: {params:?}");
 
         let mut flake_files_changed = true;
-        for FileEvent { uri, typ } in &params.changes {
+        for &FileEvent { ref uri, mut typ } in &params.changes {
             // Don't reload files maintained by the client.
             if self.opened_files.contains_key(uri) {
                 continue;
             }
             let Ok(path) = uri.to_file_path() else { continue };
-            match *typ {
-                FileChangeType::CREATED | FileChangeType::CHANGED => {
-                    if let Ok(text) = std::fs::read_to_string(&path) {
-                        self.set_vfs_file_content(uri, text);
+
+            if matches!(typ, FileChangeType::CREATED | FileChangeType::CHANGED) {
+                match (|| -> std::io::Result<_> {
+                    #[cfg(unix)]
+                    use rustix::fs::{fcntl_getfl, fcntl_setfl, OFlags, OpenOptionsExt};
+
+                    // Rule out non-regular files which may block `open()` infinitely
+                    // (eg. FIFO). We open it with `O_NONBLOCK` and check it before reading.
+                    let mut options = std::fs::File::options();
+                    options.read(true);
+                    #[cfg(unix)]
+                    options.custom_flags(OFlags::NONBLOCK.bits() as _);
+
+                    let mut file = options.open(&path)?;
+                    let ft = file.metadata()?.file_type();
+                    if !ft.is_file() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("non-regular file type: {ft:?}"),
+                        ));
                     }
+
+                    // Remove the O_NONBLOCK flag for blocking read.
+                    #[cfg(unix)]
+                    {
+                        let flags = fcntl_getfl(&file)? - OFlags::NONBLOCK;
+                        fcntl_setfl(&file, flags)?;
+                    }
+
+                    let mut buf = String::new();
+                    file.read_to_string(&mut buf)?;
+                    Ok(buf)
+                })() {
+                    Ok(text) => self.set_vfs_file_content(uri, text),
+                    Err(err) if matches!(err.kind(), ErrorKind::NotFound) => {
+                        // File gets removed at the time calling `open()`.
+                        typ = FileChangeType::DELETED;
+                    }
+                    Err(err) => tracing::error!("Ignore file {path:?}: {err}"),
                 }
-                FileChangeType::DELETED => {
-                    let _: Result<_> = self.vfs.write().unwrap().remove_uri(uri);
-                }
-                _ => continue,
             }
+            if typ == FileChangeType::DELETED {
+                let _: Result<_> = self.vfs.write().unwrap().remove_uri(uri);
+            }
+
             if let Ok(relative) = path.strip_prefix(&self.config.root_path) {
                 if relative == Path::new(FLAKE_FILE) || relative == Path::new(FLAKE_LOCK_FILE) {
                     flake_files_changed = true;
