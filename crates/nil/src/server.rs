@@ -41,6 +41,7 @@ use tokio::task::{AbortHandle, JoinHandle};
 const LSP_SERVER_NAME: &str = "nil";
 const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
 const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
+const LOAD_NIXOS_OPTIONS_PROGRESS_TOKEN: &str = "nil/loadNixosOptionsProgress";
 
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
@@ -556,6 +557,15 @@ impl Server {
             .filter(|path| path.exists())
         {
             tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
+
+            let _progress = Progress::new(
+                &client,
+                &caps,
+                LOAD_NIXOS_OPTIONS_PROGRESS_TOKEN,
+                "Loading NixOS options",
+                None,
+            )
+            .await;
 
             let ret = nixos_options::eval_all_options(&config.nix_binary, nixpkgs_path)
                 .await
