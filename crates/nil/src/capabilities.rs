@@ -1,7 +1,7 @@
 use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 use lsp_types::{
-    ClientCapabilities, CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions,
-    HoverProviderCapability, OneOf, RenameOptions, SelectionRangeProviderCapability,
+    CodeActionProviderCapability, CompletionOptions, DocumentLinkOptions, HoverProviderCapability,
+    InitializeParams, OneOf, RenameOptions, SelectionRangeProviderCapability,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
     SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
     TextDocumentSyncKind, TextDocumentSyncOptions, WorkDoneProgressOptions,
@@ -16,8 +16,14 @@ macro_rules! test {
 }
 
 pub(crate) fn negotiate_capabilities(
-    client_caps: &ClientCapabilities,
+    init_params: &InitializeParams,
 ) -> (ServerCapabilities, NegotiatedCapabilities) {
+    let client_caps = &init_params.capabilities;
+    let is_neovim = init_params
+        .client_info
+        .as_ref()
+        .map_or(false, |info| info.name == "Neovim");
+
     let final_caps = NegotiatedCapabilities {
         client_show_message_request: test!(
             client_caps
@@ -28,6 +34,20 @@ pub(crate) fn negotiate_capabilities(
                 .additional_properties_support
         ),
         server_initiated_progress: test!(client_caps.window.work_done_progress),
+        watch_files: test!(
+            client_caps
+                .workspace
+                .did_change_watched_files
+                .dynamic_registration
+        ),
+        // Workaround: https://github.com/neovim/neovim/issues/23380
+        watch_files_relative_pattern: !is_neovim
+            && test!(
+                client_caps
+                    .workspace
+                    .did_change_watched_files
+                    .relative_pattern_support
+            ),
     };
 
     let server_caps = ServerCapabilities {
@@ -81,4 +101,6 @@ pub(crate) fn negotiate_capabilities(
 pub(crate) struct NegotiatedCapabilities {
     pub client_show_message_request: bool,
     pub server_initiated_progress: bool,
+    pub watch_files: bool,
+    pub watch_files_relative_pattern: bool,
 }

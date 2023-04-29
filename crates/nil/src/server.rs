@@ -5,13 +5,17 @@ use anyhow::{bail, ensure, Context, Result};
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, ErrorCode, LanguageClient, ResponseError};
 use ide::{Analysis, AnalysisHost, Cancelled, FlakeInfo, VfsPath};
+use lsp_types::notification::Notification;
 use lsp_types::request::{self as req, Request};
 use lsp_types::{
     notification as notif, ConfigurationItem, ConfigurationParams, DidChangeConfigurationParams,
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+    DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
+    DidChangeWatchedFilesRegistrationOptions, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, FileChangeType, FileEvent, FileSystemWatcher, GlobPattern,
     InitializeParams, InitializeResult, InitializedParams, MessageActionItem,
-    MessageActionItemProperty, MessageType, NumberOrString, ProgressParams, ProgressParamsValue,
-    PublishDiagnosticsParams, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
+    MessageActionItemProperty, MessageType, NumberOrString, OneOf, ProgressParams,
+    ProgressParamsValue, PublishDiagnosticsParams, Registration, RegistrationParams,
+    RelativePattern, ServerInfo, ShowMessageParams, ShowMessageRequestParams, Url,
     WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
     WorkDoneProgressReport,
 };
@@ -22,16 +26,17 @@ use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::{ready, Future};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::ops::ControlFlow;
 use std::panic::UnwindSafe;
+use std::path::Path;
 use std::pin::pin;
 use std::sync::{Arc, Once, RwLock};
 use std::time::Duration;
 use std::{fmt, panic};
 use tokio::sync::watch;
+use tokio::task;
 use tokio::task::{AbortHandle, JoinHandle};
-use tokio::{fs, task};
 
 const LSP_SERVER_NAME: &str = "nil";
 const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
@@ -40,6 +45,7 @@ const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
 
 const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
+const LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION: Duration = Duration::from_millis(100);
 
 type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
@@ -57,6 +63,8 @@ pub struct Server {
     /// Tried to load flake?
     /// This is used to reload flake only once after the configuration is first loaded.
     tried_flake_load: bool,
+    /// Is this workspace a flake?
+    workspace_is_flake: bool,
 
     // Ongoing tasks.
     load_flake_workspace_fut: Option<JoinHandle<()>>,
@@ -88,10 +96,11 @@ impl Server {
             .notification::<notif::DidCloseTextDocument>(Self::on_did_close)
             .notification::<notif::DidChangeTextDocument>(Self::on_did_change)
             .notification::<notif::DidChangeConfiguration>(Self::on_did_change_configuration)
-            // Workaround:
+            // NB. This handler is mandatory.
             // > In former implementations clients pushed file events without the server actively asking for it.
             // Ref: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_didChangeWatchedFiles
-            .notification::<notif::DidChangeWatchedFiles>(|_, _| ControlFlow::Continue(()))
+            .notification::<notif::DidChangeWatchedFiles>(Self::on_did_change_watched_files)
+            .notification::<lsp_ext::ReloadFlake>(Self::on_reload_flake)
             //// Requests ////
             .request_snap::<req::GotoDefinition>(handler::goto_definition)
             .request_snap::<req::References>(handler::references)
@@ -111,7 +120,9 @@ impl Server {
             //// Events ////
             .event(Self::on_set_flake_info)
             .event(Self::on_set_nixos_options)
-            .event(Self::on_update_config);
+            .event(Self::on_update_config)
+            // Loopback event.
+            .event(Self::on_did_change_watched_files);
         router
     }
 
@@ -123,6 +134,7 @@ impl Server {
             // Will be set during initialization.
             config: Arc::new(Config::new("/non-existing-path".into())),
             tried_flake_load: false,
+            workspace_is_flake: false,
 
             load_flake_workspace_fut: None,
 
@@ -139,7 +151,7 @@ impl Server {
     ) -> impl Future<Output = Result<InitializeResult, ResponseError>> {
         tracing::info!("Init params: {params:?}");
 
-        let (server_caps, final_caps) = negotiate_capabilities(&params.capabilities);
+        let (server_caps, final_caps) = negotiate_capabilities(&params);
         self.capabilities = final_caps;
 
         // TODO: Use `workspaceFolders`.
@@ -171,9 +183,74 @@ impl Server {
 
         // Load configurations before loading flake.
         // The latter depends on `nix.binary`.
+        // FIXME: This is still racy since `on_did_open` can also trigger flake reloading and would
+        // read uninitialized configs.
         self.spawn_reload_config();
 
+        // Make a virtual event to trigger loading of flake files for flake info.
+        let flake_files_changed_event = DidChangeWatchedFilesParams {
+            changes: [FLAKE_LOCK_FILE, FLAKE_FILE]
+                .into_iter()
+                .map(|name| {
+                    let uri = Url::from_file_path(self.config.root_path.join(name))
+                        .expect("Root must be absolute");
+                    let typ = FileChangeType::CREATED;
+                    FileEvent { uri, typ }
+                })
+                .collect(),
+        };
+        if self.capabilities.watch_files {
+            tokio::spawn({
+                let config = self.config.clone();
+                let caps = self.capabilities.clone();
+                let mut client = self.client.clone();
+                async move {
+                    Self::register_watched_files(&config, &caps, &mut client).await;
+                    let _: Result<_, _> = client.emit(flake_files_changed_event);
+                }
+            });
+        } else {
+            self.on_did_change_watched_files(flake_files_changed_event)?;
+        }
+
         ControlFlow::Continue(())
+    }
+
+    async fn register_watched_files(
+        config: &Config,
+        caps: &NegotiatedCapabilities,
+        client: &mut ClientSocket,
+    ) {
+        let to_watcher = |pat: &str| FileSystemWatcher {
+            glob_pattern: if caps.watch_files_relative_pattern {
+                let root_uri = Url::from_file_path(&config.root_path).expect("Must be absolute");
+                GlobPattern::Relative(RelativePattern {
+                    base_uri: OneOf::Right(root_uri),
+                    pattern: pat.into(),
+                })
+            } else {
+                GlobPattern::String(format!("{}/{}", config.root_path.display(), pat))
+            },
+            // All events.
+            kind: None,
+        };
+        let register_options = DidChangeWatchedFilesRegistrationOptions {
+            watchers: [FLAKE_LOCK_FILE, FLAKE_FILE].map(to_watcher).into(),
+        };
+        let params = RegistrationParams {
+            registrations: vec![Registration {
+                id: notif::DidChangeWatchedFiles::METHOD.into(),
+                method: notif::DidChangeWatchedFiles::METHOD.into(),
+                register_options: Some(serde_json::to_value(register_options).unwrap()),
+            }],
+        };
+        if let Err(err) = client.register_capability(params).await {
+            client.show_message_ext(
+                MessageType::ERROR,
+                format!("Failed to watch flake files: {err:#}"),
+            );
+        }
+        tracing::info!("Registered file watching for flake files");
     }
 
     fn on_did_open(&mut self, params: DidOpenTextDocumentParams) -> NotifyResult {
@@ -192,6 +269,18 @@ impl Server {
         self.opened_files.insert(uri.clone(), FileData::default());
         self.set_vfs_file_content(&uri, params.text_document.text);
 
+        // We created a new flake.nix
+        if !self.workspace_is_flake
+            && uri
+                .to_file_path()
+                .ok()
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .map_or(false, |name| name == FLAKE_FILE)
+        {
+            self.spawn_load_flake_workspace();
+        }
+
         self.spawn_update_diagnostics(uri);
 
         ControlFlow::Continue(())
@@ -199,6 +288,8 @@ impl Server {
 
     fn on_did_close(&mut self, params: DidCloseTextDocumentParams) -> NotifyResult {
         // N.B. Don't clear text here.
+        // `DidCloseTextDocument` means the client ends its maintainance to a file but
+        // not deletes it.
         self.opened_files.remove(&params.text_document.uri);
 
         // Clear diagnostics for closed files.
@@ -235,7 +326,7 @@ impl Server {
 
                 // Clear file states to minimize pollution of the broken state.
                 self.opened_files.remove(&uri);
-                // TODO: Remove the file from Vfs.
+                let _: Result<_, _> = vfs.remove_uri(&uri);
             }
         }
         drop(vfs);
@@ -255,6 +346,80 @@ impl Server {
         // As stated in https://github.com/microsoft/language-server-protocol/issues/676,
         // this notification's parameters should be ignored and the actual config queried separately.
         self.spawn_reload_config();
+        ControlFlow::Continue(())
+    }
+
+    fn on_did_change_watched_files(&mut self, params: DidChangeWatchedFilesParams) -> NotifyResult {
+        tracing::debug!("Watched files changed: {params:?}");
+
+        let mut flake_files_changed = true;
+        for &FileEvent { ref uri, mut typ } in &params.changes {
+            // Don't reload files maintained by the client.
+            if self.opened_files.contains_key(uri) {
+                continue;
+            }
+            let Ok(path) = uri.to_file_path() else { continue };
+
+            if matches!(typ, FileChangeType::CREATED | FileChangeType::CHANGED) {
+                match (|| -> std::io::Result<_> {
+                    #[cfg(unix)]
+                    use rustix::fs::{fcntl_getfl, fcntl_setfl, OFlags, OpenOptionsExt};
+
+                    // Rule out non-regular files which may block `open()` infinitely
+                    // (eg. FIFO). We open it with `O_NONBLOCK` and check it before reading.
+                    let mut options = std::fs::File::options();
+                    options.read(true);
+                    #[cfg(unix)]
+                    options.custom_flags(OFlags::NONBLOCK.bits() as _);
+
+                    let mut file = options.open(&path)?;
+                    let ft = file.metadata()?.file_type();
+                    if !ft.is_file() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("non-regular file type: {ft:?}"),
+                        ));
+                    }
+
+                    // Remove the O_NONBLOCK flag for blocking read.
+                    #[cfg(unix)]
+                    {
+                        let flags = fcntl_getfl(&file)? - OFlags::NONBLOCK;
+                        fcntl_setfl(&file, flags)?;
+                    }
+
+                    let mut buf = String::new();
+                    file.read_to_string(&mut buf)?;
+                    Ok(buf)
+                })() {
+                    Ok(text) => self.set_vfs_file_content(uri, text),
+                    Err(err) if matches!(err.kind(), ErrorKind::NotFound) => {
+                        // File gets removed at the time calling `open()`.
+                        typ = FileChangeType::DELETED;
+                    }
+                    Err(err) => tracing::error!("Ignore file {path:?}: {err}"),
+                }
+            }
+            if typ == FileChangeType::DELETED {
+                let _: Result<_> = self.vfs.write().unwrap().remove_uri(uri);
+            }
+
+            if let Ok(relative) = path.strip_prefix(&self.config.root_path) {
+                if relative == Path::new(FLAKE_FILE) || relative == Path::new(FLAKE_LOCK_FILE) {
+                    flake_files_changed = true;
+                }
+            }
+        }
+
+        if flake_files_changed {
+            self.spawn_load_flake_workspace();
+        }
+
+        ControlFlow::Continue(())
+    }
+
+    fn on_reload_flake(&mut self, (): ()) -> NotifyResult {
+        self.spawn_load_flake_workspace();
         ControlFlow::Continue(())
     }
 
@@ -278,6 +443,9 @@ impl Server {
         caps: NegotiatedCapabilities,
         mut client: ClientSocket,
     ) {
+        // Delay the loading to debounce. Later triggers will cancel previous tasks at here.
+        tokio::time::sleep(LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION).await;
+
         tracing::info!("Loading flake workspace");
 
         let flake_info = match Self::load_flake_info(&vfs, &config).await {
@@ -516,54 +684,30 @@ impl Server {
     async fn load_flake_info(vfs: &RwLock<Vfs>, config: &Config) -> Result<Option<FlakeInfo>> {
         tracing::info!("Loading flake info");
 
-        let flake_path = config.root_path.join(FLAKE_FILE);
-        let lock_path = config.root_path.join(FLAKE_LOCK_FILE);
+        let (flake_file, lock_src) = {
+            let vfs = vfs.read().unwrap();
 
-        let flake_vpath = VfsPath::new(&flake_path);
-        let flake_src = match fs::read_to_string(&flake_path).await {
-            Ok(src) => src,
-            // Not a flake.
-            Err(err) if err.kind() == ErrorKind::NotFound => {
-                return Ok(None);
-            }
-            // Read failure.
-            Err(err) => {
-                return Err(anyhow::Error::new(err)
-                    .context(format!("Failed to read flake root {flake_path:?}")));
-            }
-        };
+            let flake_vpath = VfsPath::new(config.root_path.join(FLAKE_FILE));
+            // We always load flake.nix when initialized. If there's none in Vfs, there's none.
+            let Ok(flake_file) = vfs.file_for_path(&flake_vpath) else { return Ok(None) };
 
-        // Load the flake file in Vfs.
-        let flake_file = {
-            let mut vfs = vfs.write().unwrap();
-            match vfs.file_for_path(&flake_vpath) {
-                // If the file is already opened (transferred from client),
-                // prefer the managed one. It contains more recent unsaved changes.
-                Ok(file) => file,
-                // Otherwise, cache the file content from disk.
-                Err(_) => vfs.set_path_content(flake_vpath, flake_src),
-            }
-        };
-
-        let lock_src = match fs::read(&lock_path).await {
-            Ok(lock_src) => lock_src,
-            // Flake without inputs has no lock file.
-            Err(err) if err.kind() == ErrorKind::NotFound => {
+            let lock_vpath = VfsPath::new(config.root_path.join(FLAKE_LOCK_FILE));
+            let Ok(lock_file) = vfs.file_for_path(&lock_vpath)
+            else {
                 return Ok(Some(FlakeInfo {
                     flake_file,
                     input_store_paths: HashMap::new(),
                     input_flake_outputs: HashMap::new(),
                 }));
-            }
-            Err(err) => {
-                return Err(anyhow::Error::new(err)
-                    .context(format!("Failed to read flake lock {lock_path:?}")));
-            }
+            };
+            let lock_src = vfs.content_for_file(lock_file);
+            (flake_file, lock_src)
         };
 
-        let inputs = flake_lock::resolve_flake_locked_inputs(&config.nix_binary, &lock_src)
-            .await
-            .context("Failed to resolve flake inputs from lock file")?;
+        let inputs =
+            flake_lock::resolve_flake_locked_inputs(&config.nix_binary, lock_src.as_bytes())
+                .await
+                .context("Failed to resolve flake inputs from lock file")?;
 
         // We only need the map for input -> store path.
         let input_store_paths = inputs
@@ -579,6 +723,7 @@ impl Server {
 
     fn on_set_flake_info(&mut self, info: SetFlakeInfoEvent) -> NotifyResult {
         tracing::debug!("Set flake info: {:?}", info.0);
+        self.workspace_is_flake = info.0.is_some();
         self.vfs.write().unwrap().set_flake_info(info.0);
         self.apply_vfs_change();
         ControlFlow::Continue(())
@@ -645,7 +790,6 @@ impl Server {
         // If this is the first load, load the flake workspace, which depends on `nix.binary`.
         if !self.tried_flake_load {
             self.tried_flake_load = true;
-            // TODO: Register file watcher for flake.lock.
             self.spawn_load_flake_workspace();
         }
 

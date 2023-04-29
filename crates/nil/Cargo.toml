@@ -16,9 +16,10 @@ log = "0.4.17"
 lsp-types = "0.94.0"
 nix-interop = { path = "../nix-interop" }
 serde_json = "1.0.82"
+slab = "0.4.8"
 syntax = { path = "../syntax" }
 text-size = "1.1.0"
-tokio = { version = "1.27.0", features = ["fs", "io-std", "macros", "rt", "sync"] }
+tokio = { version = "1.27.0", features = ["io-std", "macros", "rt", "sync", "time"] }
 tower = "0.4.13"
 tracing = { version = "0.1.36", features = ["release_max_level_info"] }
 
@@ -33,5 +34,5 @@ features = [
     "tracing-log",
 ]
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2.137"
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "0.37.17", default-features = false, features = ["fs"] }
