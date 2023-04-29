@@ -34,5 +34,5 @@ features = [
     "tracing-log",
 ]
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2.137"
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "0.37.17", default-features = false, features = ["fs"] }
