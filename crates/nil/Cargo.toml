@@ -8,7 +8,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1.0.68"
 argh = "0.1.10"
-async-lsp = { git = "https://github.com/oxalica/async-lsp.git" }
+async-lsp = "0.0.4"
 atty = "0.2.14"
 codespan-reporting = "0.11.1"
 ide = { path = "../ide" }

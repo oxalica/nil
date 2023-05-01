@@ -26,7 +26,7 @@ rec {
 
           cargoLock = {
             lockFile = ./Cargo.lock;
-            allowBuiltinFetchGit = true;
+            allowBuiltinFetchGit = false;
           };
 
           nativeBuildInputs = [ nix.out ];
