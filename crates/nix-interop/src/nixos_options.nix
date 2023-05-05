@@ -163,5 +163,6 @@ let
       (mapAttrs (_: normalizeOptions) opts);
 
 in
-  normalizeOptionSet
-    eval.options
+  if builtins.compareVersions trivial.release "23.05" >= 0
+  then normalizeOptionSet eval.options
+  else { }
