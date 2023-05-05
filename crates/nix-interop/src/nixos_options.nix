@@ -6,9 +6,23 @@ let
   lib = import (nixpkgs + "/lib");
   modulePath = nixpkgs + "/nixos/modules";
 
-  inherit (builtins) filter mapAttrs isPath isFunction functionArgs;
+  inherit (builtins) isString filter mapAttrs isPath isFunction functionArgs;
   inherit (lib) evalModules trivial optionals filterAttrs;
-  inherit (lib.options) unknownModule renderOptionValue;
+  inherit (lib.options) unknownModule literalExpression;
+
+  # Polyfill for < 23.05
+  renderOptionValue = lib.options.renderOptionValue or (v:
+    if v ? _type && v ? text then v
+    else literalExpression (lib.generators.toPretty {
+      multiline = true;
+      allowPrettyValues = true;
+    } v));
+
+  # Special tranfrom for < 23.05
+  renderDoc = v:
+    if isString v
+    then { _type = "mkDoc"; text = v; }
+    else v;
 
   # Dummy `pkgs`.
   pkgs = import (nixpkgs + "/pkgs/pkgs-lib") {
@@ -127,7 +141,7 @@ let
     submoduleVisible = visible && (opt.visible or true == true);
 
     opt' = {
-      description = opt.description or null;
+      description = renderDoc (opt.description or null);
       declarations = filter (x: x != unknownModule) opt.declarations;
       readOnly = opt.readOnly or false;
       type = normalizeType submoduleVisible opt.type;
@@ -163,6 +177,6 @@ let
       (mapAttrs (_: normalizeOptions) opts);
 
 in
-  if builtins.compareVersions trivial.release "23.05" >= 0
+  if builtins.compareVersions trivial.release "22.11" >= 0
   then normalizeOptionSet eval.options
   else { }
