@@ -157,30 +157,42 @@ pub enum Ty {
 
 #[cfg(test)]
 mod tests {
+    use tokio::sync::OnceCell;
+
+    use crate::FlakeUrl;
+
     use super::*;
 
-    #[tokio::test]
-    #[ignore = "requires using 'nix' and '<nixpkgs>'"]
-    async fn nixos_options() {
-        let output = Command::new("nix")
-            .kill_on_drop(true)
-            .args([
-                "eval",
-                "--experimental-features",
-                "nix-command",
-                "--impure",
-                "--expr",
-                "<nixpkgs>",
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .output()
+    async fn check_nixpkgs(name: &str) {
+        static LOCKED: OnceCell<serde_json::Value> = OnceCell::const_new();
+
+        let nixpkgs_path = LOCKED
+            .get_or_init(|| async {
+                let output = Command::new("nix")
+                    .kill_on_drop(true)
+                    .args([
+                        "flake",
+                        "archive",
+                        "--experimental-features",
+                        "nix-command flakes",
+                        "--json",
+                    ])
+                    .arg(FlakeUrl::new_path("./tests/nixpkgs_revs"))
+                    .stdin(Stdio::null())
+                    // Configures stdout/stderr automatically.
+                    .output()
+                    .await
+                    .unwrap();
+                serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+            })
             .await
-            .unwrap();
-        assert!(output.status.success());
-        let nixpkgs_path = String::from_utf8(output.stdout).unwrap();
-        let opts = eval_all_options("nix".as_ref(), nixpkgs_path.trim().as_ref())
+            .pointer(&format!("/inputs/{name}/path"))
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        let opts = eval_all_options("nix".as_ref(), nixpkgs_path.as_ref())
             .await
             .unwrap();
 
@@ -192,5 +204,17 @@ mod tests {
             &opt.description,
             Some(Doc::Markdown { text }) if text.starts_with("Whether to enable Nix.")
         ));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires using 'nix' and network"]
+    async fn nixos_unstable() {
+        check_nixpkgs("nixos-unstable").await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires using 'nix' and '<nixpkgs>'"]
+    async fn nixos_22_11() {
+        check_nixpkgs("nixos-22-11").await;
     }
 }

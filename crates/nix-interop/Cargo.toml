@@ -14,4 +14,4 @@ syntax = { path = "../syntax" }
 tokio = { version = "1.27.0", features = ["io-util", "macros", "process", "sync"] }
 
 [dev-dependencies]
-tokio = { version = "1.27.0", features = ["macros", "rt", "sync"] }
+tokio = { version = "1.27.0", features = ["macros", "parking_lot", "rt", "sync"] } # parking_lot is required for `OnceCell::const_new`.
