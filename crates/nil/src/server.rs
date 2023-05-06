@@ -477,43 +477,47 @@ impl Server {
                 missing_paths().collect::<Vec<_>>()
             );
 
-            let do_fetch = if !caps.client_show_message_request {
-                client.show_message_ext(
-                    MessageType::WARNING,
-                    "\
-                    Some flake inputs are not available, please run `nix flake archive` to fetch them. \n\
-                    Your LSP client doesn't support confirmation. You can enable auto-fetch in configurations.\
-                    ",
-                );
-                false
-            } else {
-                let ret = client
-                    .show_message_request(ShowMessageRequestParams {
-                        typ: MessageType::INFO,
-                        message: "\
+            let do_fetch = match config.nix_flake_auto_archive {
+                Some(do_fetch) => do_fetch,
+                None if caps.client_show_message_request => {
+                    let ret = client
+                        .show_message_request(ShowMessageRequestParams {
+                            typ: MessageType::INFO,
+                            message: "\
                             Some flake inputs are not available. Fetch them now? \n\
                             You can enable auto-fetch in configurations.\
                         "
-                        .into(),
-                        actions: Some(vec![
-                            MessageActionItem {
-                                title: "Fetch".into(),
-                                properties: [(
-                                    // Matches below.
-                                    "ok".into(),
-                                    MessageActionItemProperty::Boolean(true),
-                                )]
-                                .into(),
-                            },
-                            MessageActionItem {
-                                title: "Ignore missing ones".into(),
-                                properties: HashMap::new(),
-                            },
-                        ]),
-                    })
-                    .await;
-                // Matches above.
-                matches!(ret, Ok(Some(item)) if item.properties.contains_key("ok"))
+                            .into(),
+                            actions: Some(vec![
+                                MessageActionItem {
+                                    title: "Fetch".into(),
+                                    properties: [(
+                                        // Matches below.
+                                        "ok".into(),
+                                        MessageActionItemProperty::Boolean(true),
+                                    )]
+                                    .into(),
+                                },
+                                MessageActionItem {
+                                    title: "Ignore missing ones".into(),
+                                    properties: HashMap::new(),
+                                },
+                            ]),
+                        })
+                        .await;
+                    // Matches above.
+                    matches!(ret, Ok(Some(item)) if item.properties.contains_key("ok"))
+                }
+                None => {
+                    client.show_message_ext(
+                        MessageType::WARNING,
+                        "\
+                        Some flake inputs are not available, please run `nix flake archive` to fetch them. \n\
+                        Your LSP client doesn't support confirmation. You can enable auto-fetch in configurations.\
+                        ",
+                    );
+                    false
+                }
             };
 
             if do_fetch {

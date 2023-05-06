@@ -45,6 +45,16 @@ Default configuration:
       // Type: string
       // Example: "/run/current-system/sw/bin/nix"
       "binary": "nix",
+      "flake": {
+        // Auto-archiving behavior which may use network.
+        //
+        // - null: Ask every time.
+        // - true: Automaticaly run `nix flake archive` when necessary.
+        // - false: Do not archive. Only load inputs that are already on disk.
+        // Type: null | boolean
+        // Example: true,
+        "autoArchive": null,
+      },
     },
   },
 }

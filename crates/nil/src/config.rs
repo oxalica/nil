@@ -12,6 +12,7 @@ pub struct Config {
     pub diagnostics_ignored: HashSet<String>,
     pub formatting_command: Option<Vec<String>>,
     pub nix_binary: PathBuf,
+    pub nix_flake_auto_archive: Option<bool>,
 }
 
 impl Config {
@@ -23,6 +24,7 @@ impl Config {
             diagnostics_ignored: HashSet::new(),
             formatting_command: None,
             nix_binary: "nix".into(),
+            nix_flake_auto_archive: None,
         }
     }
 
@@ -80,6 +82,17 @@ impl Config {
                 }
                 Err(e) => {
                     errors.push(format!("Invalid value of `nix.binary`: {e}"));
+                }
+            }
+        }
+
+        if let Some(v) = value.pointer_mut("/nix/flake/autoArchive") {
+            match serde_json::from_value::<Option<bool>>(v.take()) {
+                Ok(value) => {
+                    self.nix_flake_auto_archive = value;
+                }
+                Err(e) => {
+                    errors.push(format!("Invalid value of `nix.flake.autoArchive`: {e}"));
                 }
             }
         }
