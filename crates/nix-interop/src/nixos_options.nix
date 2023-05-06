@@ -3,10 +3,12 @@
 # - nixos/lib/make-options-doc/default.nix
 nixpkgs:
 let
-  lib = import (nixpkgs + "/lib");
+  libPath = nixpkgs + "/lib";
+  lib = import libPath;
   modulePath = nixpkgs + "/nixos/modules";
+  moduleListPath = modulePath + "/module-list.nix";
 
-  inherit (builtins) isString filter mapAttrs isPath isFunction functionArgs;
+  inherit (builtins) isString filter mapAttrs isPath isFunction functionArgs pathExists;
   inherit (lib) evalModules trivial optionals filterAttrs;
   inherit (lib.options) unknownModule literalExpression;
 
@@ -34,9 +36,7 @@ let
     pkgs = null;
   };
 
-  modules =
-    (filter canCacheDocs
-      (import (modulePath + "/module-list.nix")));
+  modules = filter canCacheDocs (import moduleListPath);
 
   # From `nixos/modules/misc/documentation.nix`.
   canCacheDocs = m:
@@ -177,6 +177,7 @@ let
       (mapAttrs (_: normalizeOptions) opts);
 
 in
-  if builtins.compareVersions trivial.release "22.11" >= 0
+  if pathExists libPath && pathExists moduleListPath
+    && builtins.compareVersions trivial.release "22.11" >= 0
   then normalizeOptionSet eval.options
   else { }
