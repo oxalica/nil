@@ -13,6 +13,8 @@ pub struct Config {
     pub formatting_command: Option<Vec<String>>,
     pub nix_binary: PathBuf,
     pub nix_flake_auto_archive: Option<bool>,
+    pub nix_flake_auto_eval_inputs: bool,
+    pub nix_flake_nixpkgs_input_name: Option<String>,
 }
 
 impl Config {
@@ -25,6 +27,8 @@ impl Config {
             formatting_command: None,
             nix_binary: "nix".into(),
             nix_flake_auto_archive: None,
+            nix_flake_auto_eval_inputs: true,
+            nix_flake_nixpkgs_input_name: Some("nixpkgs".into()),
         }
     }
 
@@ -93,6 +97,30 @@ impl Config {
                 }
                 Err(e) => {
                     errors.push(format!("Invalid value of `nix.flake.autoArchive`: {e}"));
+                }
+            }
+        }
+
+        if let Some(v) = value.pointer_mut("/nix/flake/autoEvalInputs") {
+            match serde_json::from_value::<bool>(v.take()) {
+                Ok(value) => {
+                    self.nix_flake_auto_eval_inputs = value;
+                }
+                Err(e) => {
+                    errors.push(format!("Invalid value of `nix.flake.autoArchive`: {e}"));
+                }
+            }
+        }
+
+        if let Some(v) = value.pointer_mut("/nix/flake/nixpkgsInputName") {
+            match serde_json::from_value::<Option<String>>(v.take()) {
+                Ok(value) => {
+                    self.nix_flake_nixpkgs_input_name = value;
+                }
+                Err(e) => {
+                    errors.push(format!(
+                        "Invalid value of `nix.flake.nixpkgsInputName`: {e}"
+                    ));
                 }
             }
         }

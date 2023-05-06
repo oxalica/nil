@@ -52,8 +52,25 @@ Default configuration:
         // - true: Automaticaly run `nix flake archive` when necessary.
         // - false: Do not archive. Only load inputs that are already on disk.
         // Type: null | boolean
-        // Example: true,
+        // Example: true
         "autoArchive": null,
+        // Whether to auto-eval flake inputs.
+        // The evaluation result is used to improve completion, but may cost
+        // lots of time and/or memory.
+        //
+        // Type: boolean
+        // Example: false
+        "autoEvalInputs": true,
+        // The input name of nixpkgs for NixOS options evaluation.
+        //
+        // The options hierarchy is used to improve completion, but may cost
+        // lots of time and/or memory.
+        // If this value is `null` or is not found in the workspace flake's
+        // inputs, NixOS options are not evaluated.
+        //
+        // Type: null | string
+        // Example: "nixos"
+        "nixpkgsInputName": "nixpkgs",
       },
     },
   },

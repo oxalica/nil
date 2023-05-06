@@ -43,8 +43,6 @@ const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
 const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 const LOAD_NIXOS_OPTIONS_PROGRESS_TOKEN: &str = "nil/loadNixosOptionsProgress";
 
-const NIXOS_OPTIONS_FLAKE_INPUT: &str = "nixpkgs";
-
 const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
 const LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION: Duration = Duration::from_millis(100);
 
@@ -553,20 +551,22 @@ impl Server {
             }
         }
 
-        // TODO: A better way to retrieve the nixpkgs for options?
-        if let Some(nixpkgs_path) = flake_info
-            .input_store_paths
-            .get(NIXOS_OPTIONS_FLAKE_INPUT)
-            .and_then(VfsPath::as_path)
-            .filter(|path| path.exists())
-        {
+        if let Some((input_name, nixpkgs_path)) = (|| {
+            let input_name = config.nix_flake_nixpkgs_input_name.as_ref()?;
+            let path = flake_info
+                .input_store_paths
+                .get(input_name)?
+                .as_path()
+                .filter(|p| p.exists())?;
+            Some((input_name, path))
+        })() {
             tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
 
             let _progress = Progress::new(
                 &client,
                 &caps,
                 LOAD_NIXOS_OPTIONS_PROGRESS_TOKEN,
-                "Loading NixOS options",
+                format!("Loading NixOS options from '{input_name}'"),
                 None,
             )
             .await;
@@ -587,7 +587,9 @@ impl Server {
             }
         }
 
-        Self::load_input_flakes(flake_info, &config, &caps, &mut client).await;
+        if config.nix_flake_auto_eval_inputs {
+            Self::load_input_flakes(flake_info, &config, &caps, &mut client).await;
+        }
     }
 
     async fn load_input_flakes(
