@@ -59,8 +59,8 @@ Default configuration:
         // lots of time and/or memory.
         //
         // Type: boolean
-        // Example: false
-        "autoEvalInputs": true,
+        // Example: true
+        "autoEvalInputs": false,
         // The input name of nixpkgs for NixOS options evaluation.
         //
         // The options hierarchy is used to improve completion, but may cost

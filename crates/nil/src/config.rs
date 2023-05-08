@@ -27,7 +27,7 @@ impl Config {
             formatting_command: None,
             nix_binary: "nix".into(),
             nix_flake_auto_archive: None,
-            nix_flake_auto_eval_inputs: true,
+            nix_flake_auto_eval_inputs: false,
             nix_flake_nixpkgs_input_name: Some("nixpkgs".into()),
         }
     }
