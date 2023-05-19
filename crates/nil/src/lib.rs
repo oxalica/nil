@@ -3,6 +3,7 @@ mod config;
 mod convert;
 mod handler;
 mod lsp_ext;
+mod meter;
 mod semantic_tokens;
 mod server;
 mod vfs;
@@ -20,6 +21,8 @@ use tower::ServiceBuilder;
 
 pub(crate) use server::{Server, StateSnapshot};
 pub(crate) use vfs::{LineMap, Vfs};
+
+use crate::meter::MeterLayer;
 
 /// The file length limit. Files larger than this will be rejected from all interactions.
 /// The hard limit is `u32::MAX` due to following conditions.
@@ -85,6 +88,7 @@ pub async fn run_server_stdio() -> Result<()> {
     let (frontend, _) = async_lsp::Frontend::new_server(|client| {
         ServiceBuilder::new()
             .layer(TracingLayer::default())
+            .layer(MeterLayer::default())
             .layer(LifecycleLayer::default())
             // TODO: Use `CatchUnwindLayer`.
             .layer(ConcurrencyLayer::new(concurrency))
