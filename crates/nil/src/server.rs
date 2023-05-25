@@ -163,7 +163,18 @@ impl Server {
             None => std::env::current_dir().expect("Failed to the current directory"),
         };
 
-        *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = Config::new(root_path);
+        let mut cfg = Config::new(root_path);
+        if let Some(options) = params.initialization_options {
+            let (errors, _updated_diagnostics) = cfg.update(options);
+            if !errors.is_empty() {
+                let msg = ["Failed to apply some settings:"]
+                    .into_iter()
+                    .chain(errors.iter().flat_map(|s| ["\n- ", s]))
+                    .collect::<String>();
+                self.client.show_message_ext(MessageType::ERROR, msg);
+            }
+        }
+        *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = cfg;
 
         ready(Ok(InitializeResult {
             capabilities: server_caps,
