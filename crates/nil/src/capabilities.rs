@@ -48,6 +48,7 @@ pub(crate) fn negotiate_capabilities(
                     .did_change_watched_files
                     .relative_pattern_support
             ),
+        workspace_configuration: test!(client_caps.workspace.configuration),
     };
 
     let server_caps = ServerCapabilities {
@@ -103,4 +104,5 @@ pub(crate) struct NegotiatedCapabilities {
     pub server_initiated_progress: bool,
     pub watch_files: bool,
     pub watch_files_relative_pattern: bool,
+    pub workspace_configuration: bool,
 }
