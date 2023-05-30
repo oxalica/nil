@@ -764,6 +764,9 @@ impl Server {
     }
 
     fn spawn_reload_config(&self) {
+        if !self.capabilities.workspace_configuration {
+            return;
+        }
         let mut client = self.client.clone();
         tokio::spawn(async move {
             let ret = client
