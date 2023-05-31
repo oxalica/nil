@@ -21,6 +21,7 @@ pub enum HlTag {
     AttrField(HlAttrField),
     Builtin(BuiltinKind),
     Comment,
+    BoolLiteral,
     FloatLiteral,
     IntLiteral,
     Keyword(HlKeyword),
@@ -82,6 +83,10 @@ pub(crate) fn highlight(
             Some(node) if node.kind() == SyntaxKind::REF => {
                 let expr = source_map.expr_for_node(AstPtr::new(&node))?;
                 if let Some(builtin) = nameres.check_builtin(expr, &module) {
+                    // Special case boolean literals.
+                    if matches!(builtin, "true" | "false") {
+                        return Some(HlTag::BoolLiteral);
+                    }
                     return Some(HlTag::Builtin(ALL_BUILTINS[builtin].kind));
                 }
                 Some(match nameres.get(expr) {
@@ -261,7 +266,8 @@ mod tests {
 
     #[test]
     fn builtins_global() {
-        check("$0true", expect!["Builtin(Const)"]);
+        check("$0true", expect!["BoolLiteral"]);
+        check("$0null", expect!["Builtin(Const)"]);
         check("$0builtins", expect!["Builtin(Attrset)"]);
         check("$0map", expect!["Builtin(Function)"]);
     }

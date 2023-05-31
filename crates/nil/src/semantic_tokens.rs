@@ -18,6 +18,7 @@ macro_rules! def_index {
 def_index! {
     SemanticTokenType, SEMANTIC_TOKEN_TYPES, TokenTypeIdx;
 
+    Boolean => SemanticTokenType::new("boolean"),
     Comment => SemanticTokenType::COMMENT,
     Constant => SemanticTokenType::new("constant"),
     Function => SemanticTokenType::FUNCTION,
@@ -102,6 +103,7 @@ pub(crate) fn to_semantic_type_and_modifiers(tag: HlTag) -> (TokenTypeIdx, Token
             mods.insert(TokenModIdx::Escape);
             TokenTypeIdx::String
         }
+        HlTag::BoolLiteral => TokenTypeIdx::Boolean,
         HlTag::FloatLiteral | HlTag::IntLiteral => TokenTypeIdx::Number,
         HlTag::Keyword(kw) => match kw {
             HlKeyword::Conditional => {
