@@ -1,4 +1,4 @@
-use crate::def::AstPtr;
+use crate::def::{AstPtr, ResolveResult};
 use crate::{DefDatabase, FilePos, FileRange};
 use syntax::ast::{self, AstNode};
 use syntax::{best_token_at_offset, SyntaxKind, T};
@@ -29,15 +29,22 @@ pub(crate) fn references(
     };
 
     let source_map = db.source_map(file_id);
-    let name_ref = db.name_reference(file_id);
+    let nameres = db.name_resolution(file_id);
+    let nameref = db.name_reference(file_id);
     let refs = match kind {
         DefKind::Attr(ptr) => {
-            let name = source_map.name_for_node(ptr)?;
-            name_ref.name_references(name)
+            // If this is not a name definition, but a usage. We lookup its definition for the
+            // query. This is covered by the test `on_usage`.
+            let name = source_map.name_for_node(ptr.clone()).or_else(|| {
+                let expr = source_map.expr_for_node(ptr)?;
+                let ResolveResult::Definition(name) = nameres.get(expr)? else { return None };
+                Some(*name)
+            })?;
+            nameref.name_references(name)
         }
         DefKind::With(ptr) => {
             let expr = source_map.expr_for_node(ptr)?;
-            name_ref.with_references(expr)
+            nameref.with_references(expr)
         }
     };
     // When {name,with}_references returns None, it means no references,
@@ -108,5 +115,14 @@ mod tests {
         check("a: $0with {}; [ a $1b $2c ]");
         check("a: $0with {}; $1x + (with {}; { inherit a $2b; })");
         check("a: with {}; x + ($0with {}; { inherit a $1b; })");
+    }
+
+    #[test]
+    fn on_usage() {
+        check("let x = 1; y = $0$1x; z = $2x; in z");
+
+        // Attributes from `with` should still return nothing. It would be surprising to show other
+        // unrelated attributes as "references".
+        check("with {}; $0a + b");
     }
 }
