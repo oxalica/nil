@@ -1,7 +1,12 @@
 use crate::def::AstPtr;
 use crate::{DefDatabase, FilePos, FileRange};
 use syntax::ast::{self, AstNode};
-use syntax::{best_token_at_offset, match_ast, SyntaxKind, T};
+use syntax::{best_token_at_offset, SyntaxKind, T};
+
+enum DefKind {
+    Attr(AstPtr),
+    With(AstPtr),
+}
 
 pub(crate) fn references(
     db: &dyn DefDatabase,
@@ -9,31 +14,19 @@ pub(crate) fn references(
 ) -> Option<Vec<FileRange>> {
     let parse = db.parse(file_id);
     let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
-    if !matches!(
-        tok.kind(),
-        T![with]
-            | SyntaxKind::IDENT
-            | T!['"']
-            | SyntaxKind::STRING_ESCAPE
-            | SyntaxKind::STRING_FRAGMENT
-    ) {
-        return None;
-    }
 
-    enum DefKind {
-        Attr(AstPtr),
-        With(AstPtr),
-    }
-
-    let kind = tok.parent_ancestors().find_map(|node| {
-        match_ast! {
-            match node {
-                ast::Attr(n) => Some(DefKind::Attr(AstPtr::new(n.syntax()))),
-                ast::With(n) => Some(DefKind::With(AstPtr::new(n.syntax()))),
-                _ => None,
-            }
+    let kind = match tok.kind() {
+        T![with] => {
+            let n = tok.parent().and_then(ast::With::cast)?;
+            DefKind::With(AstPtr::new(n.syntax()))
         }
-    })?;
+        SyntaxKind::IDENT => DefKind::Attr(AstPtr::new(&tok.parent()?)),
+        T!['"'] | SyntaxKind::STRING_ESCAPE | SyntaxKind::STRING_FRAGMENT => {
+            let tok = tok.parent().and_then(ast::String::cast)?;
+            DefKind::Attr(AstPtr::new(tok.syntax()))
+        }
+        _ => return None,
+    };
 
     let source_map = db.source_map(file_id);
     let name_ref = db.name_reference(file_id);
@@ -67,6 +60,7 @@ mod tests {
     #[track_caller]
     fn check(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert!(!f.markers().is_empty());
         let expect = f.markers()[1..].iter().map(|p| p.pos).collect::<Vec<_>>();
         let mut got = super::references(&db, f[0])
             .into_iter()
@@ -109,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn with() {
+    fn with_attr() {
         check("a: $0with {}; a");
         check("a: $0with {}; [ a $1b $2c ]");
         check("a: $0with {}; $1x + (with {}; { inherit a $2b; })");
