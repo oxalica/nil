@@ -261,6 +261,70 @@ impl Expr {
         }
         cur
     }
+
+    pub fn contains_without_paren(&self, inner: &Self) -> bool {
+        fn bp(e: &Expr) -> Option<u8> {
+            Some(match e {
+                Expr::With(_)
+                | Expr::Lambda(_)
+                | Expr::LetIn(_)
+                | Expr::IfThenElse(_)
+                | Expr::Assert(_) => TOPLEVEL,
+
+                // Binary and unary ops. They follow `infix_bp` in parser.
+                Expr::BinaryOp(e) => match e.op_kind()? {
+                    BinaryOpKind::Imply => 1,
+                    BinaryOpKind::Or => 3,
+                    BinaryOpKind::And => 5,
+                    BinaryOpKind::Equal | BinaryOpKind::NotEqual => 7,
+                    BinaryOpKind::Less
+                    | BinaryOpKind::Greater
+                    | BinaryOpKind::LessEqual
+                    | BinaryOpKind::GreaterEqual => 9,
+                    BinaryOpKind::Update => 11,
+                    BinaryOpKind::Add | BinaryOpKind::Sub => 15,
+                    BinaryOpKind::Mul | BinaryOpKind::Div => 17,
+                    BinaryOpKind::Concat => 19,
+                },
+                Expr::UnaryOp(e) => match e.op_kind()? {
+                    UnaryOpKind::Not => 13,
+                    UnaryOpKind::Negate => 23,
+                },
+                Expr::HasAttr(_) => 21,
+                Expr::Apply(_) => 25,
+
+                // Lists can contain Select.
+                Expr::List(_) => 27,
+
+                Expr::Select(_) => 29,
+
+                // Atoms.
+                Expr::AttrSet(_)
+                | Expr::String(_)
+                | Expr::IndentString(_)
+                | Expr::Literal(_)
+                | Expr::PathInterpolation(_)
+                | Expr::Ref(_) => 29,
+
+                // Special. See below.
+                Expr::Paren(_) => PAREN,
+            })
+        }
+
+        const TOPLEVEL: u8 = 0;
+        const PAREN: u8 = 31;
+
+        match (bp(self), bp(inner)) {
+            // Special case 1: `Paren`s can safely contain or be contained by anything.
+            (Some(PAREN), _) | (_, Some(PAREN)) => true,
+            // Special case 2: top-levels can contain each other without ambiguity.
+            (Some(TOPLEVEL), Some(TOPLEVEL)) => true,
+            // Otherwise, expressions with lower binding power contain higher ones.
+            (Some(outer), Some(inner)) => outer < inner,
+            // `false` by default.
+            _ => false,
+        }
+    }
 }
 
 asts! {

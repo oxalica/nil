@@ -33,6 +33,7 @@ struct Args {
 enum Subcommand {
     Diagnostics(DiagnosticsArgs),
     Parse(ParseArgs),
+    Ssr(SsrArgs),
 }
 
 #[derive(Debug, FromArgs)]
@@ -78,6 +79,7 @@ fn main() {
         return match subcommand {
             Subcommand::Diagnostics(args) => main_diagnostics(args),
             Subcommand::Parse(args) => main_parse(args),
+            Subcommand::Ssr(args) => main_ssr(args),
         };
     }
 
@@ -168,6 +170,70 @@ fn main_parse(args: ParseArgs) {
     match ret {
         Ok(true) => {}
         Ok(false) => process::exit(1),
+        Err(err) => {
+            eprintln!("{err:#}");
+            process::exit(1);
+        }
+    }
+}
+
+#[derive(Debug, FromArgs)]
+#[argh(subcommand, name = "ssr")]
+/// Search structural patterns and optionaly replace them.
+/// WARNING: This functionality is experimental.
+struct SsrArgs {
+    /// nix file to check, or read from stdin for `-`.
+    /// NB. You need `--` before `-` for paths starting with `-`,
+    /// to disambiguous it from flags.
+    #[argh(positional)]
+    path: PathBuf,
+    /// expression pattern to search. Placeholders `$name` can be used to capture sub-expressions.
+    #[argh(positional)]
+    pattern: String,
+    /// expression template to replace. Placeholders `$name` can be used to substitute
+    /// sub-expressions from the pattern.
+    #[argh(positional)]
+    template: Option<String>,
+}
+
+fn main_ssr(args: SsrArgs) {
+    let ret = (|| -> Result<()> {
+        let path = &*args.path;
+
+        let src = if path.as_os_str() == "-" {
+            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
+        } else {
+            fs::read_to_string(path).context("Failed to read file")?
+        };
+
+        let parse = syntax::parse_file(&src);
+        let pat = ssr::Pattern::parse(&args.pattern).context("invalid SSR pattern")?;
+
+        match args.template {
+            None => {
+                for n in pat.find_iter(&parse.syntax_node()) {
+                    let range = n.text_range();
+                    println!(
+                        "{}:{}-{}:{}",
+                        args.path.display(),
+                        u32::from(range.start()),
+                        u32::from(range.end()),
+                        &src[range],
+                    );
+                }
+            }
+            Some(templ) => {
+                let templ = ssr::Template::parse(&templ, &pat).context("invalid SSR template")?;
+                let ret = pat.replace(&src, &templ, &parse.syntax_node());
+                print!("{ret}");
+            }
+        }
+
+        Ok(())
+    })();
+
+    match ret {
+        Ok(()) => {}
         Err(err) => {
             eprintln!("{err:#}");
             process::exit(1);

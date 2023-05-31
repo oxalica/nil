@@ -5,6 +5,7 @@ members = [
     "crates/ide",
     "crates/nil",
     "crates/nix-interop",
+    "crates/ssr",
     "crates/syntax",
 ]
 

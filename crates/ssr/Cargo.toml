@@ -1,0 +1,16 @@
+[package]
+name = "ssr"
+description = "Structual search and replace"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "1.0.71"
+indexmap = "1.9.3"
+smol_str = "0.2.0"
+syntax = { path = "../syntax" }
+
+[dev-dependencies]
+expect-test = "1.4.1"

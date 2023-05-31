@@ -1,4 +1,5 @@
 use crate::ast::{AstNode, SourceFile};
+use crate::lexer::LexTokens;
 use crate::SyntaxKind::{self, *};
 use crate::{lexer, Error, ErrorKind, SyntaxNode};
 use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
@@ -35,9 +36,16 @@ impl Parse {
 /// # Panics
 /// Panic if the source is longer than `u32::MAX`.
 pub fn parse_file(src: &str) -> Parse {
-    assert!(u32::try_from(src.len()).is_ok());
+    let tokens = lexer::lex(src.as_bytes());
+    parse_file_tokens(src, tokens)
+}
 
-    let mut tokens = lexer::lex(src.as_bytes());
+/// Parse the source of a Nix file after tokenization.
+///
+/// # Panics
+/// Panic if the source is longer than `u32::MAX`.
+pub fn parse_file_tokens(src: &str, mut tokens: LexTokens) -> Parse {
+    assert!(u32::try_from(src.len()).is_ok());
     tokens.reverse();
     Parser {
         tokens,
