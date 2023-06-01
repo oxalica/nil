@@ -165,7 +165,8 @@ impl Server {
 
         let mut cfg = Config::new(root_path);
         if let Some(options) = params.initialization_options {
-            let (errors, _updated_diagnostics) = cfg.update(options);
+            let mut errors = Vec::new();
+            cfg.update(options, &mut errors);
             if !errors.is_empty() {
                 let msg = ["Failed to apply some settings:"]
                     .into_iter()
@@ -795,7 +796,17 @@ impl Server {
 
     fn on_update_config(&mut self, value: UpdateConfigEvent) -> NotifyResult {
         let mut config = Config::clone(&self.config);
-        let (errors, updated_diagnostics) = config.update(value.0);
+        let mut errors = Vec::new();
+        config.update(value.0, &mut errors);
+
+        let updated_diagnostics = (
+            &self.config.diagnostics_excluded_files,
+            &self.config.diagnostics_ignored,
+        ) != (
+            &config.diagnostics_excluded_files,
+            &config.diagnostics_ignored,
+        );
+
         tracing::debug!("Updated config, errors: {errors:?}, config: {config:?}");
         self.config = Arc::new(config);
 
