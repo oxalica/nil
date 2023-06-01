@@ -163,19 +163,15 @@ impl Server {
             None => std::env::current_dir().expect("Failed to the current directory"),
         };
 
-        let mut cfg = Config::new(root_path);
+        // Allow the client to pass initial settings through `initializationOptions`, especially
+        // when they do not support `workspace/configuration`.
+        *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = Config::new(root_path);
         if let Some(options) = params.initialization_options {
-            let mut errors = Vec::new();
-            cfg.update(options, &mut errors);
-            if !errors.is_empty() {
-                let msg = ["Failed to apply some settings:"]
-                    .into_iter()
-                    .chain(errors.iter().flat_map(|s| ["\n- ", s]))
-                    .collect::<String>();
-                self.client.show_message_ext(MessageType::ERROR, msg);
+            if options.as_object().filter(|o| !o.is_empty()).is_some() {
+                tracing::debug!("Initialization options: {options}");
+                self.on_update_config(UpdateConfigEvent(options));
             }
         }
-        *Arc::get_mut(&mut self.config).expect("No concurrent access yet") = cfg;
 
         ready(Ok(InitializeResult {
             capabilities: server_caps,
@@ -807,7 +803,7 @@ impl Server {
             &config.diagnostics_ignored,
         );
 
-        tracing::debug!("Updated config, errors: {errors:?}, config: {config:?}");
+        tracing::info!("Updated config, errors: {errors:?}, config: {config:?}");
         self.config = Arc::new(config);
 
         if !errors.is_empty() {
