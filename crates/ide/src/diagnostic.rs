@@ -34,10 +34,10 @@ pub enum DiagnosticKind {
     UnusedRec,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
-    Error,
     Warning,
+    Error,
     IncompleteSyntax,
 }
 

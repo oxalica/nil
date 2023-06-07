@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::term::termcolor::WriteColor;
-use ide::AnalysisHost;
+use ide::{AnalysisHost, Severity};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs, io, process};
@@ -39,7 +39,7 @@ enum Subcommand {
 #[derive(Debug, FromArgs)]
 #[argh(subcommand, name = "diagnostics")]
 /// Check and print diagnostics for a file.
-/// Exit with non-zero code if there are any diagnostics.
+/// Exit with non-zero code if there are any diagnostics. (`1` for errors, `2` if only warnings)
 /// WARNING: The output format is for human and should not be relied on.
 struct DiagnosticsArgs {
     /// nix file to check, or read from stdin for `-`.
@@ -112,7 +112,7 @@ fn main() {
 fn main_diagnostics(args: DiagnosticsArgs) {
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
-    let ret = (|| -> Result<bool> {
+    let ret = (|| -> Result<Option<Severity>> {
         let path = &*args.path;
 
         let src = if path.as_os_str() == "-" {
@@ -129,11 +129,18 @@ fn main_diagnostics(args: DiagnosticsArgs) {
 
         let mut writer = StandardStream::stdout(ColorChoice::Auto);
         emit_diagnostics(path, &src, &mut writer, &mut diags.iter().cloned())?;
-        Ok(diags.is_empty())
+
+        Ok(diags.iter().map(|diag| diag.severity()).max())
     })();
     match ret {
-        Ok(true) => {}
-        Ok(false) => process::exit(1),
+        Ok(None) => process::exit(0),
+        Ok(Some(max_severity)) => {
+            if max_severity > Severity::Warning {
+                process::exit(1)
+            } else {
+                process::exit(0)
+            }
+        }
         Err(err) => {
             eprintln!("{err:#}");
             process::exit(1);
