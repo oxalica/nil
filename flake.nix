@@ -127,6 +127,7 @@ rec {
             RUST_BACKTRACE = "short";
             NIXPKGS = nixpkgs;
             CLIPPY_FLAGS = clippyFlags;
+            RUST_SRC_PATH = "${rustPkgs.rustPlatform.rustLibSrc}"; # needed for rust-analyzer, from https://github.com/NixOS/nixos-search/blob/main/flake.nix#L102
 
             # bash
             shellHook = ''
