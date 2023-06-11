@@ -120,5 +120,5 @@ You can run `nil --help` for usages of all available commands.
 
 - `nil diagnostics <PATH>`
   Check and print diagnostics for a file.
-  Exit with non-zero code if there are any diagnostics.
+  Exit with code `1` if there are any errors.
   :warning: **WARNING**: The output format is for human and should not be relied on.
