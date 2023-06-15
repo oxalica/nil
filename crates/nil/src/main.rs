@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::term::termcolor::WriteColor;
 use ide::{AnalysisHost, Severity};
+use is_terminal::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs, io, process};
@@ -85,7 +86,7 @@ fn main() {
 
     setup_logger();
 
-    if !args.stdio && (atty::is(atty::Stream::Stdin) || atty::is(atty::Stream::Stdout)) {
+    if !args.stdio && (io::stdin().is_terminal() || io::stdout().is_terminal()) {
         // TODO: Make this a hard error.
         eprintln!(
             "\
