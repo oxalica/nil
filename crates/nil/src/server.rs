@@ -362,7 +362,7 @@ impl Server {
     fn on_did_change_watched_files(&mut self, params: DidChangeWatchedFilesParams) -> NotifyResult {
         tracing::debug!("Watched files changed: {params:?}");
 
-        let mut flake_files_changed = true;
+        let mut flake_files_changed = false;
         for &FileEvent { ref uri, mut typ } in &params.changes {
             // Don't reload files maintained by the client.
             if self.opened_files.contains_key(uri) {
