@@ -3,9 +3,8 @@ on:
   push:
     branches:
       - 'main'
-      - 'ci'
   schedule:
-    - cron: '23 1 * * *' # *-*-* 01:23:00 UTC
+    - cron: '23 1 * * 0' # Sun *-*-* 01:23:00 UTC
 
 permissions:
   contents: read
