@@ -9,7 +9,7 @@ rust-version.workspace = true
 builtin = { path = "../builtin" }
 either = "1.8.0"
 if_chain = "1.0.2"
-indexmap = "1.9.1"
+indexmap = "2"
 itertools = "0.11.0"
 la-arena = "0.3.0"
 nix-interop = { path = "../nix-interop" }

@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow = "1.0.71"
-indexmap = "1.9.3"
+indexmap = "2"
 smol_str = "0.2.0"
 syntax = { path = "../syntax" }
 
