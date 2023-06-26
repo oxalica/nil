@@ -23,7 +23,7 @@ syntax = { path = "../syntax" }
 text-size = "1.1.0"
 tokio = { version = "1.27.0", features = ["io-std", "macros", "rt", "sync", "time"] }
 tower = "0.4.13"
-tracing = { version = "0.1.36", features = ["release_max_level_info"] }
+tracing = { version = "0.1.36", features = ["release_max_level_debug"] }
 
 [dependencies.tracing-subscriber]
 version = "0.3.15"
