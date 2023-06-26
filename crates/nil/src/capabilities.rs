@@ -87,7 +87,7 @@ pub(crate) fn negotiate_capabilities(
         document_symbol_provider: Some(OneOf::Left(true)),
         document_formatting_provider: Some(OneOf::Left(true)),
         document_link_provider: Some(DocumentLinkOptions {
-            resolve_provider: Some(false),
+            resolve_provider: Some(true),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         }),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),

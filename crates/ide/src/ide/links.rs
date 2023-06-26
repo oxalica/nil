@@ -1,13 +1,18 @@
-use crate::def::{Expr, ExprId, Literal};
-use crate::{DefDatabase, FileId, VfsPath};
+use crate::def::{AstPtr, Expr, ExprId, Literal};
+use crate::{DefDatabase, FileId, FileRange, VfsPath};
 use syntax::TextRange;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Link {
-    pub range: TextRange,
-    pub tooltip: String,
-    pub target: LinkTarget,
+pub enum Link {
+    Lazy {
+        range: TextRange,
+    },
+    Resolved {
+        range: TextRange,
+        tooltip: String,
+        target: LinkTarget,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -22,27 +27,44 @@ pub(crate) fn links(db: &dyn DefDatabase, file_id: FileId) -> Vec<Link> {
 
     let extract_link = |(e, kind): (ExprId, &Expr)| -> Option<Link> {
         let Expr::Literal(lit) = kind else { return None };
-        let (tooltip, target) = match lit {
+        let range = || Some(source_map.node_for_expr(e)?.text_range());
+        match lit {
             Literal::String(s) => {
                 let uri = try_resolve_link_uri(s)?;
-                (uri.to_string(), LinkTarget::Uri(uri))
+                Some(Link::Resolved {
+                    range: range()?,
+                    tooltip: uri.as_str().to_owned(),
+                    target: LinkTarget::Uri(uri),
+                })
             }
-            Literal::Path(p) => {
-                let vpath = p.resolve(db)?;
-                // Walkaround a lifetime issue.
-                let tooltip = vpath.display().to_string();
-                (tooltip, LinkTarget::VfsPath(vpath))
-            }
-            _ => return None,
-        };
-        Some(Link {
-            range: source_map.node_for_expr(e)?.text_range(),
-            tooltip,
-            target,
-        })
+            Literal::Path(_) => Some(Link::Lazy { range: range()? }),
+            _ => None,
+        }
     };
 
     module.exprs().filter_map(extract_link).collect()
+}
+
+pub(crate) fn link_resolve(db: &dyn DefDatabase, frange: FileRange) -> Option<Link> {
+    let module = db.module(frange.file_id);
+    let source_map = db.source_map(frange.file_id);
+    let parse = db.parse(frange.file_id);
+
+    let n = parse
+        .syntax_node()
+        .token_at_offset(frange.range.start())
+        .right_biased()?
+        .parent()?;
+    let expr = source_map.expr_for_node(AstPtr::new(&n))?;
+    let Expr::Literal(Literal::Path(path)) = &module[expr] else { return None };
+    let vpath = path.resolve(db)?;
+    // Workaround: inlining this causes lifetime issues.
+    let tooltip = vpath.display().to_string();
+    Some(Link::Resolved {
+        range: frange.range,
+        tooltip,
+        target: LinkTarget::VfsPath(vpath),
+    })
 }
 
 fn try_resolve_link_uri(uri: &str) -> Option<Url> {
@@ -126,13 +148,31 @@ mod tests {
         let links = links(&db, file_id);
         let src = db.file_content(file_id);
         let got = links
-            .iter()
-            .map(|link| {
-                let target = match &link.target {
+            .into_iter()
+            .filter_map(|link| {
+                let (range, tooltip, target) = match link {
+                    Link::Resolved {
+                        range,
+                        tooltip,
+                        target,
+                    } => (range, tooltip, target),
+                    Link::Lazy { range } => {
+                        match link_resolve(&db, FileRange::new(file_id, range))? {
+                            Link::Lazy { .. } => unreachable!(),
+                            Link::Resolved {
+                                range,
+                                tooltip,
+                                target,
+                            } => (range, tooltip, target),
+                        }
+                    }
+                };
+                let target = match &target {
                     LinkTarget::Uri(uri) => uri.to_string(),
                     LinkTarget::VfsPath(p) => p.display().to_string(),
                 };
-                format!("{} -> {}: {}\n", &src[link.range], target, link.tooltip,)
+                let src = &src[range];
+                Some(format!("{src} -> {target}: {tooltip}\n"))
             })
             .collect::<String>();
         expect.assert_eq(&got);

@@ -113,6 +113,7 @@ impl Server {
             .request_snap::<req::DocumentSymbolRequest>(handler::document_symbol)
             .request_snap::<req::Formatting>(handler::formatting)
             .request_snap::<req::DocumentLinkRequest>(handler::document_links)
+            .request_snap::<req::DocumentLinkResolve>(handler::document_link_resolve)
             .request_snap::<req::CodeActionRequest>(handler::code_action)
             .request_snap::<req::DocumentHighlightRequest>(handler::document_highlight)
             .request_snap::<lsp_ext::ParentModule>(handler::parent_module)

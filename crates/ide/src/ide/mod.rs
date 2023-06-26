@@ -196,6 +196,10 @@ impl Analysis {
         self.with_db(|db| links::links(db, file))
     }
 
+    pub fn link_resolve(&self, frange: FileRange) -> Cancellable<Option<Link>> {
+        self.with_db(|db| links::link_resolve(db, frange))
+    }
+
     pub fn assists(&self, frange: FileRange) -> Cancellable<Vec<Assist>> {
         self.with_db(|db| assists::assists(db, frange))
     }

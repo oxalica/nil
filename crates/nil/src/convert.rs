@@ -2,15 +2,17 @@ use crate::{semantic_tokens, LineMap, Result, Vfs};
 use async_lsp::{ErrorCode, ResponseError};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
-    HlRange, HlRelated, HoverResult, NameKind, Severity, SymbolTree, TextEdit, WorkspaceEdit,
+    HlRange, HlRelated, HoverResult, Link, LinkTarget, NameKind, Severity, SymbolTree, TextEdit,
+    WorkspaceEdit,
 };
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
-    DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentSymbol,
-    Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString, Position,
-    PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
+    DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentLink,
+    DocumentSymbol, Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString,
+    Position, PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
     TextDocumentPositionParams, Url,
 };
+use nix_interop::DEFAULT_IMPORT_FILE;
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
 
@@ -324,4 +326,64 @@ pub(crate) fn to_document_highlight(
             }),
         })
         .collect()
+}
+
+pub(crate) fn to_document_link(
+    line_map: &LineMap,
+    file_uri: &Url,
+    link: Link,
+) -> Option<DocumentLink> {
+    let (range, target, tooltip) = match link {
+        Link::Lazy { range } => (range, None, None),
+        Link::Resolved {
+            range,
+            tooltip,
+            target,
+        } => {
+            let target = match target {
+                LinkTarget::Uri(uri) => uri,
+                // FIXME: Duplicated with `goto_definition`.
+                LinkTarget::VfsPath(vpath) => {
+                    let path = vpath.as_path()?;
+                    let default_child = path.join(DEFAULT_IMPORT_FILE);
+                    let target_path = if path.is_file() {
+                        path
+                    } else if default_child.is_file() {
+                        &default_child
+                    } else {
+                        return None;
+                    };
+                    Url::from_file_path(target_path).ok()?
+                }
+            };
+            (range, Some(target), Some(tooltip))
+        }
+    };
+    Some(DocumentLink {
+        range: to_range(line_map, range),
+        target,
+        tooltip,
+        // Pass the URI to `DocumentLinkResolve`.
+        data: Some(file_uri.as_str().to_owned().into()),
+    })
+}
+
+pub(crate) fn from_document_link(
+    vfs: &Vfs,
+    link: &DocumentLink,
+) -> Result<(Url, FileRange, Arc<LineMap>)> {
+    let uri = link
+        .data
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .and_then(|s| Url::parse(s).ok())
+        .ok_or_else(|| {
+            anyhow::Error::from(ResponseError::new(
+                ErrorCode::INVALID_PARAMS,
+                "invalid `data` field",
+            ))
+        })?;
+    let file_id = vfs.file_for_uri(&uri)?;
+    let (line_map, range) = from_range(vfs, file_id, link.range)?;
+    Ok((uri, FileRange::new(file_id, range), line_map))
 }

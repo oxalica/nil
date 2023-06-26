@@ -1,6 +1,7 @@
 use crate::{convert, StateSnapshot};
 use anyhow::{ensure, Context, Result};
-use ide::{FileRange, GotoDefinitionResult, LinkTarget};
+use async_lsp::{ErrorCode, ResponseError};
+use ide::{FileRange, GotoDefinitionResult};
 use lsp_types::{
     CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse, Diagnostic,
     DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentLink,
@@ -268,32 +269,25 @@ pub(crate) fn document_links(
     let links = snap.analysis.links(file)?;
     let links = links
         .into_iter()
-        .filter_map(|link| {
-            let uri = match link.target {
-                LinkTarget::Uri(uri) => uri,
-                // FIXME: Duplicated with `goto_definition`.
-                LinkTarget::VfsPath(vpath) => {
-                    let path = vpath.as_path()?;
-                    let default_child = path.join(DEFAULT_IMPORT_FILE);
-                    let target_path = if path.is_file() {
-                        path
-                    } else if default_child.is_file() {
-                        &default_child
-                    } else {
-                        return None;
-                    };
-                    Url::from_file_path(target_path).ok()?
-                }
-            };
-            Some(DocumentLink {
-                range: convert::to_range(&line_map, link.range),
-                target: Some(uri),
-                tooltip: Some(link.tooltip),
-                data: None,
-            })
-        })
+        .filter_map(|link| convert::to_document_link(&line_map, &params.text_document.uri, link))
         .collect::<Vec<_>>();
     Ok(Some(links))
+}
+
+pub(crate) fn document_link_resolve(
+    snap: StateSnapshot,
+    params: DocumentLink,
+) -> Result<DocumentLink> {
+    let (uri, frange, line_map) = convert::from_document_link(&snap.vfs(), &params)?;
+    snap.analysis
+        .link_resolve(frange)?
+        .and_then(|link| convert::to_document_link(&line_map, &uri, link))
+        .ok_or_else(|| {
+            anyhow::Error::new(ResponseError::new(
+                ErrorCode::INVALID_PARAMS,
+                "invalid unresolved link",
+            ))
+        })
 }
 
 pub(crate) fn code_action(
