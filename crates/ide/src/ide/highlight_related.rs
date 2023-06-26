@@ -3,6 +3,11 @@ use crate::{DefDatabase, FilePos};
 use syntax::ast::{self, AstNode};
 use syntax::{best_token_at_offset, TextRange, T};
 
+/// The max distance between returned positions and the original one. Spans too far away are not
+/// considered "related", to prevent spamming MBs of data to the client. This can happen when
+/// hovering a "with" attribute in `all-packages.nix`.
+const MAX_DIST: usize = 1000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HlRelated {
     pub range: TextRange,
@@ -14,31 +19,35 @@ pub(crate) fn highlight_related(db: &dyn DefDatabase, fpos: FilePos) -> Option<V
     let source_map = db.source_map(fpos.file_id);
     let tok = best_token_at_offset(&parse.syntax_node(), fpos.pos)?;
 
+    let dist_filter = |hlr: &HlRelated| {
+        usize::from(hlr.range.start()).abs_diff(fpos.pos.into()) < MAX_DIST
+            || usize::from(hlr.range.end()).abs_diff(fpos.pos.into()) < MAX_DIST
+    };
+
     // For `with` token, highlight itself and all Attr references.
     if tok.kind() == T![with] {
         let with_node = ast::With::cast(tok.parent()?)?;
         let with_expr = source_map.expr_for_node(AstPtr::new(with_node.syntax()))?;
         let nameref = db.name_reference(fpos.file_id);
-        return Some(
-            // Also include the current token.
+        let ret = itertools::chain(
             std::iter::once(HlRelated {
                 range: tok.text_range(),
                 is_definition: true,
-            })
-            .chain(
-                nameref
-                    .with_references(with_expr)
-                    .unwrap_or(&[])
-                    .iter()
-                    .flat_map(|&e| {
-                        Some(HlRelated {
-                            range: source_map.node_for_expr(e)?.text_range(),
-                            is_definition: false,
-                        })
-                    }),
-            )
-            .collect(),
-        );
+            }),
+            nameref
+                .with_references(with_expr)
+                .unwrap_or(&[])
+                .iter()
+                .flat_map(|&e| {
+                    Some(HlRelated {
+                        range: source_map.node_for_expr(e)?.text_range(),
+                        is_definition: false,
+                    })
+                }),
+        )
+        .filter(dist_filter)
+        .collect();
+        return Some(ret);
     }
 
     // Resolve the definition `Name` for `Attr` and `Ref`.
@@ -81,16 +90,13 @@ pub(crate) fn highlight_related(db: &dyn DefDatabase, fpos: FilePos) -> Option<V
         return None;
     };
 
-    let mut ret = Vec::new();
-
-    // Definitions.
-    ret.extend(source_map.nodes_for_name(name).map(|ptr| HlRelated {
-        range: ptr.text_range(),
-        is_definition: true,
-    }));
-
-    // References.
-    ret.extend(
+    let ret = itertools::chain(
+        // Definitions.
+        source_map.nodes_for_name(name).map(|ptr| HlRelated {
+            range: ptr.text_range(),
+            is_definition: true,
+        }),
+        // References.
         db.name_reference(fpos.file_id)
             .name_references(name)
             .into_iter()
@@ -101,8 +107,9 @@ pub(crate) fn highlight_related(db: &dyn DefDatabase, fpos: FilePos) -> Option<V
                     is_definition: false,
                 })
             }),
-    );
-
+    )
+    .filter(dist_filter)
+    .collect();
     Some(ret)
 }
 
