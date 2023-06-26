@@ -87,7 +87,12 @@ pub async fn run_server_stdio() -> Result<()> {
 
     let (frontend, _) = async_lsp::Frontend::new_server(|client| {
         ServiceBuilder::new()
-            .layer(TracingLayer::default())
+            .layer(
+                TracingLayer::new()
+                    .request(|r| tracing::info_span!("request", method = r.method))
+                    .notification(|n| tracing::info_span!("notification", method = n.method))
+                    .event(|e| tracing::info_span!("event", method = e.type_name())),
+            )
             .layer(MeterLayer::default())
             .layer(LifecycleLayer::default())
             // TODO: Use `CatchUnwindLayer`.
