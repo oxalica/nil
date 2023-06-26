@@ -14,6 +14,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
   };
   const clientOptions = {
     documentSelector: [{ language: 'nix' }],
+    initializationOptions: cfg,
   };
   const client = new LanguageClient('nil', 'nil Language Server', serverOptions, clientOptions);
   context.subscriptions.push(services.registLanguageClient(client));
