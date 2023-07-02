@@ -62,7 +62,7 @@ fn main() {
             |_| {
                 // Fallback to the older command `__dump-builtins` so that the package
                 // doesn't fail to build for people using older versions of nix
-                // (introduced in)
+                // (introduced in 2.4)
                 // https://github.com/NixOS/nix/commit/0f314f3c2594e80322c675b70a61dcfda11bf423#diff-20a8b5b2a231db80eab27840bd32ac0214aa0c4e9e923e649d3d741c3da77b48R187
                 Command::new("nix")
                     .arg("__dump-builtins")
