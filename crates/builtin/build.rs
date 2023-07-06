@@ -52,12 +52,24 @@ fn main() {
             .collect()
     };
 
-    // Use a secret subcommand `__dump-builtins` to dump Nix builtins with documentations.
-    // It is introduced since Nix 2.4 in
-    // https://github.com/NixOS/nix/commit/0f314f3c2594e80322c675b70a61dcfda11bf423#diff-20a8b5b2a231db80eab27840bd32ac0214aa0c4e9e923e649d3d741c3da77b48R187
+    // Use a secret subcommand `__dump-language` to dump Nix builtins with documentations.
+    // It is introduced since Nix 2.17 in
+    // https://github.com/NixOS/nix/commit/22b278e011ab9c1328749a126514c57b89a39173#diff-20a8b5b2a231db80eab27840bd32ac0214aa0c4e9e923e649d3d741c3da77b48L355
     let builtins_dump: DumpBuiltins = Command::new("nix")
-        .arg("__dump-builtins")
-        .json()
+        .arg("__dump-language")
+        .json::<DumpLanguage>()
+        .map_or_else(
+            |_| {
+                // Fallback to the older command `__dump-builtins` so that the package
+                // doesn't fail to build for people using older versions of nix
+                // (introduced in 2.4)
+                // https://github.com/NixOS/nix/commit/0f314f3c2594e80322c675b70a61dcfda11bf423#diff-20a8b5b2a231db80eab27840bd32ac0214aa0c4e9e923e649d3d741c3da77b48R187
+                Command::new("nix")
+                    .arg("__dump-builtins")
+                    .json::<DumpBuiltins>()
+            },
+            |v| Ok(v.builtins),
+        )
         .expect("Failed to dump builtins");
 
     let mut phf_gen = phf_codegen::Map::<&'static str>::new();
@@ -96,6 +108,11 @@ impl CommandExt for Command {
         }
         Ok(serde_json::from_slice(&output.stdout)?)
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct DumpLanguage {
+    builtins: DumpBuiltins,
 }
 
 // Keep names sorted.
