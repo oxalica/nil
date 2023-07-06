@@ -1,8 +1,5 @@
 name: Future proof tests
 on:
-  push:
-    branches:
-      - 'main'
   schedule:
     - cron: '23 1 * * 0' # Sun *-*-* 01:23:00 UTC
 
