@@ -492,7 +492,7 @@ impl Server {
                             typ: MessageType::INFO,
                             message: "\
                             Some flake inputs are not available. Fetch them now? \n\
-                            You can enable auto-fetch in configurations.\
+                            You can enable autoArchive in lsp configuration.\
                         "
                             .into(),
                             actions: Some(vec![
@@ -520,7 +520,7 @@ impl Server {
                         MessageType::WARNING,
                         "\
                         Some flake inputs are not available, please run `nix flake archive` to fetch them. \n\
-                        Your LSP client doesn't support confirmation. You can enable auto-fetch in configurations.\
+                        Your LSP client doesn't support confirmation. You can enable autoArchive in lsp configuration.\
                         ",
                     );
                     false
