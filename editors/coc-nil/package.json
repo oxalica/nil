@@ -24,15 +24,15 @@
     "semi": true
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^5.53.0",
-    "@typescript-eslint/parser": "^5.53.0",
+    "@typescript-eslint/eslint-plugin": "^5.61.0",
+    "@typescript-eslint/parser": "^5.61.0",
     "coc.nvim": "^0.0.82",
-    "esbuild": "^0.17.10",
-    "eslint": "^8.34.0",
-    "eslint-config-prettier": "^8.6.0",
+    "esbuild": "^0.18.11",
+    "eslint": "^8.44.0",
+    "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "^4.2.1",
-    "prettier": "^2.8.4",
-    "rimraf": "^4.1.2",
+    "prettier": "^2.8.8",
+    "rimraf": "^5.0.1",
     "typescript": "^4.9.5"
   },
   "activationEvents": [
