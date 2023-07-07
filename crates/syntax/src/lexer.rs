@@ -1,8 +1,9 @@
 use crate::SyntaxKind::{self, *};
 use once_cell::sync::Lazy;
-use regex_automata::dfa::{dense, Automaton};
-use regex_automata::nfa::thompson;
-use regex_automata::SyntaxConfig;
+use regex_automata::dfa::{dense, Automaton, StartKind};
+use regex_automata::nfa::thompson::Config as NfaConfig;
+use regex_automata::util::syntax::Config as SyntaxConfig;
+use regex_automata::{Anchored, Input};
 use rowan::{TextRange, TextSize};
 use std::ptr;
 
@@ -23,9 +24,13 @@ type Dfa = dense::DFA<Vec<u32>>;
 
 fn build_dfa(pats: &[&str]) -> Dfa {
     dense::Builder::new()
-        .configure(dense::Config::new().minimize(false).anchored(true))
+        .configure(
+            dense::Config::new()
+                .minimize(true)
+                .start_kind(StartKind::Anchored),
+        )
         .syntax(SyntaxConfig::new().unicode(false).utf8(false))
-        .thompson(thompson::Config::new().utf8(false))
+        .thompson(NfaConfig::new().utf8(false).shrink(true))
         .build_many(pats)
         .unwrap()
 }
@@ -156,7 +161,8 @@ pub fn lex(src: &[u8]) -> LexTokens {
         let (dfa, map) = ctxs.last().copied().unwrap_or(default_ctx);
 
         let rest = &src[usize::from(offset)..];
-        let (mut tok, mut len) = match dfa.find_leftmost_fwd(rest).expect("No quit byte") {
+        let input = Input::new(rest).anchored(Anchored::Yes);
+        let (mut tok, mut len) = match dfa.try_search_fwd(&input).expect("No quit byte") {
             // The length of src is checked before.
             Some(m) => (
                 map[m.pattern().as_usize()],
