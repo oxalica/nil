@@ -11,4 +11,9 @@ regex-automata = "0.2.0"
 rowan = "0.15.6"
 
 [dev-dependencies]
+criterion = "0.5.1"
 expect-test = "1.4.0"
+
+[[bench]]
+name = "parse"
+harness = false
