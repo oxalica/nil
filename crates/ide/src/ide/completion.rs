@@ -412,7 +412,9 @@ fn complete_pat_param(
     let infer = db.infer(file_id);
     let lambda_expr = source_map.expr_for_node(AstPtr::new(lambda_node.syntax()))?;
     let lambda_ty = infer.ty_for_expr(lambda_expr);
-    let Ty::Lambda(arg_ty, _) = lambda_ty else { return None };
+    let Ty::Lambda(arg_ty, _) = lambda_ty else {
+        return None;
+    };
     let arg_set = arg_ty.as_attrset()?;
 
     let name_tok = name_node.token()?;

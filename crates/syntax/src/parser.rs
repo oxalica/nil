@@ -408,7 +408,9 @@ impl<'i> Parser<'i> {
                 continue;
             }
 
-            let Some((lbp, rbp)) = tok.infix_bp() else { break };
+            let Some((lbp, rbp)) = tok.infix_bp() else {
+                break;
+            };
             if lbp == min_bp {
                 self.error(ErrorKind::MultipleNoAssoc);
                 break;
@@ -564,7 +566,9 @@ impl<'i> Parser<'i> {
 
     /// Validate the next path fragment and emit errors about slashes.
     fn validate_path_fragment(&mut self, allow_trailing_slash: bool) {
-        let Some((PATH_FRAGMENT | PATH, range)) = self.peek_full() else { unreachable!() };
+        let Some((PATH_FRAGMENT | PATH, range)) = self.peek_full() else {
+            unreachable!()
+        };
         // N.B. Path tokens are ASCII-only, which are verified by the lexer.
         self.src[range]
             .as_bytes()

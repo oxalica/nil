@@ -40,7 +40,9 @@ pub(crate) fn goto_definition(
     // Special case for goto-path.
     if tok.kind() == SyntaxKind::PATH {
         let module = db.module(file_id);
-        let Expr::Literal(Literal::Path(path)) = &module[expr_id] else { return None };
+        let Expr::Literal(Literal::Path(path)) = &module[expr_id] else {
+            return None;
+        };
         let path = path.resolve(db)?;
         return Some(GotoDefinitionResult::Path(path));
     }
@@ -102,7 +104,14 @@ fn goto_flake_input(
     tok: SyntaxToken,
 ) -> Option<GotoDefinitionResult> {
     let module_kind = db.module_kind(file);
-    let ModuleKind::FlakeNix { explicit_inputs, param_inputs, .. } = &*module_kind else { return None };
+    let ModuleKind::FlakeNix {
+        explicit_inputs,
+        param_inputs,
+        ..
+    } = &*module_kind
+    else {
+        return None;
+    };
     let flake_info = db.source_root_flake_info(db.file_source_root(file))?;
 
     let ptr = tok.parent_ancestors().find_map(|node| {

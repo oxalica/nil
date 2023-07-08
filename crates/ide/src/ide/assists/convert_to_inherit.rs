@@ -33,7 +33,9 @@ pub(super) fn convert_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             });
             let from_expr = format!(" ({})", &src[from_expr_range]);
 
-            let AttrKind::Static(Some(ident)) = AttrKind::of(last_attr) else { return None };
+            let AttrKind::Static(Some(ident)) = AttrKind::of(last_attr) else {
+                return None;
+            };
 
             (from_expr, ident)
         }

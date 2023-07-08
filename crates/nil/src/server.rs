@@ -316,7 +316,9 @@ impl Server {
         let mut vfs = self.vfs.write().unwrap();
         let uri = params.text_document.uri;
         // Ignore files not maintained in Vfs.
-        let Ok(file) = vfs.file_for_uri(&uri) else { return ControlFlow::Continue(()) };
+        let Ok(file) = vfs.file_for_uri(&uri) else {
+            return ControlFlow::Continue(());
+        };
         for change in params.content_changes {
             let ret = (|| {
                 let del_range = match change.range {
@@ -366,7 +368,9 @@ impl Server {
             if self.opened_files.contains_key(uri) {
                 continue;
             }
-            let Ok(path) = uri.to_file_path() else { continue };
+            let Ok(path) = uri.to_file_path() else {
+                continue;
+            };
 
             if matches!(typ, FileChangeType::CREATED | FileChangeType::CHANGED) {
                 match (|| -> std::io::Result<_> {
@@ -715,11 +719,12 @@ impl Server {
 
             let flake_vpath = VfsPath::new(config.root_path.join(FLAKE_FILE));
             // We always load flake.nix when initialized. If there's none in Vfs, there's none.
-            let Ok(flake_file) = vfs.file_for_path(&flake_vpath) else { return Ok(None) };
+            let Ok(flake_file) = vfs.file_for_path(&flake_vpath) else {
+                return Ok(None);
+            };
 
             let lock_vpath = VfsPath::new(config.root_path.join(FLAKE_LOCK_FILE));
-            let Ok(lock_file) = vfs.file_for_path(&lock_vpath)
-            else {
+            let Ok(lock_file) = vfs.file_for_path(&lock_vpath) else {
                 return Ok(Some(FlakeInfo {
                     flake_file,
                     input_store_paths: HashMap::new(),
@@ -853,7 +858,10 @@ impl Server {
         });
 
         // Can this really fail?
-        let Some(f) = self.opened_files.get_mut(&uri) else { task.abort(); return; };
+        let Some(f) = self.opened_files.get_mut(&uri) else {
+            task.abort();
+            return;
+        };
         if let Some(prev_task) = f.diagnostics_task.replace(task.abort_handle()) {
             prev_task.abort();
         }

@@ -61,7 +61,9 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
             // Covered by `check_builtin`.
             Some(ResolveResult::Builtin(_)) => unreachable!(),
             Some(ResolveResult::WithExprs(withs)) => {
-                let Expr::Reference(text) = &module[expr] else { return None };
+                let Expr::Reference(text) = &module[expr] else {
+                    return None;
+                };
                 let ty = infer
                     .ty_for_expr(expr)
                     .display_with(TY_DETAILED_DISPLAY)
@@ -137,7 +139,9 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
 
         let mut ty = infer.ty_for_expr(expr);
         for attr in path_node.attrs() {
-            let AttrKind::Static(Some(field)) = AttrKind::of(attr.clone()) else { return None };
+            let AttrKind::Static(Some(field)) = AttrKind::of(attr.clone()) else {
+                return None;
+            };
             ty = ty.as_attrset()?.get(&field)?.clone();
             if attr.syntax() == name_node.syntax() {
                 break;

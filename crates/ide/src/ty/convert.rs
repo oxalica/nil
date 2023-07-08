@@ -45,7 +45,9 @@ fn from_raw_ty(ty: &OptionTy) -> Ty {
 }
 
 pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<HashMap<String, Ty>> {
-    let Some(info) = db.source_root_flake_info(sid) else { return Arc::default() };
+    let Some(info) = db.source_root_flake_info(sid) else {
+        return Arc::default();
+    };
     let tys = info
         .input_flake_outputs
         .iter()
@@ -55,7 +57,9 @@ pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<Has
 }
 
 fn from_flake_output(out: &FlakeOutput) -> Ty {
-    let FlakeOutput::Attrset(set) = out else { return from_flake_output_inner(out, None) };
+    let FlakeOutput::Attrset(set) = out else {
+        return from_flake_output_inner(out, None);
+    };
     let fields = set.iter().map(|(key, output)| {
         let generic_system_depth = FLAKE_OUTPUT_GENERIC_SYSTEM_FIELDS
             .iter()

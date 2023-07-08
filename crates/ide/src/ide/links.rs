@@ -26,7 +26,9 @@ pub(crate) fn links(db: &dyn DefDatabase, file_id: FileId) -> Vec<Link> {
     let source_map = db.source_map(file_id);
 
     let extract_link = |(e, kind): (ExprId, &Expr)| -> Option<Link> {
-        let Expr::Literal(lit) = kind else { return None };
+        let Expr::Literal(lit) = kind else {
+            return None;
+        };
         let range = || Some(source_map.node_for_expr(e)?.text_range());
         match lit {
             Literal::String(s) => {
@@ -56,7 +58,9 @@ pub(crate) fn link_resolve(db: &dyn DefDatabase, frange: FileRange) -> Option<Li
         .right_biased()?
         .parent()?;
     let expr = source_map.expr_for_node(AstPtr::new(&n))?;
-    let Expr::Literal(Literal::Path(path)) = &module[expr] else { return None };
+    let Expr::Literal(Literal::Path(path)) = &module[expr] else {
+        return None;
+    };
     let vpath = path.resolve(db)?;
     // Workaround: inlining this causes lifetime issues.
     let tooltip = vpath.display().to_string();

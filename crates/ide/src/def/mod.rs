@@ -132,7 +132,9 @@ fn module_referrers(db: &dyn DefDatabase, file_id: FileId) -> ModuleReferrers {
 }
 
 fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<FileId>> {
-    let Some(entry) = db.source_root(id).entry() else { return Arc::default() };
+    let Some(entry) = db.source_root(id).entry() else {
+        return Arc::default();
+    };
     let mut closure = HashSet::new();
     closure.insert(entry);
     let mut queue = vec![entry];
@@ -198,7 +200,9 @@ impl Module {
             .module(file_id)
             .exprs()
             .filter_map(|(_, kind)| {
-                let &Expr::Literal(Literal::Path(path)) = kind else { return None };
+                let &Expr::Literal(Literal::Path(path)) = kind else {
+                    return None;
+                };
                 let mut vpath = path.resolve(db)?;
                 source_root.file_for_path(&vpath).or_else(|| {
                     vpath.push(DEFAULT_IMPORT_FILE)?;

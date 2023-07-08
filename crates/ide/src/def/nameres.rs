@@ -250,11 +250,14 @@ impl NameResolution {
             // NB. Only recursive attrset are considered here.
             let (Expr::LetIn(bindings, _)
             | Expr::LetAttrset(bindings)
-            | Expr::RecAttrset(bindings)) = expr else {
+            | Expr::RecAttrset(bindings)) = expr
+            else {
                 continue;
             };
             for &(name, value) in bindings.statics.iter() {
-                let BindingValue::InheritFrom(i) = value else { continue };
+                let BindingValue::InheritFrom(i) = value else {
+                    continue;
+                };
                 let from_expr = bindings.inherit_froms[i];
                 if let Some(Some(ResolveResult::Builtin("builtins"))) = resolve_map.get(&from_expr)
                 {

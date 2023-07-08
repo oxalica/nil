@@ -217,7 +217,9 @@ impl<'db> InferCtx<'db> {
                 let lhs_ty = self.infer_expr(lhs);
                 let rhs_ty = self.infer_expr(rhs);
 
-                let Some(op) = op else { return self.new_ty_var() };
+                let Some(op) = op else {
+                    return self.new_ty_var();
+                };
 
                 match op {
                     BinaryOpKind::Equal | BinaryOpKind::NotEqual => Ty::Bool.intern(self),

@@ -197,7 +197,9 @@ mod tests {
             .unwrap();
 
         // Sanity check.
-        let Ty::Attrset { fields, .. } = &(&opts["nix"].ty) else { panic!("Invalid options: {opts:?}") };
+        let Ty::Attrset { fields, .. } = &(&opts["nix"].ty) else {
+            panic!("Invalid options: {opts:?}");
+        };
         let opt = &fields["enable"];
         assert_eq!(opt.ty, Ty::Bool);
         assert!(matches!(

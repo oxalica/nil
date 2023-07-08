@@ -37,7 +37,9 @@ pub(crate) fn references(
             // query. This is covered by the test `on_usage`.
             let name = source_map.name_for_node(ptr.clone()).or_else(|| {
                 let expr = source_map.expr_for_node(ptr)?;
-                let ResolveResult::Definition(name) = nameres.get(expr)? else { return None };
+                let ResolveResult::Definition(name) = nameres.get(expr)? else {
+                    return None;
+                };
                 Some(*name)
             })?;
             nameref.name_references(name)

@@ -40,7 +40,9 @@ pub(crate) fn goto_definition(
     let targets = match ret {
         None => return Ok(None),
         Some(GotoDefinitionResult::Path(vpath)) => {
-            let Some(path) = vpath.as_path() else { return Ok(None) };
+            let Some(path) = vpath.as_path() else {
+                return Ok(None);
+            };
             let default_child = path.join(DEFAULT_IMPORT_FILE);
             let target_path = if path.is_file() {
                 path
@@ -69,7 +71,9 @@ pub(crate) fn references(
     params: ReferenceParams,
 ) -> Result<Option<Vec<Location>>> {
     let (fpos, _) = convert::from_file_pos(&snap.vfs(), &params.text_document_position)?;
-    let Some(refs) = snap.analysis.references(fpos)? else { return Ok(None) };
+    let Some(refs) = snap.analysis.references(fpos)? else {
+        return Ok(None);
+    };
     let vfs = snap.vfs();
     let locs = refs
         .into_iter()
@@ -86,7 +90,9 @@ pub(crate) fn completion(
     let trigger_char = params
         .context
         .and_then(|ctx| ctx.trigger_character?.chars().next());
-    let Some(items) = snap.analysis.completions(fpos, trigger_char)? else { return Ok(None) };
+    let Some(items) = snap.analysis.completions(fpos, trigger_char)? else {
+        return Ok(None);
+    };
     let items = items
         .into_iter()
         .map(|item| convert::to_completion_item(&line_map, item))
@@ -229,7 +235,9 @@ pub(crate) fn formatting(
         Ok(stdout)
     }
 
-    let Some(cmd) = &snap.config.formatting_command else { return Ok(None) };
+    let Some(cmd) = &snap.config.formatting_command else {
+        return Ok(None);
+    };
 
     let (file_content, line_map) = {
         let vfs = snap.vfs();

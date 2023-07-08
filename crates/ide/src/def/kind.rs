@@ -60,11 +60,15 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
     let mut outputs_expr = None;
     if let Expr::Attrset(flake_set) | Expr::RecAttrset(flake_set) = &module[module.entry_expr()] {
         for &(name_id, value) in flake_set.statics.iter() {
-            let BindingValue::Expr(value_expr) = value else { continue };
+            let BindingValue::Expr(value_expr) = value else {
+                continue;
+            };
             match &*module[name_id].text {
                 "inputs" => {
                     let (Expr::Attrset(inputs) | Expr::RecAttrset(inputs)) = &module[value_expr]
-                    else { continue };
+                    else {
+                        continue;
+                    };
                     explicit_inputs = inputs
                         .statics
                         .iter()
@@ -75,7 +79,9 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
                 }
                 "outputs" => {
                     outputs_expr = Some(value_expr);
-                    let Expr::Lambda(_, Some(pat), _) = &module[value_expr] else { continue };
+                    let Expr::Lambda(_, Some(pat), _) = &module[value_expr] else {
+                        continue;
+                    };
                     param_inputs = pat
                         .fields
                         .iter()

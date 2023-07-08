@@ -114,7 +114,9 @@ pub(crate) fn highlight(
                     None => {
                         let expr = source_map.expr_for_node(ptr)?;
                         // Attrs in select-expression should be converted into string literals.
-                        let Expr::Literal(Literal::String(attr_text)) = &module[expr] else { return None };
+                        let Expr::Literal(Literal::String(attr_text)) = &module[expr] else {
+                            return None;
+                        };
 
                         let path_node = ast::Attrpath::cast(node.parent()?)?;
                         let set_node = match_ast! {

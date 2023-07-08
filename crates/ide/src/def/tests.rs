@@ -189,7 +189,12 @@ fn module_kind() {
     .unwrap();
 
     let module_kind = db.module_kind(f["/flake.nix"]);
-    let ModuleKind::FlakeNix { explicit_inputs, param_inputs, .. } = &*module_kind else {
+    let ModuleKind::FlakeNix {
+        explicit_inputs,
+        param_inputs,
+        ..
+    } = &*module_kind
+    else {
         panic!("Unexpected module kind: {module_kind:?}");
     };
     assert_eq!(
