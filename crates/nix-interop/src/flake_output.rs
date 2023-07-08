@@ -34,7 +34,9 @@ pub async fn eval_flake_output(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    #[cfg(unix)]
+    // MacOS does not respect `RLIMIT_DATA`.
+    // See: https://bugs.chromium.org/p/chromium/issues/detail?id=853873#c2
+    #[cfg(target_os = "linux")]
     unsafe {
         if let Some(limit) = memory_limit {
             use rustix::process::{setrlimit, Resource, Rlimit};
@@ -46,13 +48,13 @@ pub async fn eval_flake_output(
                         current: Some(limit),
                         maximum: Some(limit),
                     },
-                )
-                .map_err(|err| std::io::Error::from_raw_os_error(err.raw_os_error()))
+                )?;
+                Ok(())
             });
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(not(target_os = "linux"))]
     let _unused = memory_limit;
 
     let mut child = command.spawn().context("Failed to spawn `nix`")?;
@@ -171,6 +173,7 @@ mod tests {
         assert_eq!(leaf.description.as_deref(), Some("A test derivation"));
     }
 
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     #[ignore = "requires calling 'nix'"]
     async fn memory_limit() {
