@@ -2,8 +2,9 @@ use crate::SyntaxKind::{self, *};
 use once_cell::sync::Lazy;
 use regex_automata::dfa::{dense, Automaton, StartKind};
 use regex_automata::nfa::thompson::Config as NfaConfig;
+use regex_automata::util::primitives::StateID;
 use regex_automata::util::syntax::Config as SyntaxConfig;
-use regex_automata::{Anchored, Input};
+use regex_automata::Anchored;
 use rowan::{TextRange, TextSize};
 use std::ptr;
 
@@ -20,33 +21,73 @@ pub const KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("with", T![with]),
 ];
 
-type Dfa = dense::DFA<Vec<u32>>;
+struct Dfa {
+    dfa: dense::DFA<Vec<u32>>,
+    pat_map: &'static [SyntaxKind],
+    start: StateID,
+}
 
-fn build_dfa(pats: &[&str]) -> Dfa {
-    dense::Builder::new()
-        .configure(
-            dense::Config::new()
-                .minimize(true)
-                .start_kind(StartKind::Anchored),
-        )
-        .syntax(SyntaxConfig::new().unicode(false).utf8(false))
-        .thompson(NfaConfig::new().utf8(false).shrink(true))
-        .build_many(pats)
-        .unwrap()
+impl Dfa {
+    fn new(pats: &[&str], pat_map: &'static [SyntaxKind]) -> Self {
+        let dfa = dense::Builder::new()
+            .configure(
+                dense::Config::new()
+                    .minimize(true)
+                    .start_kind(StartKind::Anchored),
+            )
+            .syntax(SyntaxConfig::new().unicode(false).utf8(false))
+            .thompson(NfaConfig::new().utf8(false).shrink(true))
+            .build_many(pats)
+            .unwrap();
+        let start = dfa
+            .universal_start_state(Anchored::Yes)
+            .expect("no look-around");
+        Self {
+            dfa,
+            pat_map,
+            start,
+        }
+    }
+
+    // `Dfa::try_search_fwd` is >50% slower than manually executing DFA on regex-automata 0.3.
+    // See: https://github.com/rust-lang/regex/issues/1029#issuecomment-1626453062
+    fn execute(&self, haystack: &[u8]) -> Option<(StateID, usize)> {
+        let mut sid = self.start;
+        let mut ret = None;
+        for (i, byte) in haystack.iter().copied().enumerate() {
+            sid = self.dfa.next_state(sid, byte);
+            if self.dfa.is_match_state(sid) {
+                ret = Some((sid, i));
+            } else if self.dfa.is_dead_state(sid) {
+                return ret;
+            }
+        }
+        sid = self.dfa.next_eoi_state(sid);
+        if self.dfa.is_match_state(sid) {
+            return Some((sid, haystack.len()));
+        }
+        ret
+    }
+
+    fn match_first(&self, haystack: &[u8]) -> Option<(SyntaxKind, usize)> {
+        let (sid, pos) = self.execute(haystack)?;
+        let pid = self.dfa.match_pattern(sid, 0);
+        let kind = self.pat_map[pid.as_usize()];
+        Some((kind, pos))
+    }
 }
 
 macro_rules! regex_dfa {
-    ($static:ident, $map:ident { $($tok:path = $regex:literal,)* }) => {
-        static $map: &[SyntaxKind] = &[$($tok),*];
-
-        static $static: Lazy<Dfa> = Lazy::new(|| {
-            build_dfa(&[$($regex),*])
-        });
+    ($static:ident { $($tok:path = $regex:literal,)* }) => {
+        static $static: Lazy<Dfa> = Lazy::new(|| Dfa::new(
+            &[$($regex),*],
+            &[$($tok),*],
+        ));
     };
 }
 
 regex_dfa! {
-    DEFAULT_TOKEN_DFA, DEFAULT_TOKEN_MAP {
+    DEFAULT_TOKEN_DFA {
         // The order matters!
         SPACE = r"[ \r\n\t]+",
         COMMENT = r"#.*|/\*([^*]|\*[^/])*\*/",
@@ -102,7 +143,7 @@ regex_dfa! {
 }
 
 regex_dfa! {
-    STRING_TOKEN_DFA, STRING_TOKEN_MAP {
+    STRING_TOKEN_DFA {
         // The order matters!
         DQUOTE = r#"""#,
         // Yes, we parse one UTF-8 encoded char here, to avoid break into code units.
@@ -117,7 +158,7 @@ regex_dfa! {
 }
 
 regex_dfa! {
-    INDENT_STRING_TOKEN_DFA, INDENT_STRING_TOKEN_MAP {
+    INDENT_STRING_TOKEN_DFA {
         // The order matters!
         // See comments in STRING_TOKEN_DFA's STRING_ESCAPE.
         STRING_ESCAPE = r#"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''"#,
@@ -131,7 +172,7 @@ regex_dfa! {
 }
 
 regex_dfa! {
-    PATH_TOKEN_DFA, PATH_TOKEN_MAP {
+    PATH_TOKEN_DFA {
         DOLLAR_L_CURLY = r"\$\{",
         PATH_FRAGMENT = r"[/a-zA-Z0-9._+-]+",
     }
@@ -148,28 +189,23 @@ pub fn lex(src: &[u8]) -> LexTokens {
 
     let total_len = TextSize::try_from(src.len()).expect("Length overflow");
 
-    let default_ctx = (&*DEFAULT_TOKEN_DFA, DEFAULT_TOKEN_MAP);
-    let string_ctx = (&*STRING_TOKEN_DFA, STRING_TOKEN_MAP);
-    let indent_string_ctx = (&*INDENT_STRING_TOKEN_DFA, INDENT_STRING_TOKEN_MAP);
-    let path_ctx = (&*PATH_TOKEN_DFA, PATH_TOKEN_MAP);
+    let default_ctx = &*DEFAULT_TOKEN_DFA;
+    let string_ctx = &*STRING_TOKEN_DFA;
+    let indent_string_ctx = &*INDENT_STRING_TOKEN_DFA;
+    let path_ctx = &*PATH_TOKEN_DFA;
 
     let mut out = Vec::new();
     let mut ctxs = Vec::new();
 
     let mut offset = TextSize::from(0);
     while offset != total_len {
-        let (dfa, map) = ctxs.last().copied().unwrap_or(default_ctx);
+        let dfa = ctxs.last().copied().unwrap_or(default_ctx);
 
         let rest = &src[usize::from(offset)..];
-        let input = Input::new(rest).anchored(Anchored::Yes);
-        let (mut tok, mut len) = match dfa.try_search_fwd(&input).expect("No quit byte") {
-            // The length of src is checked before.
-            Some(m) => (
-                map[m.pattern().as_usize()],
-                // Offset <= u32, already checked.
-                TextSize::from(m.offset() as u32),
-            ),
-            None if ptr::eq(dfa, path_ctx.0) => {
+        let (mut tok, mut len) = match dfa.match_first(rest) {
+            // Offset <= u32, already checked.
+            Some((kind, len)) => (kind, TextSize::from(len as u32)),
+            None if ptr::eq(dfa, path_ctx) => {
                 ctxs.pop().expect("In path");
                 out.push((PATH_END, TextRange::empty(offset)));
                 continue;
@@ -188,7 +224,7 @@ pub fn lex(src: &[u8]) -> LexTokens {
         };
 
         match tok {
-            T!['"'] | T!["''"] if !ptr::eq(dfa, default_ctx.0) => {
+            T!['"'] | T!["''"] if !ptr::eq(dfa, default_ctx) => {
                 ctxs.pop();
             }
             T!['"'] => ctxs.push(string_ctx),
@@ -225,7 +261,7 @@ pub fn lex(src: &[u8]) -> LexTokens {
         offset += len;
     }
 
-    if matches!(ctxs.last(), Some((dfa, _)) if ptr::eq(*dfa, path_ctx.0)) {
+    if matches!(ctxs.last(), Some(&dfa) if ptr::eq(dfa, path_ctx)) {
         out.push((PATH_END, TextRange::empty(total_len)));
     }
 
