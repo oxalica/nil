@@ -45,6 +45,14 @@ Default configuration:
       // Type: string
       // Example: "/run/current-system/sw/bin/nix"
       "binary": "nix",
+      // The virtual memory limit in MiB for `nix` evaluation.
+      // Currently it only applies to flake evaluation when `autoEvalInputs` is
+      // enabled, on *NIX platforms. Other `nix` invocations may be also
+      // applied in the future. `null` means no limit.
+      //
+      // Type: number | null
+      // Example: 1024
+      "maxMemoryMB": 2048,
       "flake": {
         // Auto-archiving behavior which may use network.
         //

@@ -8,15 +8,17 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
 
-use crate::FlakeUrl;
+use crate::{FlakeUrl, NixOutOfMemory};
 
 pub async fn eval_flake_output(
     nix_command: &Path,
     flake_url: &FlakeUrl,
     watcher_tx: Option<watch::Sender<String>>,
     legacy: bool,
+    memory_limit: Option<u64>,
 ) -> Result<FlakeOutput> {
-    let mut child = Command::new(nix_command)
+    let mut command = Command::new(nix_command);
+    command
         .kill_on_drop(true)
         .args([
             "flake",
@@ -30,12 +32,34 @@ pub async fn eval_flake_output(
         .arg(flake_url)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn `nix`")?;
+        .stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    unsafe {
+        if let Some(limit) = memory_limit {
+            use rustix::process::{setrlimit, Resource, Rlimit};
+            command.pre_exec(move || {
+                // NB. RSS limit has no effect on modern Linux. We set DATA limit instead.
+                setrlimit(
+                    Resource::Data,
+                    Rlimit {
+                        current: Some(limit),
+                        maximum: Some(limit),
+                    },
+                )
+                .map_err(|err| std::io::Error::from_raw_os_error(err.raw_os_error()))
+            });
+        }
+    }
+
+    #[cfg(not(unix))]
+    let _unused = memory_limit;
+
+    let mut child = command.spawn().context("Failed to spawn `nix`")?;
 
     let stderr = child.stderr.take().expect("Piped");
     let mut error_msg = String::new();
+    let mut oom = false;
     let consume_stderr_fut = async {
         let mut stderr = BufReader::new(stderr);
         let mut line = String::new();
@@ -43,7 +67,8 @@ pub async fn eval_flake_output(
             line.clear();
             matches!(stderr.read_line(&mut line).await, Ok(n) if n != 0)
         } {
-            if let Some(inner) = line.trim().strip_prefix("evaluating '") {
+            let line = line.trim();
+            if let Some(inner) = line.strip_prefix("evaluating '") {
                 if let Some(inner) = inner.strip_suffix("'...") {
                     if let Some(tx) = &watcher_tx {
                         tx.send_modify(|buf| {
@@ -53,12 +78,19 @@ pub async fn eval_flake_output(
                     }
                 }
             } else {
-                error_msg.push_str(&line);
+                if line == "error: out of memory" {
+                    oom = true;
+                }
+                error_msg.push_str(line);
             }
         }
     };
     let wait_fut = child.wait_with_output();
     let output = tokio::join!(consume_stderr_fut, wait_fut).1?;
+
+    if oom {
+        return Err(NixOutOfMemory.into());
+    }
 
     ensure!(
         output.status.success(),
@@ -123,7 +155,7 @@ mod tests {
     async fn eval_outputs() {
         let flake_url = FlakeUrl::new_path("./tests/test_flake");
         let (tx, rx) = watch::channel(String::new());
-        let output = eval_flake_output("nix".as_ref(), &flake_url, Some(tx), false)
+        let output = eval_flake_output("nix".as_ref(), &flake_url, Some(tx), false, None)
             .await
             .unwrap();
         // Even if the system is omitted, the attrpath is still printed in progress.
@@ -137,5 +169,17 @@ mod tests {
         assert_eq!(leaf.type_, Type::Derivation);
         assert_eq!(leaf.name.as_ref().unwrap(), "hello-1.2.3");
         assert_eq!(leaf.description.as_deref(), Some("A test derivation"));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires calling 'nix'"]
+    async fn memory_limit() {
+        let flake_url = FlakeUrl::new_path("./tests/oom_flake");
+        // 64MiB. This should be large enough to start the Nix evaluator itself without crash.
+        let limit = 64 << 20;
+        let err = eval_flake_output("nix".as_ref(), &flake_url, None, false, Some(limit))
+            .await
+            .unwrap_err();
+        assert!(err.is::<NixOutOfMemory>(), "expect OOM but got: {err}");
     }
 }

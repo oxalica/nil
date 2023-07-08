@@ -74,6 +74,8 @@ pub struct Config {
     pub formatting_command: Option<Vec<String>>,
     #[parse("/nix/binary", default = "nix".into())]
     pub nix_binary: PathBuf,
+    #[parse("/nix/maxMemoryMB", default = Some(2048))]
+    pub nix_max_memory_mb: Option<u64>,
     #[parse("/nix/flake/autoArchive")]
     pub nix_flake_auto_archive: Option<bool>,
     #[parse("/nix/flake/autoEvalInputs")]
@@ -97,5 +99,9 @@ impl Config {
     ) -> anyhow::Result<Option<Vec<String>>> {
         ensure!(v != Some(Vec::new()), "command must not be empty");
         Ok(v)
+    }
+
+    pub fn nix_max_memory(&self) -> Option<u64> {
+        self.nix_max_memory_mb?.checked_mul(1 << 20)
     }
 }

@@ -13,6 +13,10 @@ pub const DEFAULT_IMPORT_FILE: &str = "default.nix";
 pub const FLAKE_FILE: &str = "flake.nix";
 pub const FLAKE_LOCK_FILE: &str = "flake.lock";
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Nix exceeds memory limit")]
+pub struct NixOutOfMemory;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlakeUrl(String);
 

@@ -768,10 +768,12 @@ name = "nix-interop"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "rustix 0.38.3",
  "serde",
  "serde_json",
  "serde_repr",
  "syntax",
+ "thiserror",
  "tokio",
 ]
 

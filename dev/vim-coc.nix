@@ -100,6 +100,7 @@ let
     nil.formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
     nil.diagnostics.excludedFiles = [ "generated.nix" ];
     nil.nix.flake.autoEvalInputs = true;
+    nil.nix.maxMemoryMB = 2048;
   };
 
 

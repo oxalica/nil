@@ -672,6 +672,7 @@ impl Server {
                 &flake_url,
                 Some(watcher_tx),
                 include_legacy,
+                config.nix_max_memory(),
             ));
             let ret = loop {
                 match tokio::time::timeout(PROGRESS_REPORT_PERIOD, eval_fut.as_mut()).await {
@@ -684,13 +685,13 @@ impl Server {
                 Ok(output) => output,
                 Err(err) => {
                     // Don't spam on configuration errors (eg. bad Nix path).
-                    if error_cnt == 0 {
+                    error_cnt += 1;
+                    if error_cnt <= 3 {
                         client.show_message_ext(
                             MessageType::ERROR,
                             format!("Flake input {input_name:?} cannot be evaluated: {err:#}"),
                         );
                     }
-                    error_cnt += 1;
                     continue;
                 }
             };
