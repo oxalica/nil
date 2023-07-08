@@ -18,3 +18,6 @@ rust-version = "1.68"
 
 [profile.dev]
 debug = 1
+
+[profile.bench]
+debug = 1

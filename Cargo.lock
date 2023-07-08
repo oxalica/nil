@@ -1325,6 +1325,7 @@ dependencies = [
  "once_cell",
  "regex-automata 0.3.2",
  "rowan",
+ "walkdir",
 ]
 
 [[package]]
