@@ -37,4 +37,4 @@ features = [
 ]
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "0.37.17", default-features = false, features = ["fs"] }
+rustix = { version = "0.38.3", default-features = false, features = ["fs"] }

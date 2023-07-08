@@ -751,7 +751,7 @@ dependencies = [
  "lsp-types",
  "macro_rules_attribute",
  "nix-interop",
- "rustix 0.37.23",
+ "rustix 0.38.3",
  "serde_json",
  "slab",
  "ssr",
