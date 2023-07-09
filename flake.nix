@@ -101,7 +101,9 @@ rec {
               rustPkgs.rust-nightly_2023-07-08.availableComponents.rustfmt
               # Follows nixpkgs's version of rustc.
               (let vers = lib.splitVersion rustc.version; in
-                rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}")
+              rustPkgs."rust_${lib.elemAt vers 0}_${lib.elemAt vers 1}_${lib.elemAt vers 2}".override {
+                extensions = [ "rust-src" ];
+              })
 
               # Don't include `nix` by default. If would override user's (newer
               # or patched) one, cause damage or misbehavior due to version
