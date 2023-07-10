@@ -18,7 +18,7 @@ rec {
       date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
       rev = self.rev or (throw "Git changes are not committed");
 
-      mkNil = { rustPlatform, nix, ... }:
+      mkNil = { rustPlatform, nixUnstable, ... }:
         rustPlatform.buildRustPackage {
           pname = "nil";
           version = "unstable-${date}";
@@ -29,7 +29,7 @@ rec {
             allowBuiltinFetchGit = false;
           };
 
-          nativeBuildInputs = [ nix.out ];
+          nativeBuildInputs = [ nixUnstable.out ];
 
           CFG_RELEASE = "git-${rev}";
 
@@ -109,7 +109,6 @@ rec {
               # or patched) one, cause damage or misbehavior due to version
               # mismatch.
               # If you do want a locked one, use `devShells.full` below.
-              # nix.out
 
               nodejs
               watchman # Required by coc.nvim for file watching.
@@ -140,7 +139,7 @@ rec {
           # See comments above.
           devShells.full = devShells.default.overrideAttrs (old: {
             nativeBuildInputs = old.nativeBuildInputs ++ [
-              pkgs.nix.out
+              pkgs.nixUnstable.out
             ];
           });
 
