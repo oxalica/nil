@@ -12,9 +12,10 @@ fn main() {
         .args([
             "eval",
             "--experimental-features",
-            "nix-command",
+            "nix-command flakes",
             "--store",
             "dummy://",
+            "--impure",
             "--json",
             "--expr",
             "builtins.attrNames builtins",
@@ -33,9 +34,10 @@ fn main() {
                     .args([
                         "eval",
                         "--experimental-features",
-                        "nix-command",
+                        "nix-command flakes",
                         "--store",
                         "dummy://",
+                        "--impure",
                         "--expr",
                         name,
                     ])
