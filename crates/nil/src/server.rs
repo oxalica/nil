@@ -36,12 +36,14 @@ use std::time::Duration;
 use std::{fmt, panic};
 use tokio::sync::watch;
 use tokio::task;
-use tokio::task::{AbortHandle, JoinHandle};
+use tokio::task::JoinHandle;
 
 const LSP_SERVER_NAME: &str = "nil";
 const FLAKE_ARCHIVE_PROGRESS_TOKEN: &str = "nil/flakeArchiveProgress";
 const LOAD_INPUT_FLAKE_PROGRESS_TOKEN: &str = "nil/loadInputFlakeProgress";
 const LOAD_NIXOS_OPTIONS_PROGRESS_TOKEN: &str = "nil/loadNixosOptionsProgress";
+
+const MAX_DIAGNOSTICS_CNT: usize = 128;
 
 const PROGRESS_REPORT_PERIOD: Duration = Duration::from_millis(100);
 const LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION: Duration = Duration::from_millis(100);
@@ -49,6 +51,7 @@ const LOAD_FLAKE_WORKSPACE_DEBOUNCE_DURATION: Duration = Duration::from_millis(1
 type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
 struct UpdateConfigEvent(serde_json::Value);
+struct UpdateDiagnostics(u64, Vec<(Url, Vec<lsp_types::Diagnostic>)>);
 struct SetFlakeInfoEvent(Option<FlakeInfo>);
 struct SetNixosOptionsEvent(NixosOptions);
 
@@ -64,6 +67,7 @@ pub struct Server {
     tried_flake_load: bool,
     /// Is this workspace a flake?
     workspace_is_flake: bool,
+    diagnostic_version: u64,
 
     // Ongoing tasks.
     load_flake_workspace_fut: Option<JoinHandle<()>>,
@@ -77,7 +81,8 @@ pub struct Server {
 
 #[derive(Debug, Default)]
 struct FileData {
-    diagnostics_task: Option<AbortHandle>,
+    // XXX: `lsp_types::Diagnostic` has a very large memory footprint.
+    diagnostics: Vec<lsp_types::Diagnostic>,
 }
 
 impl Server {
@@ -121,6 +126,7 @@ impl Server {
             .event(Self::on_set_flake_info)
             .event(Self::on_set_nixos_options)
             .event(Self::on_update_config)
+            .event(Self::on_update_diagnostics)
             // Loopback event.
             .event(Self::on_did_change_watched_files);
         router
@@ -135,6 +141,7 @@ impl Server {
             config: Arc::new(Config::new("/non-existing-path".into())),
             tried_flake_load: false,
             workspace_is_flake: false,
+            diagnostic_version: 0,
 
             load_flake_workspace_fut: None,
 
@@ -289,7 +296,7 @@ impl Server {
             self.spawn_load_flake_workspace();
         }
 
-        self.spawn_update_diagnostics(uri);
+        self.spawn_update_diagnostics();
 
         ControlFlow::Continue(())
     }
@@ -301,13 +308,13 @@ impl Server {
         self.opened_files.remove(&params.text_document.uri);
 
         // Clear diagnostics for closed files.
-        let _: Result<_, _> =
-            self.client
-                .notify::<notif::PublishDiagnostics>(PublishDiagnosticsParams {
-                    uri: params.text_document.uri,
-                    diagnostics: Vec::new(),
-                    version: None,
-                });
+        self.client
+            .publish_diagnostics(PublishDiagnosticsParams {
+                uri: params.text_document.uri,
+                diagnostics: Vec::new(),
+                version: None,
+            })
+            .expect("inside main loop");
 
         ControlFlow::Continue(())
     }
@@ -343,8 +350,6 @@ impl Server {
 
         // FIXME: This blocks.
         self.apply_vfs_change();
-
-        self.spawn_update_diagnostics(uri);
 
         ControlFlow::Continue(())
     }
@@ -821,64 +826,96 @@ impl Server {
             self.client.show_message_ext(MessageType::ERROR, msg);
         }
 
-        // Refresh all diagnostics since the filter may be changed.
-        if updated_diagnostics {
-            // Pre-collect to avoid mutability violation.
-            let uris = self.opened_files.keys().cloned().collect::<Vec<_>>();
-            for uri in uris {
-                tracing::trace!("Recalculate diagnostics of {uri}");
-                self.spawn_update_diagnostics(uri.clone());
-            }
-        }
-
         // If this is the first load, load the flake workspace, which depends on `nix.binary`.
         if !self.tried_flake_load {
             self.tried_flake_load = true;
             self.spawn_load_flake_workspace();
         }
 
+        // Refresh all diagnostics since the filter may be changed.
+        if updated_diagnostics {
+            self.spawn_update_diagnostics();
+        }
+
         ControlFlow::Continue(())
     }
 
-    fn spawn_update_diagnostics(&mut self, uri: Url) {
-        let task = self.spawn_with_snapshot({
-            let uri = uri.clone();
-            move |snap| {
-                // Return empty diagnostics for ignored files.
-                (!snap.config.diagnostics_excluded_files.contains(&uri))
-                    .then(|| {
-                        with_catch_unwind("diagnostics", || handler::diagnostics(snap, &uri))
-                            .unwrap_or_else(|err| {
-                                tracing::error!("Failed to calculate diagnostics: {err}");
-                                Vec::new()
-                            })
+    fn spawn_update_diagnostics(&mut self) {
+        self.diagnostic_version += 1;
+        let version = self.diagnostic_version;
+
+        let client = self.client.clone();
+        let opened_files = {
+            let vfs = self.vfs.read().unwrap();
+            self.opened_files
+                .keys()
+                .filter_map(|uri| {
+                    let file = vfs.file_for_uri(uri).ok()?;
+                    let line_map = vfs.line_map_for_file(file);
+                    Some((uri.clone(), file, line_map))
+                })
+                .collect::<Vec<_>>()
+        };
+
+        self.spawn_with_snapshot(move |snap| {
+            let ret = with_catch_unwind("diagnostics", || {
+                opened_files
+                    .into_iter()
+                    .map(|(uri, file, line_map)| {
+                        let diags = if !snap.config.diagnostics_excluded_files.contains(&uri) {
+                            let mut diags = snap.analysis.diagnostics(file)?;
+                            diags.retain(|diag| {
+                                !snap.config.diagnostics_ignored.contains(diag.code())
+                            });
+                            diags.truncate(MAX_DIAGNOSTICS_CNT);
+                            convert::to_diagnostics(&uri, file, &line_map, &diags)
+                        } else {
+                            Vec::new()
+                        };
+                        Ok((uri, diags))
                     })
-                    .unwrap_or_default()
+                    .collect::<Result<Vec<_>>>()
+            });
+            match ret {
+                Ok(diags) => {
+                    let _: Result<_, _> = client.emit(UpdateDiagnostics(version, diags));
+                }
+                // Ignore cancellations caused by editing.
+                Err(err) if err.is::<Cancelled>() => {}
+                Err(err) => tracing::error!("Failed to update diagnostics: {err:#}"),
             }
         });
+    }
 
-        // Can this really fail?
-        let Some(f) = self.opened_files.get_mut(&uri) else {
-            task.abort();
-            return;
-        };
-        if let Some(prev_task) = f.diagnostics_task.replace(task.abort_handle()) {
-            prev_task.abort();
+    fn on_update_diagnostics(
+        &mut self,
+        UpdateDiagnostics(version, diags): UpdateDiagnostics,
+    ) -> NotifyResult {
+        // Content changed before the event dispatch. A new request should be enqueued.
+        if self.diagnostic_version != version {
+            return ControlFlow::Continue(());
         }
 
-        let mut client = self.client.clone();
-        task::spawn(async move {
-            if let Ok(diagnostics) = task.await {
-                tracing::debug!("Publish {} diagnostics for {}", diagnostics.len(), uri);
-                let _: Result<_, _> = client.publish_diagnostics(PublishDiagnosticsParams {
+        for (uri, diagnostics) in diags {
+            match self.opened_files.get_mut(&uri) {
+                // Update if changed.
+                Some(file_data) if file_data.diagnostics != diagnostics => {
+                    file_data.diagnostics = diagnostics.clone();
+                }
+                _ => continue,
+            }
+
+            tracing::debug!("Publish {} diagnostics for {}", diagnostics.len(), uri);
+            self.client
+                .publish_diagnostics(PublishDiagnosticsParams {
                     uri,
                     diagnostics,
                     version: None,
-                });
-            } else {
-                // Task cancelled, then there must be another task queued already. Do nothing.
-            }
-        });
+                })
+                .expect("inside main loop");
+        }
+
+        ControlFlow::Continue(())
     }
 
     /// Create a blocking task with a database snapshot as the input.
@@ -911,6 +948,8 @@ impl Server {
         // N.B. This acquires the internal write lock.
         // Must be called without holding the lock of `vfs`.
         self.host.apply_change(changes);
+
+        self.spawn_update_diagnostics();
     }
 }
 
