@@ -73,4 +73,17 @@ mod tests {
             "#]],
         );
     }
+
+    #[test]
+    fn deterministic_order() {
+        check(
+            "let a = 1; b = 2; c = 3; d = 4; in 0",
+            expect![[r#"
+                4..5: UnusedBinding
+                11..12: UnusedBinding
+                18..19: UnusedBinding
+                25..26: UnusedBinding
+            "#]],
+        );
+    }
 }

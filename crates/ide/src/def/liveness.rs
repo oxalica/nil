@@ -20,7 +20,7 @@
 use super::{BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
 use crate::{Diagnostic, DiagnosticKind, FileId, ModuleKind};
 use la_arena::ArenaMap;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use syntax::ast::{self, AstNode};
 use syntax::TextRange;
@@ -99,11 +99,12 @@ pub(crate) fn liveness_check_query(
     let mut visited_def_rhs = ArenaMap::with_capacity(expr_cnt);
     let mut visited_withs = ArenaMap::with_capacity(expr_cnt);
     let mut stack = vec![module.entry_expr];
+    let mut discovered_let_rhs: BTreeMap<NameId, ExprId> = BTreeMap::new();
 
     while !stack.is_empty() {
         // N.B. This should be dropped in every loop.
         // Or it will make this whole check cost quadratic time!
-        let mut discovered_let_rhs: HashMap<NameId, ExprId> = HashMap::new();
+        discovered_let_rhs.clear();
 
         // Traverse all reachable Exprs from roots.
         while let Some(expr) = stack.pop() {
