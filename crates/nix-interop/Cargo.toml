@@ -15,7 +15,7 @@ thiserror = "1.0.43"
 tokio = { version = "1.27.0", features = ["io-util", "macros", "process", "sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "0.38.3", default-features = false, features = ["process"] }
+rustix = { version = "0.38.3", default-features = false, features = ["process", "std"] }
 
 [dev-dependencies]
 tokio = { version = "1.27.0", features = ["macros", "parking_lot", "rt", "sync"] } # parking_lot is required for `OnceCell::const_new`.
