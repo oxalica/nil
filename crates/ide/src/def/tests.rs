@@ -6,6 +6,30 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 #[test]
+fn change_barrier() {
+    let src = r#"
+{ stdenv }:
+stdenv.mkDerivation {
+    pname = "hello";
+    version = "42"; # comment
+}
+"#;
+    let (mut db, file) = TestDB::single_file(src).unwrap();
+    let module = db.module(file);
+
+    for (before, after) in [("comment", "editted cmt"), (";", "  ; \n ")] {
+        let new_src = src.replace(before, after);
+        assert_ne!(src, new_src);
+        db.set_file_content(file, new_src.into());
+        assert_eq!(
+            module,
+            db.module(file),
+            "module() changed on update {before:?} -> {after:?}"
+        );
+    }
+}
+
+#[test]
 fn source_map() {
     let (db, root) = TestDB::single_file("foo 123").unwrap();
 
