@@ -23,7 +23,7 @@ let
   # Special tranfrom for < 23.05
   renderDoc = v:
     if isString v
-    then { _type = "mkDoc"; text = v; }
+    then { _type = "mdDoc"; text = v; }
     else v;
 
   # Dummy `pkgs`.

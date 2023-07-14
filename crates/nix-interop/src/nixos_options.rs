@@ -197,7 +197,7 @@ mod tests {
             .unwrap();
 
         // Sanity check.
-        let Ty::Attrset { fields, .. } = &(&opts["nix"].ty) else {
+        let Ty::Attrset { fields, .. } = &opts["nix"].ty else {
             panic!("Invalid options: {opts:?}");
         };
         let opt = &fields["enable"];
@@ -218,5 +218,11 @@ mod tests {
     #[ignore = "requires using 'nix' and '<nixpkgs>'"]
     async fn nixos_22_11() {
         check_nixpkgs("nixos-22-11").await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires using 'nix' and '<nixpkgs>'"]
+    async fn nixos_23_05() {
+        check_nixpkgs("nixos-23-05").await;
     }
 }
