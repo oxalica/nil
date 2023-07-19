@@ -93,7 +93,7 @@ pub async fn run_server_stdio() -> Result<()> {
                     .notification(|n| tracing::info_span!("notification", method = n.method))
                     .event(|e| tracing::info_span!("event", method = e.type_name())),
             )
-            .layer(MeterLayer::default())
+            .layer(MeterLayer)
             .layer(LifecycleLayer::default())
             // TODO: Use `CatchUnwindLayer`.
             .layer(ConcurrencyLayer::new(concurrency))
