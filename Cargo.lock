@@ -746,7 +746,6 @@ dependencies = [
  "async-lsp",
  "codespan-reporting",
  "ide",
- "is-terminal",
  "log",
  "lsp-types",
  "macro_rules_attribute",

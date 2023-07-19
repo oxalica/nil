@@ -11,7 +11,6 @@ argh = "0.1.10"
 async-lsp = "0.0.4"
 codespan-reporting = "0.11.1"
 ide = { path = "../ide" }
-is-terminal = "0.4.7"
 log = "0.4.17"
 lsp-types = "0.94.0"
 macro_rules_attribute = "0.2.0"

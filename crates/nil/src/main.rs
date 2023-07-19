@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::term::termcolor::WriteColor;
 use ide::{AnalysisHost, Severity};
-use is_terminal::IsTerminal;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fs, io, process};
