@@ -338,7 +338,19 @@ mod tests {
                 `bool`
 
                 `builtins.true`
-                (No documentation from Nix)
+                Primitive value.
+
+                It can be returned by
+                [comparison operators](@docroot@/language/operators.md#Comparison)
+                and used in
+                [conditional expressions](@docroot@/language/constructs.md#Conditionals).
+
+                The name `true` is not special, and can be shadowed:
+
+                ```nix-repl
+                nix-repl> let true = 1; in true
+                1
+                ```
             "#]],
         );
         check(
@@ -419,7 +431,19 @@ mod tests {
                 `bool`
 
                 `builtins.true`
-                (No documentation from Nix)
+                Primitive value.
+
+                It can be returned by
+                [comparison operators](@docroot@/language/operators.md#Comparison)
+                and used in
+                [conditional expressions](@docroot@/language/constructs.md#Conditionals).
+
+                The name `true` is not special, and can be shadowed:
+
+                ```nix-repl
+                nix-repl> let true = 1; in true
+                1
+                ```
             "#]],
         );
 
@@ -434,7 +458,14 @@ mod tests {
                 `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, … }`
 
                 `builtins.builtins`
-                (No documentation from Nix)
+                Contains all the [built-in functions](@docroot@/language/builtins.md) and values.
+
+                Since built-in functions were added over time, [testing for attributes](./operators.md#has-attribute) in `builtins` can be used for graceful fallback on older Nix installations:
+
+                ```nix
+                # if hasContext is not available, we assume `s` has a context
+                if builtins ? hasContext then builtins.hasContext s else true
+                ```
             "#]],
         );
     }
