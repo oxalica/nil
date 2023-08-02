@@ -47,15 +47,11 @@ jobs:
         uses: cachix/install-nix-action@v22
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          nix_path: nixpkgs=channel:nixos-unstable
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.channel }}
+          nix_path: nixpkgs=channel:nixpkgs-unstable
       - name: Build
-        run: cargo build --all
+        run: nix develop .#full --command cargo build --all
       - name: Test
-        run: cargo test --all -- --include-ignored
+        run: nix develop .#full --command cargo test --all -- --include-ignored
 
   nix-flake:
     name: Flake package
