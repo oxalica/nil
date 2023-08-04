@@ -90,7 +90,7 @@ regex_dfa! {
     DEFAULT_TOKEN_DFA {
         // The order matters!
         SPACE = r"[ \r\n\t]+",
-        COMMENT = r"#.*|/\*([^*]|\*[^/])*\*/",
+        COMMENT = r"#.*|/\*([^*]|\*+[^/*])*\*+/",
         // N.B. Nix somehow accepts multiple slashes in path interpolation except the first
         // slash, but the first path fragment accepts at most 2 continuous slashes.
         //
@@ -620,6 +620,37 @@ mod tests {
                 IDENT "x"
                 R_CURLY "}"
                 QUOTE2 "''"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn comment() {
+        check_lex(
+            "/*1/*2*/3*/4",
+            expect![[r#"
+                COMMENT "/*1/*2*/"
+                INT "3"
+                STAR "*"
+                PATH "/4"
+            "#]],
+        );
+        check_lex(
+            "1/**/2",
+            expect![[r#"
+                INT "1"
+                COMMENT "/**/"
+                INT "2"
+            "#]],
+        );
+        check_lex(
+            "1/*/2/**/3/***/4",
+            expect![[r#"
+                INT "1"
+                COMMENT "/*/2/**/"
+                INT "3"
+                COMMENT "/***/"
+                INT "4"
             "#]],
         );
     }
