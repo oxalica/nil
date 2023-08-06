@@ -43,7 +43,7 @@ it is allowed to have recursive references (but may not be infinite recursion).
 ### `flatten_attrset`
 
 Flatten binding with Attrset RHS into multiple bindings of outer level.
-FIXME: Indentations are not reformated well.
+FIXME: Indentations are not reformatted well.
 
 ```nix
 {
@@ -64,7 +64,7 @@ foo.baz = 2;
 ### `pack_bindings`
 
 Pack multiple bindings with the same prefix into nested one.
-FIXME: Indentations are not reformated well.
+FIXME: Indentations are not reformatted well.
 
 ```nix
 {

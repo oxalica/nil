@@ -66,7 +66,7 @@ impl LowerCtx<'_> {
         if let Some(expr) = expr {
             return self.lower_expr(expr);
         }
-        // Synthetic syntax has no coresponding text.
+        // Synthetic syntax has no corresponding text.
         self.module.exprs.alloc(Expr::Missing)
     }
 

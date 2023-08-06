@@ -202,7 +202,7 @@ fn complete_expr(
         .map(|kw| keyword_to_completion(kw, source_range))
         .for_each(&mut feed);
 
-    // Contectual keywords.
+    // Contextual keywords.
     if ref_node
         .syntax()
         .ancestors()
@@ -298,7 +298,7 @@ fn complete_attrpath(
     }
 
     // We are inside the first Attr of a Let.
-    // Completes all static names in the same `Let` for splited definition.
+    // Completes all static names in the same `Let` for split definition.
     // ```nix
     // let
     //   foo.bar = 42;

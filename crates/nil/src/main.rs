@@ -187,7 +187,7 @@ fn main_parse(args: ParseArgs) {
 
 #[derive(Debug, FromArgs)]
 #[argh(subcommand, name = "ssr")]
-/// Search structural patterns and optionaly replace them.
+/// Search structural patterns and optionally replace them.
 /// WARNING: This functionality is experimental.
 struct SsrArgs {
     /// nix file to check, or read from stdin for `-`.

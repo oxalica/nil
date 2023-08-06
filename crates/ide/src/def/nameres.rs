@@ -226,7 +226,7 @@ pub struct NameResolution {
     // `None` value for unresolved names.
     resolve_map: HashMap<ExprId, Option<ResolveResult>>,
     // All names from the common pattern `inherit (builtins) ...`.
-    // This is used for tracking builtins names even through alising.
+    // This is used for tracking builtins names even through aliasing.
     inherited_builtins: HashSet<NameId>,
 }
 

@@ -1,5 +1,5 @@
 //! Flatten binding with Attrset RHS into multiple bindings of outer level.
-//! FIXME: Indentations are not reformated well.
+//! FIXME: Indentations are not reformatted well.
 //!
 //! ```nix
 //! {

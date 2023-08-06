@@ -1,0 +1,9 @@
+[files]
+extend-exclude = [
+    "crates/syntax/test_data",
+]
+
+[default.extend-words]
+froms = "froms"
+regist = "regist" # coc.nvim `registLanguageClient`
+withs = "withs"

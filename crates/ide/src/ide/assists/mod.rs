@@ -152,14 +152,14 @@ mod tests {
         fixture: &str,
         expect: Expect,
     ) {
-        let got = try_apply_assist(handler, fixture).expect("Not applicatable");
+        let got = try_apply_assist(handler, fixture).expect("Not applicable");
         expect.assert_eq(&got);
     }
 
     #[track_caller]
     pub(crate) fn check_assist_no(handler: fn(&mut AssistsCtx) -> Option<()>, fixture: &str) {
         if let Some(got) = try_apply_assist(handler, fixture) {
-            panic!("Unexpected applicatable:\n{got}");
+            panic!("Unexpected applicable:\n{got}");
         }
     }
 }

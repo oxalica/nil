@@ -2,7 +2,7 @@
 //! It locates uncessary or inaccessible bindings and expressions, based on name resolution.
 //!
 //! Our goals are,
-//! - Applicatable.
+//! - Applicable.
 //!   Removing ALL unused items will work and be semantically identical.
 //! - Closed.
 //!   If there is an unused binding, it either has no references,

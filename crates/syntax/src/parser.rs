@@ -183,7 +183,7 @@ impl<'i> Parser<'i> {
         }
     }
 
-    /// Expect the termination of an experssion by a followed `guard` token.
+    /// Expect the termination of an expression by a followed `guard` token.
     /// Return whether the expected token is consumed.
     fn require_expr_end(&mut self, guard: SyntaxKind) -> bool {
         if matches!(self.peek_non_ws(), Some(k) if k == guard) {
@@ -192,7 +192,7 @@ impl<'i> Parser<'i> {
         }
         self.error(ErrorKind::ExpectToken(guard));
 
-        // Try to consume more experssions as recovery.
+        // Try to consume more expressions as recovery.
         loop {
             match self.peek_non_ws() {
                 Some(k) if k == guard => {
@@ -675,7 +675,7 @@ impl<'i> Parser<'i> {
                     self.want(T![;]);
                     self.finish_node();
                 }
-                // Ensure we always consume somthing in the loop!
+                // Ensure we always consume something in the loop!
                 Some(k) if k.can_start_attr() => {
                     self.start_node(ATTR_PATH_VALUE);
                     self.attrpath_opt();

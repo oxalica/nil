@@ -1,5 +1,5 @@
 //! Pack multiple bindings with the same prefix into nested one.
-//! FIXME: Indentations are not reformated well.
+//! FIXME: Indentations are not reformatted well.
 //!
 //! ```nix
 //! {

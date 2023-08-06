@@ -17,7 +17,7 @@ stdenv.mkDerivation {
     let (mut db, file) = TestDB::single_file(src).unwrap();
     let module = db.module(file);
 
-    for (before, after) in [("comment", "editted cmt"), (";", "  ; \n ")] {
+    for (before, after) in [("comment", "edited cmt"), (";", "  ; \n ")] {
         let new_src = src.replace(before, after);
         assert_ne!(src, new_src);
         db.set_file_content(file, new_src.into());

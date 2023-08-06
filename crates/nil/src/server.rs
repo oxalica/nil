@@ -303,7 +303,7 @@ impl Server {
 
     fn on_did_close(&mut self, params: DidCloseTextDocumentParams) -> NotifyResult {
         // N.B. Don't clear text here.
-        // `DidCloseTextDocument` means the client ends its maintainance to a file but
+        // `DidCloseTextDocument` means the client ends its maintenance to a file but
         // not deletes it.
         self.opened_files.remove(&params.text_document.uri);
 
