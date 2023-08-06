@@ -775,20 +775,20 @@ mod tests {
     #[test]
     fn string() {
         check_lower(
-            r#"" fo\no ""#,
+            r#"" a\nb ""#,
             expect![[r#"
-                0: Literal(String(" fo\no "))
+                0: Literal(String(" a\nb "))
             "#]],
         );
         check_lower(
-            r#"'' fo'''o ''"#,
+            r#"'' a'''b ''"#,
             expect![[r#"
                 0: StringInterpolation([])
             "#]],
         );
 
         check_lower(
-            r#"" fo${1}o\n$${${42}\💗""#,
+            r#"" a${1}b\n$${${42}\💗""#,
             expect![[r#"
                 0: Literal(Int(1))
                 1: Literal(Int(42))

@@ -82,10 +82,10 @@ mod tests {
         check("{foo, ...}: $0bar", expect!["{foo, bar, ...}: bar"]);
         check("{foo,...}: $0bar", expect!["{foo, bar,...}: bar"]);
 
-        check_no("{ foo }: fo$0o");
+        check_no("{ foo }: foo$0");
         check_no("{ }: foo.$0bar");
-        check_no("{ }: let foo = bar; in f$0oo");
-        check_no("{ bar }: { fo$0o = bar; }");
-        check_no("bar: fo$0o");
+        check_no("{ }: let foo = bar; in $0foo");
+        check_no("{ bar }: { foo$0 = bar; }");
+        check_no("bar: foo$0");
     }
 }

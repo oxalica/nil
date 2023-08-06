@@ -307,7 +307,7 @@ mod tests {
         );
 
         check_no(r#"$0"foo""#);
-        check_no(r#"{ ${fo$0o} = bar; }"#);
+        check_no(r#"{ ${foo$0} = bar; }"#);
         check_no(r#"{ $0"foo\n" = bar; }"#);
         check_no(r#"{ "foo.$0bar" = baz; }"#);
     }

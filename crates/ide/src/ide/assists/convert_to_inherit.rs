@@ -99,7 +99,7 @@ mod tests {
         check("{ f$0oo = foo; }", expect!["{ inherit foo; }"]);
         check("{ foo $0= foo; }", expect!["{ inherit foo; }"]);
         check("{ foo = f$0oo; }", expect!["{ inherit foo; }"]);
-        check("{ fo$0o = fo$1o; }", expect!["{ inherit foo; }"]);
+        check("{ foo$0 = $1foo; }", expect!["{ inherit foo; }"]);
 
         check_no("$0{ foo = foo; }");
     }
@@ -120,7 +120,7 @@ mod tests {
     fn multiple_rhs_plain() {
         check("{ foo = bar.foo$0; }", expect!["{ inherit (bar) foo; }"]);
         check(
-            "{ foo.bar = ba$0z.bar; }",
+            "{ foo.bar = baz$0.bar; }",
             expect!["{ foo = { inherit (baz) bar; }; }"],
         );
         check(
