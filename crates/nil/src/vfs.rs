@@ -153,11 +153,11 @@ impl Vfs {
 #[derive(Debug, PartialEq, Eq)]
 pub struct LineMap {
     /// Invariant:
-    /// - Have at least two elements.
+    /// - Have at least one element.
     /// - The first must be 0.
-    /// - The last must be the length of original text.
     line_starts: Vec<u32>,
     char_diffs: HashMap<u32, Vec<(u32, CodeUnitsDiff)>>,
+    len: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,12 +169,12 @@ enum CodeUnitsDiff {
 impl LineMap {
     fn normalize(mut text: String) -> (String, Self) {
         // Must be valid for `TextSize`.
-        u32::try_from(text.len()).expect("Text too long");
+        let text_len = u32::try_from(text.len()).expect("Text too long");
 
         text.retain(|c| c != '\r');
         let bytes = text.as_bytes();
 
-        let mut line_starts = Some(0)
+        let line_starts = Some(0)
             .into_iter()
             .chain(
                 bytes
@@ -184,10 +184,12 @@ impl LineMap {
                     .map(|(_, i)| i + 1),
             )
             .collect::<Vec<_>>();
-        line_starts.push(text.len() as u32);
 
         let mut char_diffs = HashMap::new();
-        for ((&start, &end), i) in line_starts.iter().zip(&line_starts[1..]).zip(0u32..) {
+
+        let start_pos_iter = line_starts.iter().copied();
+        let end_pos_iter = line_starts[1..].iter().copied().chain(Some(text_len));
+        for ((start, end), i) in start_pos_iter.zip(end_pos_iter).zip(0u32..) {
             let mut diffs = Vec::new();
             for (&b, pos) in bytes[start as usize..end as usize].iter().zip(0u32..) {
                 let diff = match b {
@@ -207,12 +209,13 @@ impl LineMap {
         let this = Self {
             line_starts,
             char_diffs,
+            len: text_len,
         };
         (text, this)
     }
 
     pub fn last_line(&self) -> u32 {
-        self.line_starts.len() as u32 - 2
+        self.line_starts.len() as u32 - 1
     }
 
     pub fn pos_for_line_col(&self, line: u32, mut col: u32) -> TextSize {
@@ -245,14 +248,15 @@ impl LineMap {
     }
 
     pub fn end_col_for_line(&self, line: u32) -> u32 {
-        let mut len = self.line_starts[line as usize + 1] - self.line_starts[line as usize];
+        let mut len = if line + 1 >= self.line_starts.len() as u32 {
+            self.len - self.line_starts[line as usize]
+        } else {
+            // Minus the trailing `\n` for non-last-lines.
+            self.line_starts[line as usize + 1] - self.line_starts[line as usize] - 1
+        };
+
         if let Some(diffs) = self.char_diffs.get(&line) {
             len -= diffs.iter().map(|&(_, diff)| diff as u32).sum::<u32>();
-        }
-        // Lines except the last one has a trailing `\n`.
-        // Note that `line_starts` has one element more than actual total lines.
-        if line + 1 + 1 != self.line_starts.len() as u32 {
-            len -= 1;
         }
         len
     }
@@ -268,7 +272,7 @@ mod tests {
         let s = "hello\nworld\nend";
         let (norm, map) = LineMap::normalize(s.into());
         assert_eq!(norm, s);
-        assert_eq!(&map.line_starts, &[0, 6, 12, 15]);
+        assert_eq!(&map.line_starts, &[0, 6, 12]);
 
         let mapping = [
             (0, 0, 0),
@@ -277,6 +281,7 @@ mod tests {
             (6, 1, 0),
             (11, 1, 5),
             (12, 2, 0),
+            (15, 2, 3),
         ];
         for (pos, line, col) in mapping {
             assert_eq!(map.line_col_for_pos(pos.into()), (line, col));
@@ -294,7 +299,7 @@ mod tests {
         let s = "_A_ß_ℝ_💣_";
         let (norm, map) = LineMap::normalize(s.into());
         assert_eq!(norm, s);
-        assert_eq!(&map.line_starts, &[0, 15]);
+        assert_eq!(&map.line_starts, &[0]);
         assert_eq!(
             &map.char_diffs,
             &HashMap::from([(
