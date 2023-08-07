@@ -8,15 +8,14 @@ mod semantic_tokens;
 mod server;
 mod vfs;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_lsp::client_monitor::ClientProcessMonitorLayer;
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::server::LifecycleLayer;
 use async_lsp::stdio::{PipeStdin, PipeStdout};
 use async_lsp::tracing::TracingLayer;
 use ide::VfsPath;
-use lsp_types::{MessageType, ShowMessageParams, Url};
-use tokio::io::BufReader;
+use lsp_types::Url;
 use tower::ServiceBuilder;
 
 pub(crate) use server::{Server, StateSnapshot};
@@ -62,30 +61,21 @@ impl UrlExt for Url {
 
 pub async fn run_server_stdio() -> Result<()> {
     let concurrency = match std::thread::available_parallelism() {
-        Ok(n) => n,
+        // Double the concurrency limit since many handlers are blocking anyway.
+        Ok(n) => n.saturating_mul(2.try_into().expect("2 is not 0")),
         Err(err) => {
             tracing::error!("Failed to get available parallelism: {err}");
-            1.try_into().expect("1 is not 0")
+            2.try_into().expect("2 is not 0")
         }
     };
     tracing::info!("Max concurrent requests: {concurrency}");
 
-    let mut init_messages = Vec::new();
-    if let Some(err) = PipeStdin::lock().err().or_else(|| PipeStdout::lock().err()) {
-        init_messages.push(ShowMessageParams {
-            typ: MessageType::WARNING,
-            message: format!(
-                "\
-                Invalid stdin/stdout fd mode: {err}. \n\
-                This will become a hard error in the future. \n\
-                Please file an issue with your editor configurations: \n\
-                https://github.com/oxalica/nil/issues
-                ",
-            ),
-        });
-    }
+    let init_messages = Vec::new();
 
-    let (frontend, _) = async_lsp::Frontend::new_server(|client| {
+    let stdin = PipeStdin::lock_tokio().context("stdin is not pipe-like")?;
+    let stdout = PipeStdout::lock_tokio().context("stdout is not pipe-like")?;
+
+    let (mainloop, _) = async_lsp::MainLoop::new_server(|client| {
         ServiceBuilder::new()
             .layer(
                 TracingLayer::new()
@@ -101,7 +91,5 @@ pub async fn run_server_stdio() -> Result<()> {
             .service(Server::new_router(client, init_messages))
     });
 
-    let input = BufReader::new(tokio::io::stdin());
-    let output = tokio::io::stdout();
-    Ok(frontend.run(input, output).await?)
+    Ok(mainloop.run_buffered(stdin, stdout).await?)
 }
