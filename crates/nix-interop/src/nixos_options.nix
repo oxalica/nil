@@ -104,8 +104,8 @@ let
 
       listOf = { name = "list"; inherit elem; };
 
-      attrOf = { name = "attrset"; rest = elem; };
-      lazyAttrOf = { name = "attrset"; rest = elem; };
+      attrsOf = { name = "attrset"; rest = elem; };
+      lazyAttrsOf = { name = "attrset"; rest = elem; };
 
       uniq = elem;
       unique = elem;
