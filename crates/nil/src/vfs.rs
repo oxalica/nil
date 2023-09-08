@@ -168,10 +168,10 @@ enum CodeUnitsDiff {
 
 impl LineMap {
     fn normalize(mut text: String) -> (String, Self) {
+        text.retain(|c| c != '\r');
+
         // Must be valid for `TextSize`.
         let text_len = u32::try_from(text.len()).expect("Text too long");
-
-        text.retain(|c| c != '\r');
         let bytes = text.as_bytes();
 
         let line_starts = Some(0)
@@ -349,5 +349,16 @@ mod tests {
         assert_eq!(map.end_col_for_line(1), 5);
         assert_eq!(map.end_col_for_line(2), 0);
         assert_eq!(map.end_col_for_line(3), 3);
+    }
+
+    #[test]
+    fn cr_lf() {
+        let (_, map) = LineMap::normalize("hello\r\nworld!".into());
+        assert_eq!(map.last_line(), 1);
+        assert_eq!(map.end_col_for_line(0), 5);
+        assert_eq!(map.end_col_for_line(1), 6);
+
+        // `\r` should be stripped. Thus only 5 chars + 1 newline for the first line.
+        assert_eq!(map.line_col_for_pos(6.into()), (1, 0));
     }
 }
