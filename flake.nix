@@ -70,6 +70,9 @@ rec {
             "-D" "clippy::missing-panics-doc"
             "-D" "clippy::semicolon_if_nothing_returned"
             "-D" "clippy::uninlined_format_args"
+
+            # FIXME: https://github.com/rust-lang/rust-clippy/issues/11436
+            "-A" "clippy::missing_panics_doc"
           ];
 
           pre-commit = pkgs.writeShellScriptBin "pre-commit" ''

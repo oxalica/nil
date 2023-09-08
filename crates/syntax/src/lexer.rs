@@ -148,7 +148,7 @@ regex_dfa! {
         DQUOTE = r#"""#,
         // Yes, we parse one UTF-8 encoded char here, to avoid break into code units.
         // We can assume the input is already a valid UTF-8 string.
-        STRING_ESCAPE = r#"\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)"#,
+        STRING_ESCAPE = r"\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)",
         DOLLAR_L_CURLY = r"\$\{",
         // `$$` makes the second `$` loses the special meaning.
         STRING_FRAGMENT = r"\$\$",
@@ -161,7 +161,7 @@ regex_dfa! {
     INDENT_STRING_TOKEN_DFA {
         // The order matters!
         // See comments in STRING_TOKEN_DFA's STRING_ESCAPE.
-        STRING_ESCAPE = r#"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''"#,
+        STRING_ESCAPE = r"''\\([\x00-\x7F]|[\x80-\xFF][\x80-\xBF]*)|''\$|'''",
         QUOTE2 = r"''",
         DOLLAR_L_CURLY = r"\$\{",
         // `$$` makes the second `$` loses the special meaning.
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn indent_string() {
         check_lex(
-            r#"'' a'''b$c''\nd''${e${{} ''f''} ''"#,
+            r"'' a'''b$c''\nd''${e${{} ''f''} ''",
             expect![[r#"
                 QUOTE2 "''"
                 STRING_FRAGMENT " a"
@@ -548,8 +548,8 @@ mod tests {
         );
 
         check_lex(
-            r#"''''\n''\_''\
-''\ΣΣ''"#,
+            r"''''\n''\_''\
+''\ΣΣ''",
             expect![[r#"
                 QUOTE2 "''"
                 STRING_ESCAPE "''\\n"
