@@ -252,6 +252,7 @@ mod tests {
     #[test]
     fn lambda() {
         check("a: { b }: $0c@{}: 0");
+        check("let __findFile = a: b: 1; in <findme>");
     }
 
     #[test]

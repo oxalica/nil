@@ -469,7 +469,27 @@ impl<'i> Parser<'i> {
                 self.bump(); // IDENT
                 self.finish_node();
             }
-            Some(k @ (INT | FLOAT | PATH | SEARCH_PATH | URI)) => {
+            Some(SEARCH_PATH) => {
+                // Desugaring search path into a __findFile call
+                self.start_node(APPLY);
+                self.start_node(APPLY);
+
+                self.start_node(REF);
+                self.builder.token(SyntaxKind::IDENT.into(), "__findFile");
+                self.finish_node();
+
+                self.start_node(LIST);
+                self.finish_node();
+
+                self.finish_node();
+
+                self.start_node(LITERAL);
+                self.bump();
+                self.finish_node();
+
+                self.finish_node()
+            }
+            Some(k @ (INT | FLOAT | PATH | URI)) => {
                 if k == PATH {
                     self.validate_path_fragment(false);
                 }

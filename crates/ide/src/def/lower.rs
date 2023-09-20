@@ -709,6 +709,16 @@ mod tests {
                 PathData { anchor: Search("p"), supers: 2, relative_path: ".b/c" }
             "#]],
         );
+        check_lower(
+            r#"<something>"#,
+            expect![[r#"
+            0: Reference("__findFile")
+            1: List([])
+            2: Apply(Idx::<Expr>(0), Idx::<Expr>(1))
+            3: Literal(Path(Path(0)))
+            4: Apply(Idx::<Expr>(2), Idx::<Expr>(3))
+            "#]],
+        );
     }
 
     #[test]
