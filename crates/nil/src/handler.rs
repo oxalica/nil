@@ -221,9 +221,10 @@ pub(crate) fn formatting(
         Ok(stdout)
     }
 
-    let Some(cmd) = &snap.config.formatting_command else {
-        return Ok(None);
-    };
+    let cmd =
+        snap.config.formatting_command.as_ref().context(
+            "No formatter configured. Set the nil.formatting.command LSP server setting.",
+        )?;
 
     let (file_content, line_map) = {
         let vfs = snap.vfs();
