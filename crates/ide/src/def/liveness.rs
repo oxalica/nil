@@ -17,6 +17,10 @@
 //! - Unused `with` expressions.
 //! - Unnecessary `rec` attrsets.
 //! - Unused parameters of a package.
+//!
+//! Notes:
+//! - All identifiers starting with `_` are skipped from warnings. This also includes Nix internals
+//!   starting with `__`, eg. `__findFile` <https://github.com/oxalica/nil/pull/109>.
 use super::{BindingValue, DefDatabase, Expr, ExprId, NameId, ResolveResult};
 use crate::{Diagnostic, DiagnosticKind, FileId, ModuleKind};
 use la_arena::ArenaMap;
@@ -24,6 +28,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use syntax::ast::{self, AstNode};
 use syntax::TextRange;
+
+fn should_ignore(name: &str) -> bool {
+    name.starts_with('_')
+}
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct LivenessCheckResult {
@@ -207,6 +215,8 @@ pub(crate) fn liveness_check_query(
         }
     }
 
+    unused_defs.retain(|name| !should_ignore(&module[*name].text));
+
     Arc::new(LivenessCheckResult {
         names: unused_defs.into(),
         withs: unused_withs.into(),
@@ -352,5 +362,11 @@ mod tests {
 }
             ",
         );
+    }
+
+    #[test]
+    fn underscore_names() {
+        check("x: _y: x");
+        check("let __findFile = 42; in <nixpkgs>");
     }
 }
