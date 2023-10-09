@@ -632,8 +632,10 @@ mod tests {
                 Expr::Literal(Literal::Path(path)) => Some(path),
                 _ => None,
             })
-            .map(|path| format!("{:?}\n", path.data(&db)))
-            .collect::<String>();
+            .fold(String::new(), |mut got, path| {
+                writeln!(got, "{:?}", path.data(&db)).unwrap();
+                got
+            });
         expect.assert_eq(&got);
     }
 

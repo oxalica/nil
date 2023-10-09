@@ -4,6 +4,7 @@ use crate::{FlakeInfo, ModuleKind, SourceDatabase, VfsPath};
 use expect_test::expect;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 
 #[test]
 fn change_barrier() {
@@ -118,19 +119,19 @@ baz/../../bar.nix + ../default.nix
     let source_root = db.source_root(sid);
     let graph = db.source_root_referrer_graph(sid);
 
-    let got = source_root
-        .files()
-        .sorted_by_key(|&(f, _)| f)
-        .map(|(referee, _)| {
+    let got = source_root.files().sorted_by_key(|&(f, _)| f).fold(
+        String::new(),
+        |mut got, (referee, _)| {
             let referrers = graph.get(&referee).cloned().unwrap_or_default();
             let referee = source_root.path_for_file(referee).display();
             let referrers = referrers
                 .iter()
                 .map(|&f| source_root.path_for_file(f).display())
                 .join(", ");
-            format!("{referee} <- [{referrers}]\n")
-        })
-        .collect::<String>();
+            writeln!(got, "{referee} <- [{referrers}]").unwrap();
+            got
+        },
+    );
     expect![[r#"
         /default.nix <- [/foo/bar.nix, /bar.nix]
         /foo/bar.nix <- [/default.nix]
