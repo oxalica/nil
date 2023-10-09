@@ -14,7 +14,7 @@ itertools = "0.11.0"
 la-arena = "0.3.0"
 nix-interop = { path = "../nix-interop" }
 once_cell = "1.17.0"
-ordered-float = "3.4.0"
+ordered-float = "4.1.0"
 salsa = "0.17.0-pre.2"
 smallvec = { version = "1.10.0", features = ["const_generics", "union"] }
 smol_str = "0.2.0"
