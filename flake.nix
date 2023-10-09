@@ -37,6 +37,7 @@ rec {
             inherit description;
             homepage = "https://github.com/oxalica/nil";
             license = with lib.licenses; [ mit asl20 ];
+            mainProgram = "nil";
           };
         };
 
