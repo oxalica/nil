@@ -4,7 +4,7 @@ use criterion::{BatchSize, Criterion};
 use once_cell::sync::Lazy;
 
 const TEST_FILES: &[(&str, &str)] = &[
-    ("gcc-13", "pkgs/development/compilers/gcc/13/default.nix"),
+    ("gcc-13", "pkgs/development/compilers/gcc/default.nix"),
     ("all-packages", "pkgs/top-level/all-packages.nix"),
 ];
 
