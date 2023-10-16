@@ -796,7 +796,7 @@ mod tests {
     inputs.nixpkgs.url = "...";
     outputs = { n$0 }: { };
 }
-            "#,
+"#,
             "nixpkgs",
             expect![[r#"
                 (Param) {
@@ -815,7 +815,7 @@ mod tests {
 {
     nix.e$0
 }
-            ",
+",
             "enable",
             expect![[r#"
                 (Field) { ... }:
@@ -830,7 +830,7 @@ mod tests {
 {
     notexists.e$0
 }
-            ",
+",
             "enable",
         );
         check_no(
@@ -839,7 +839,7 @@ mod tests {
 stdenv.mkDerivation {
     nix.e$0
 }
-            ",
+",
             "enable",
         );
     }

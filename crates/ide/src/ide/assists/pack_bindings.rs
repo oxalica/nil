@@ -316,7 +316,7 @@ rec {
   foo = rec { };
   $0foo = { a = 42; };
 }
-              ",
+",
             expect![[r#"
                 {
                 foo = rec {
@@ -343,7 +343,7 @@ rec {
     d = 3;
   };
 }
-              ",
+",
             expect![[r#"
                 {
                 foo = {

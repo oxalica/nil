@@ -182,7 +182,9 @@ impl Fixture {
 
     fn insert_file(&mut self, path: VfsPath, mut text: String) -> Result<()> {
         let file = FileId(self.files.len() as u32);
-        text.truncate(text.trim_end().len());
+        // Trim the last newline for simplicity. But whitespaces are kept since markers may be
+        // pointing to them.
+        text.truncate(text.trim_end_matches('\n').len());
         ensure!(
             self.files.insert(path.clone(), text).is_none(),
             "Duplicated path: {:?}",
