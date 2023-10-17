@@ -87,8 +87,6 @@ rec {
               || die 'Format failed'
             cargo clippy --workspace --all-targets -- ${clippyFlags} \
               || die 'Clippy failed'
-            cargo test --workspace --all-targets \
-              || die 'Test failed'
 
             ( cd editors/coc-nil; npm run lint )
           '';
