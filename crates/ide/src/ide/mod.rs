@@ -164,7 +164,7 @@ impl Analysis {
         &self,
         pos: FilePos,
         trigger_char: Option<char>,
-    ) -> Cancellable<Option<Vec<CompletionItem>>> {
+    ) -> Cancellable<Vec<CompletionItem>> {
         self.with_db(|db| completion::completions(db, pos, trigger_char))
     }
 

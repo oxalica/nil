@@ -76,9 +76,7 @@ pub(crate) fn completion(
     let trigger_char = params
         .context
         .and_then(|ctx| ctx.trigger_character?.chars().next());
-    let Some(items) = snap.analysis.completions(fpos, trigger_char)? else {
-        return Ok(None);
-    };
+    let items = snap.analysis.completions(fpos, trigger_char)?;
     let items = items
         .into_iter()
         .map(|item| convert::to_completion_item(&line_map, item))

@@ -1,12 +1,12 @@
-use crate::def::{AstPtr, BindingValue, Expr, NameKind};
+use crate::def::{AstPtr, BindingValue, Expr, ExprId, ModuleScopes, NameKind};
 use crate::ty::{self, AttrSource, DisplayConfig, Ty};
-use crate::{FileId, FilePos, TyDatabase};
+use crate::{FilePos, InferenceResult, Module, ModuleSourceMap, TyDatabase};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use either::Either::{Left, Right};
 use smol_str::SmolStr;
-use syntax::ast::{self, AstNode, Attr};
+use syntax::ast::{self, AstNode};
+use syntax::rowan::TokenAtOffset;
 use syntax::semantic::{escape_literal_attr, is_valid_ident, AttrKind};
-use syntax::{best_token_at_offset, match_ast, SyntaxKind, SyntaxNode, TextRange, T};
+use syntax::{match_ast, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, T};
 
 use super::hover::TY_DETAILED_DISPLAY;
 
@@ -38,7 +38,7 @@ pub struct CompletionItem {
     /// The label to show in the completion menu.
     pub label: SmolStr,
     /// Range of identifier that is being completed.
-    pub source_range: TextRange,
+    pub replace_range: TextRange,
     /// What content replaces the source range when user selects this item.
     pub replace: SmolStr,
     /// What item (struct, function, etc) are we completing.
@@ -84,415 +84,503 @@ impl From<NameKind> for CompletionItemKind {
     }
 }
 
+struct Context<'a> {
+    module: &'a Module,
+    source_map: &'a ModuleSourceMap,
+    scopes: &'a ModuleScopes,
+    infer: &'a InferenceResult,
+    fpos: FilePos,
+    // The token at cursor (left biased) to complete.
+    token: SyntaxToken,
+    // The replace range for the result.
+    replace_range: TextRange,
+    // Identifier prefix as filter.
+    prefix: &'a str,
+    completions: Vec<CompletionItem>,
+}
+
 pub(crate) fn completions(
     db: &dyn TyDatabase,
     fpos @ FilePos { file_id, pos }: FilePos,
-    trigger_char: Option<char>,
-) -> Option<Vec<CompletionItem>> {
+    _trigger_char: Option<char>,
+) -> Vec<CompletionItem> {
     let parse = db.parse(file_id);
 
-    if let Some(items) =
-        trigger_char.and_then(|ch| complete_trigger(db, fpos, parse.syntax_node(), ch))
-    {
-        return Some(items);
-    }
-
-    let tok = best_token_at_offset(&parse.syntax_node(), pos)?;
-    let source_range = match tok.kind() {
-        T![.] => TextRange::empty(pos),
-        SyntaxKind::IDENT => tok.text_range(),
-        _ => return None,
+    // Always completes from the LHS if we are in the middle of two tokens,
+    // with the exception when LHS is the binding terminator `;`,
+    // then we must regard it as a new binding starting.
+    let token = match parse.syntax_node().token_at_offset(pos) {
+        TokenAtOffset::None => return Vec::new(),
+        TokenAtOffset::Single(token) => token,
+        TokenAtOffset::Between(lhs, _) if lhs.kind() != T![;] => lhs,
+        TokenAtOffset::Between(_, rhs) => rhs,
     };
 
-    let node = tok.parent_ancestors().find_map(|node| {
+    // Identifiers on LHS (keywords may be incomplete identifiers) are the hints to complete,
+    // the result should replace it.
+    // Otherwise, if we are not in (or after) any identifiers, we are completing a fresh new
+    // identifier or snippet, the result should be inserted to the current position.
+    let (replace_range, prefix) = if token.kind() == SyntaxKind::IDENT || token.kind().is_keyword()
+    {
+        // Clamp the prefix range in case where we are typing inside an identifier.
+        // Eg. `foo|bar`. This is not clear if we want to replace `foobar` or just insert,
+        // we do the former currently. But at least the hint prefix must be only `foo`.
+        let prefix_len = pos - token.text_range().start();
+        (token.text_range(), &token.text()[..prefix_len.into()])
+    } else {
+        (TextRange::empty(pos), "")
+    };
+
+    let module = db.module(file_id);
+    let source_map = db.source_map(file_id);
+    let scopes = db.scopes(file_id);
+    let infer = db.infer(file_id);
+
+    let mut ctx = Context {
+        module: &module,
+        source_map: &source_map,
+        scopes: &scopes,
+        infer: &infer,
+        fpos,
+        token: token.clone(),
+        replace_range,
+        prefix,
+        completions: Vec::new(),
+    };
+    ctx.complete();
+
+    let mut completions = ctx.completions;
+    // TODO: Better sorting.
+    completions.sort_by(|lhs, rhs| lhs.label.cmp(&rhs.label));
+    completions.dedup_by(|lhs, rhs| lhs.label == rhs.label);
+    completions
+}
+
+impl Context<'_> {
+    fn complete(&mut self) -> Option<()> {
+        // Do not complete inside strings.
+        // TODO: Escapes and `${}` snippets?
+        if let T!["''"] | T!['"'] | SyntaxKind::STRING_FRAGMENT = self.token.kind() {
+            return None;
+        }
+
+        let mut parent = self.token.parent()?;
+        if let Some(name) = ast::Name::cast(parent.clone()) {
+            parent = name.syntax().parent()?;
+        }
+
         match_ast! {
-            match node {
-                ast::Ref(n) => Some(Left(n)),
-                ast::Name(n) => Some(Right(n)),
-                _ => None,
+            match parent {
+                // A definition, or a child of `HasAttr` or `Select`.
+                ast::Attrpath(path) => {
+                    self.complete_attrpath(path);
+                },
+                ast::Inherit(inherit_node) => {
+                    self.complete_inherit_attr(inherit_node);
+                },
+                // Triggered right at `.` or `?` token.
+                ast::HasAttr(e) => {
+                    if e.question_token()?.text_range().end() <= self.fpos.pos {
+                        self.complete_attrpath(e.attrpath()?);
+                    }
+                },
+                ast::Select(e) => {
+                    if e.dot_token()?.text_range().end() <= self.fpos.pos {
+                        self.complete_attrpath(e.attrpath()?);
+                    }
+                },
+
+                // Outside any existing binding but inside a binding container,
+                // eg. `let |` or `{ a = 1; | }`.
+                ast::LetIn(e) => {
+                    self.complete_binding(ast::Expr::LetIn(e));
+                },
+                ast::AttrSet(e) => {
+                    self.complete_binding(ast::Expr::AttrSet(e));
+                },
+
+                // At a parameter pattern field,
+                // eg. `{ a| }: 42`.
+                ast::PatField(field) => {
+                    let lambda = field
+                        .syntax()
+                        .ancestors()
+                        // Lambda > Param > Pat > PatField
+                        .nth(3)
+                        .and_then(ast::Lambda::cast)?;
+                    self.complete_lambda_pat_param(lambda);
+                },
+                // Inside lambda parameter but outside any existing fields,
+                // eg. `{ a, |... }: 42`
+                ast::Pat(pat) => {
+                    let lambda = pat
+                        .syntax()
+                        .ancestors()
+                        // Lambda > Param > Pat
+                        .nth(2)
+                        .and_then(ast::Lambda::cast)?;
+                    self.complete_lambda_pat_param(lambda);
+                },
+
+                // Expression context.
+                ast::Expr(expr) => {
+                    self.complete_expr(expr);
+                },
+                _ => {}
             }
         }
-    })?;
 
-    match node {
-        Left(ref_node) => complete_expr(db, file_id, source_range, ref_node),
-        Right(name_node) => {
-            match_ast! {
-                match (name_node.syntax().parent()?) {
-                    ast::Attrpath(path_node) => {
-                        complete_attrpath(db, file_id, source_range, name_node, path_node)
-                    },
-                    ast::PatField(pat_field_node) => {
-                        let lambda_node = pat_field_node
-                            .syntax()
-                            .ancestors()
-                            .find_map(ast::Lambda::cast)?;
-                        complete_pat_param(db, file_id, source_range, name_node, lambda_node)
-                    },
-                    _ => None,
+        Some(())
+    }
+
+    /// Subsequence matching check.
+    fn can_complete(&self, replace: &str) -> bool {
+        let mut prefix = self.prefix.as_bytes();
+        if prefix.is_empty() {
+            return true;
+        }
+        for b in replace.bytes() {
+            if prefix.first().unwrap() == &b {
+                prefix = &prefix[1..];
+                if prefix.is_empty() {
+                    return true;
                 }
             }
         }
-    }
-}
-
-fn complete_trigger(
-    db: &dyn TyDatabase,
-    FilePos { file_id, pos }: FilePos,
-    root_node: SyntaxNode,
-    trigger_char: char,
-) -> Option<Vec<CompletionItem>> {
-    if !matches!(trigger_char, '.' | '?') {
-        return None;
+        false
     }
 
-    let trigger_tok = root_node.token_at_offset(pos).left_biased()?;
-    let source_range = TextRange::empty(trigger_tok.text_range().end());
-    let path_node = match_ast! {
-        match (trigger_tok.parent()?) {
-            // `foo.bar.|` or `foo?bar.|`
-            ast::Attrpath(n) => n,
-            // `foo.|`
-            ast::Select(n) => n.attrpath()?,
-            // `foo?|`
-            ast::HasAttr(n) => n.attrpath()?,
-            _ => return None,
+    fn record_item(&mut self, compe: CompletionItem) {
+        if self.can_complete(&compe.replace) {
+            self.completions.push(compe);
         }
-    };
-
-    // There may be triva between `.` and NAME, due to parser lookahead.
-    // We skips them to locate the correct node, while keeping `source_range` at the cursor.
-    // `{ a.| = 42; }`
-    //     ^  \ NAME before here
-    //     DOT is here
-    let Attr::Name(name_node) = path_node
-        .attrs()
-        .find(|attr| source_range.start() <= attr.syntax().text_range().start())?
-    else {
-        return None;
-    };
-
-    let path_node = ast::Attrpath::cast(name_node.syntax().parent()?)?;
-    complete_attrpath(db, file_id, source_range, name_node, path_node)
-}
-
-fn complete_expr(
-    db: &dyn TyDatabase,
-    file_id: FileId,
-    source_range: TextRange,
-    ref_node: ast::Ref,
-) -> Option<Vec<CompletionItem>> {
-    let module = db.module(file_id);
-    let source_map = db.source_map(file_id);
-    let expr_id = source_map.expr_for_node(AstPtr::new(ref_node.syntax()))?;
-    let scopes = db.scopes(file_id);
-    let scope_id = scopes.scope_for_expr(expr_id)?;
-
-    let prefix = SmolStr::from(ref_node.token()?.text());
-    let mut items = Vec::new();
-    let mut feed = |compe: CompletionItem| {
-        if can_complete(&prefix, &compe.replace) {
-            items.push(compe);
-        }
-    };
-
-    // Keywords.
-    EXPR_POS_KEYWORDS
-        .iter()
-        .map(|kw| keyword_to_completion(kw, source_range))
-        .for_each(&mut feed);
-
-    // Contextual keywords.
-    if ref_node
-        .syntax()
-        .ancestors()
-        .find_map(ast::IfThenElse::cast)
-        .is_some()
-    {
-        feed(keyword_to_completion("then", source_range));
-        feed(keyword_to_completion("else", source_range));
-    }
-    if ref_node
-        .syntax()
-        .ancestors()
-        .find_map(ast::LetIn::cast)
-        .is_some()
-    {
-        feed(keyword_to_completion("in", source_range));
     }
 
-    let infer = db.infer(file_id);
-
-    // Names in current scopes.
-    scopes
-        .ancestors(scope_id)
-        .filter_map(|scope| scope.as_definitions())
-        .flatten()
-        .filter(|(text, _)| is_valid_ident(text))
-        .map(|(text, &name)| CompletionItem {
-            label: text.clone(),
-            source_range,
-            replace: text.clone(),
-            kind: module[name].kind.into(),
-            signature: {
-                let ty = infer.ty_for_name(name);
-                ty.is_known()
-                    .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string())
-            },
+    fn record_keyword(&mut self, kw: &str) {
+        self.record_item(CompletionItem {
+            label: kw.into(),
+            replace_range: self.replace_range,
+            replace: kw.into(),
+            kind: CompletionItemKind::Keyword,
+            signature: None,
             description: None,
             documentation: None,
-        })
-        .for_each(&mut feed);
+        });
+    }
 
-    // Global builtins.
-    ALL_BUILTINS
-        .entries()
-        .filter(|(_, b)| b.is_global)
-        .filter_map(|(name, _)| builtin_to_completion(source_range, name))
-        .for_each(&mut feed);
+    fn record_builtin(&mut self, name: &str) {
+        let Some(builtin) = ALL_BUILTINS.get(name) else {
+            return;
+        };
+        let ty = ty::known::BUILTINS
+            .as_attrset()
+            .unwrap()
+            .get(name)
+            .cloned()
+            .unwrap_or(Ty::Unknown);
+        self.record_item(CompletionItem {
+            label: name.into(),
+            replace_range: self.replace_range,
+            replace: name.into(),
+            kind: builtin.kind.into(),
+            signature: ty
+                .is_known()
+                .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+            description: Some(format!(
+                "{}\n{}",
+                ty.display_with(TY_DETAILED_DISPLAY),
+                builtin.summary,
+            )),
+            documentation: builtin.doc.map(|s| s.to_owned()),
+        });
+    }
 
-    // TODO: Better sorting.
-    items.sort_by(|lhs, rhs| lhs.label.cmp(&rhs.label));
-    items.dedup_by(|lhs, rhs| lhs.label == rhs.label);
+    /// Complete in expression position, with the name scope of `expr_node`.
+    /// Eg. `a + |` or `let a = 1; in |`.
+    fn complete_expr(&mut self, expr_node: ast::Expr) -> Option<()> {
+        let expr_id = self
+            .source_map
+            .expr_for_node(AstPtr::new(expr_node.syntax()))?;
 
-    Some(items)
-}
-
-fn complete_attrpath(
-    db: &dyn TyDatabase,
-    file_id: FileId,
-    source_range: TextRange,
-    name_node: ast::Name,
-    path_node: ast::Attrpath,
-) -> Option<Vec<CompletionItem>> {
-    let (set_node, container_node) = match_ast! {
-        match (path_node.syntax().parent()?){
-            ast::AttrpathValue(n) => {
-                let n = n.syntax().parent()?;
-                (n.clone(), n)
-            },
-            ast::HasAttr(n) => (n.set()?.syntax().clone(), n.syntax().clone()),
-            ast::Select(n) => (n.set()?.syntax().clone(), n.syntax().clone()),
-            _ => return None,
+        // Keywords.
+        for kw in EXPR_POS_KEYWORDS {
+            self.record_keyword(kw);
         }
-    };
 
-    let is_let = ast::LetIn::can_cast(container_node.kind());
-    let is_attrset = ast::AttrSet::can_cast(container_node.kind());
-    let attr_cnt = path_node.attrs().count();
-    let current_input = name_node
-        .token()
-        .map_or(SmolStr::default(), |tok| tok.text().into());
+        // Contextual keywords.
+        // TODO: Only emit if they are actually missing.
+        if expr_node
+            .syntax()
+            .ancestors()
+            .find_map(ast::IfThenElse::cast)
+            .is_some()
+        {
+            self.record_keyword("then");
+            self.record_keyword("else");
+        }
+        if expr_node
+            .syntax()
+            .ancestors()
+            .find_map(ast::LetIn::cast)
+            .is_some()
+        {
+            self.record_keyword("in");
+        }
 
-    let module = db.module(file_id);
-    let source_map = db.source_map(file_id);
+        // Global builtins.
+        ALL_BUILTINS
+            .entries()
+            .filter(|(_, b)| b.is_global)
+            .for_each(|(name, _)| self.record_builtin(name));
 
-    let mut items = Vec::new();
+        let scope_id = self.scopes.scope_for_expr(expr_id)?;
 
-    // Only complete keywords when this Attrpath has only one Attr.
-    if attr_cnt == 1 && (is_let || is_attrset) {
-        items.push(keyword_to_completion("inherit", source_range));
+        // Names in current scopes.
+        self.scopes
+            .ancestors(scope_id)
+            .filter_map(|scope| scope.as_definitions())
+            .flatten()
+            .filter(|(text, _)| is_valid_ident(text))
+            .for_each(|(text, &name)| {
+                self.record_item(CompletionItem {
+                    label: text.clone(),
+                    replace_range: self.replace_range,
+                    replace: text.clone(),
+                    kind: self.module[name].kind.into(),
+                    signature: {
+                        let ty = self.infer.ty_for_name(name);
+                        ty.is_known()
+                            .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string())
+                    },
+                    description: None,
+                    documentation: None,
+                });
+            });
+
+        Some(())
     }
-    if attr_cnt == 1 && is_let {
-        items.push(keyword_to_completion("in", source_range));
-    }
 
-    // We are inside the first Attr of a Let.
-    // Completes all static names in the same `Let` for split definition.
-    // ```nix
-    // let
-    //   foo.bar = 42;
-    //   f| # <- We may want to also define `foo.baz`.
-    // in /**/
-    // ```
-    // Note that the first Attr of an Attrset can be handled by types later.
-    if is_let
-        && path_node
-            .attrs()
-            .next()
-            .map_or(false, |attr| attr.syntax() == name_node.syntax())
-    {
-        if let Some(expr) = source_map.expr_for_node(AstPtr::new(&container_node)) {
-            if let Expr::LetIn(b, _) = &module[expr] {
-                items.extend(
-                    b.statics
-                        .iter()
-                        .filter(|(_, v)| matches!(v, BindingValue::Expr(_)))
-                        .map(|&(name, _)| module[name].text.clone())
-                        // We should not report current incomplete definition.
-                        // This is covered by `no_incomplete_field`.
-                        .filter(|name| *name != current_input)
-                        .map(|name| {
-                            let escaped_name = escape_literal_attr(&name);
-                            CompletionItem {
-                                label: escaped_name.as_ref().into(),
-                                source_range,
-                                replace: escaped_name.into(),
-                                kind: CompletionItemKind::LetBinding,
-                                signature: None,
-                                description: None,
-                                documentation: None,
-                            }
-                        }),
-                );
+    /// Complete in binding position.
+    /// Eg. `{ a = 1; | }` or `let |`.
+    fn complete_binding(&mut self, container: ast::Expr) -> Option<()> {
+        self.record_keyword("inherit");
+
+        let expr_id = self
+            .source_map
+            .expr_for_node(AstPtr::new(container.syntax()))?;
+        if let ast::Expr::LetIn(let_in_node) = &container {
+            if let_in_node.in_token().is_none() {
+                self.record_keyword("in");
+            }
+            self.complete_sibling_bindings(expr_id);
+        } else if let ast::Expr::AttrSet(attrset_node) = &container {
+            let is_rec = attrset_node.rec_token().is_some();
+            let is_let = attrset_node.let_token().is_some();
+            if is_rec || is_let {
+                self.complete_sibling_bindings(expr_id);
+            }
+            if !is_let {
+                let ty = self.infer.ty_for_expr(expr_id);
+                self.complete_attr(ty);
             }
         }
-        return Some(items);
+
+        Some(())
     }
 
-    // If we get here, we are either inside a selection path `a.b|`,
-    // or non-first parts of a definition `{ a.b| }`.
-    // Use type information
-    (|| -> Option<()> {
-        let infer = db.infer(file_id);
-
-        let mut attrs = path_node.attrs();
-        let set_ty = if is_let {
-            let name = source_map.name_for_node(AstPtr::new(attrs.next()?.syntax()))?;
-            infer.ty_for_name(name)
-        } else {
-            let set_expr = source_map.expr_for_node(AstPtr::new(&set_node))?;
-            infer.ty_for_expr(set_expr)
+    // Complete variables defined in the same block for recursive blocks.
+    // `let foo.bar = 1; f|` -> `foo`
+    // TODO: Filter variables with Attrset types?
+    fn complete_sibling_bindings(&mut self, expr_id: ExprId) -> Option<()> {
+        let (Expr::LetIn(bindings, _) | Expr::RecAttrset(bindings) | Expr::LetAttrset(bindings)) =
+            &self.module[expr_id]
+        else {
+            return None;
         };
 
-        // Resolve prefix paths, except for the current NAME.
-        // foo.a.b.c|.d
-        // ^-----^
-        let ty = attrs
-            .take_while(|attr| attr.syntax() != name_node.syntax())
-            .try_fold(set_ty, |set_ty, attr| match AttrKind::of(attr) {
-                AttrKind::Static(Some(field)) => set_ty.as_attrset()?.get(&field).cloned(),
-                _ => None,
-            })?;
-        let set = ty.as_attrset()?;
-
-        items.extend(set.iter().filter_map(|(name, ty, src)| {
-            // We should not report current incomplete definition.
+        let prefix = self.prefix;
+        bindings
+            .statics
+            .iter()
+            .filter(|(_, v)| matches!(v, BindingValue::Expr(_)))
+            .map(|&(name, _)| self.module[name].text.clone())
+            // Skip current incomplete prefix.
             // This is covered by `no_incomplete_field`.
-            if **name == current_input {
-                return None;
+            .filter(|name| *name != prefix)
+            .for_each(|name| {
+                let escaped_name = escape_literal_attr(&name);
+                self.record_item(CompletionItem {
+                    label: escaped_name.as_ref().into(),
+                    replace_range: self.replace_range,
+                    replace: escaped_name.into(),
+                    kind: CompletionItemKind::LetBinding,
+                    signature: None,
+                    description: None,
+                    documentation: None,
+                });
+            });
+        Some(())
+    }
+
+    /// Complete attributes of a given attrset type.
+    fn complete_attr(&mut self, attrset_ty: Ty) -> Option<()> {
+        let attrset = attrset_ty.as_attrset()?;
+        for (name, ty, src) in attrset.iter() {
+            // Fast filter. And skip current incomplete prefix.
+            if !self.can_complete(name) || name == self.prefix {
+                continue;
             }
 
             if src == AttrSource::Builtin {
-                return builtin_to_completion(source_range, name);
+                self.record_builtin(name);
+                continue;
             }
 
             let escaped_name = escape_literal_attr(name);
-
-            Some(CompletionItem {
+            self.completions.push(CompletionItem {
                 label: escaped_name.as_ref().into(),
-                source_range,
+                replace_range: self.replace_range,
                 replace: escaped_name.into(),
                 kind: match src {
                     AttrSource::Unknown => CompletionItemKind::Field,
-                    AttrSource::Name(name) => module[name].kind.into(),
+                    AttrSource::Name(name) => self.module[name].kind.into(),
                     // Handled above.
                     AttrSource::Builtin => unreachable!(),
                 },
                 signature: Some(ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
                 description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
                 documentation: None,
-            })
-        }));
-
-        Some(())
-    })();
-
-    Some(items)
-}
-
-fn complete_pat_param(
-    db: &dyn TyDatabase,
-    file_id: FileId,
-    source_range: TextRange,
-    name_node: ast::Name,
-    lambda_node: ast::Lambda,
-) -> Option<Vec<CompletionItem>> {
-    let source_map = db.source_map(file_id);
-    let infer = db.infer(file_id);
-    let lambda_expr = source_map.expr_for_node(AstPtr::new(lambda_node.syntax()))?;
-    let lambda_ty = infer.ty_for_expr(lambda_expr);
-    let Ty::Lambda(arg_ty, _) = lambda_ty else {
-        return None;
-    };
-    let arg_set = arg_ty.as_attrset()?;
-
-    let name_tok = name_node.token()?;
-    let prefix = name_tok.text();
-
-    let items = arg_set
-        .iter()
-        .filter(|(name, ..)| prefix != name.as_str() && can_complete(prefix, name))
-        .map(|(name, ty, _)| CompletionItem {
-            label: name.clone(),
-            source_range,
-            replace: name.clone(),
-            kind: CompletionItemKind::Param,
-            signature: ty
-                .is_known()
-                .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
-            description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
-            documentation: None,
-        })
-        .collect();
-    Some(items)
-}
-fn keyword_to_completion(kw: &str, source_range: TextRange) -> CompletionItem {
-    CompletionItem {
-        label: kw.into(),
-        source_range,
-        replace: kw.into(),
-        kind: CompletionItemKind::Keyword,
-        signature: None,
-        description: None,
-        documentation: None,
-    }
-}
-
-fn builtin_to_completion(source_range: TextRange, name: &str) -> Option<CompletionItem> {
-    let builtin = ALL_BUILTINS.get(name)?;
-    let ty = ty::known::BUILTINS
-        .as_attrset()
-        .unwrap()
-        .get(name)
-        .cloned()
-        .unwrap_or(Ty::Unknown);
-    Some(CompletionItem {
-        label: name.into(),
-        source_range,
-        replace: name.into(),
-        kind: builtin.kind.into(),
-        signature: ty
-            .is_known()
-            .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
-        description: Some(format!(
-            "{}\n{}",
-            ty.display_with(TY_DETAILED_DISPLAY),
-            builtin.summary,
-        )),
-        documentation: builtin.doc.map(|s| s.to_owned()),
-    })
-}
-
-// Subsequence matching.
-fn can_complete(prefix: &str, replace: &str) -> bool {
-    let mut rest = prefix.as_bytes();
-    if rest.is_empty() {
-        return true;
-    }
-    for b in replace.bytes() {
-        if rest.first().unwrap() == &b {
-            rest = &rest[1..];
-            if rest.is_empty() {
-                return true;
-            }
+            });
         }
+        Some(())
     }
-    false
+
+    /// Complete a segment of `Attrpath`, which may be a reference or a definition.
+    fn complete_attrpath(&mut self, node: ast::Attrpath) -> Option<()> {
+        // All known `Attr`s, until (and excluding) the one we are currently typing.
+        // foo.a.b.c|.d
+        // ^-----^
+        let mut prefix_attrs = node
+            .attrs()
+            .take_while(|attr| attr.syntax().text_range().end() < self.fpos.pos)
+            .peekable();
+
+        // TODO: Merge these logic.
+        // Currently, we must special case the first `Attr` of let-in definition to get its type,
+        // since the `Expr::LetIn` has the type of its body, not the variable set.
+        enum Prefix {
+            SetExpr(SyntaxNode),
+            LetIn(ast::Attr),
+        }
+
+        let prefix = match_ast! {
+            match (node.syntax().parent()?){
+                ast::HasAttr(n) => Prefix::SetExpr(n.set()?.syntax().clone()),
+                ast::Select(n) => Prefix::SetExpr(n.set()?.syntax().clone()),
+                ast::AttrpathValue(n) => {
+                    // We are typing the first word of a binding.
+                    if prefix_attrs.peek().is_none() {
+                        return self.complete_binding(ast::Expr::cast(n.syntax().parent()?)?);
+                    }
+
+                    match_ast! {
+                        match (n.syntax().parent()?) {
+                            ast::AttrSet(n) => {
+                                Prefix::SetExpr(n.syntax().clone())
+                            },
+                            ast::LetIn(_) => {
+                                Prefix::LetIn(prefix_attrs.next().expect("handled above"))
+                            },
+                            _ => return None,
+                        }
+                    }
+                },
+                _ => return None,
+            }
+        };
+
+        let set_ty = match prefix {
+            Prefix::SetExpr(n) => {
+                let expr = self.source_map.expr_for_node(AstPtr::new(&n))?;
+                self.infer.ty_for_expr(expr)
+            }
+            Prefix::LetIn(first_attr) => {
+                let name = self
+                    .source_map
+                    .name_for_node(AstPtr::new(first_attr.syntax()))?;
+                self.infer.ty_for_name(name)
+            }
+        };
+
+        let set_ty = prefix_attrs.try_fold(set_ty, |set_ty, attr| match AttrKind::of(attr) {
+            AttrKind::Static(Some(field)) => set_ty.as_attrset()?.get(&field).cloned(),
+            _ => None,
+        })?;
+        self.complete_attr(set_ty)
+    }
+
+    /// Complete an `Attr` of an `inherit` binding.
+    fn complete_inherit_attr(&mut self, inherit: ast::Inherit) -> Option<()> {
+        let ptr = AstPtr::new(&inherit.syntax().parent()?);
+        let container_expr = self.source_map.expr_for_node(ptr)?;
+        let scope_id = self.scopes.scope_for_expr(container_expr)?;
+        self.scopes
+            .ancestors(scope_id)
+            .filter_map(|scope| scope.as_definitions())
+            .flatten()
+            .for_each(|(text, &name)| {
+                let escaped_name = escape_literal_attr(text);
+                self.record_item(CompletionItem {
+                    label: escaped_name.as_ref().into(),
+                    replace_range: self.replace_range,
+                    replace: escaped_name.into(),
+                    kind: self.module[name].kind.into(),
+                    signature: {
+                        let ty = self.infer.ty_for_name(name);
+                        ty.is_known()
+                            .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string())
+                    },
+                    description: None,
+                    documentation: None,
+                });
+            });
+        Some(())
+    }
+
+    /// Completes a lambda parameter pattern (aka, "formal").
+    fn complete_lambda_pat_param(&mut self, lambda: ast::Lambda) -> Option<()> {
+        let expr = self
+            .source_map
+            .expr_for_node(AstPtr::new(lambda.syntax()))?;
+        let Ty::Lambda(param_ty, _) = self.infer.ty_for_expr(expr) else {
+            return None;
+        };
+        let prefix = self.prefix;
+        param_ty
+            .as_attrset()?
+            .iter()
+            // We should not report current incomplete definition.
+            .filter(|(name, ..)| **name != prefix)
+            .for_each(|(name, ty, _)| {
+                self.record_item(CompletionItem {
+                    label: name.clone(),
+                    replace_range: self.replace_range,
+                    replace: name.clone(),
+                    kind: CompletionItemKind::Param,
+                    signature: ty
+                        .is_known()
+                        .then(|| ty.display_with(TY_SIGNATURE_DISPLAY).to_string()),
+                    description: Some(ty.display_with(TY_DETAILED_DISPLAY).to_string()),
+                    documentation: None,
+                });
+            });
+        Some(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Range;
     use std::sync::Arc;
 
     use crate::base::SourceDatabase;
@@ -503,14 +591,14 @@ mod tests {
     #[track_caller]
     fn check_no(fixture: &str, label: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
-        if let Some(compes) = super::completions(&db, f[0], None) {
-            assert_eq!(compes.iter().find(|item| item.label == label), None);
-        }
+        let compes = super::completions(&db, f[0], None);
+        assert_eq!(compes.iter().find(|item| item.label == label), None);
     }
 
     #[track_caller]
     fn check_trigger(fixture: &str, trigger_char: Option<char>, label: &str, expect: Expect) {
-        let (mut db, f) = TestDB::from_fixture(fixture).unwrap();
+        let (mut db, f) = TestDB::from_fixture(fixture).expect("fixture should be valid");
+        assert_eq!(f.markers().len(), 1, "should have exact one marker");
         db.set_nixos_options(Arc::new(NixosOptions::from_iter([(
             "nix".into(),
             NixosOption {
@@ -528,16 +616,14 @@ mod tests {
             },
         )])));
 
-        let compes = super::completions(&db, f[0], trigger_char).expect("No completion");
+        let compes = super::completions(&db, f[0], trigger_char);
         let item = compes
             .iter()
             .find(|item| item.label == label)
             .expect("No expected completion");
 
-        let source_range =
-            usize::from(item.source_range.start())..usize::from(item.source_range.end());
         let mut completed = db.file_content(f[0].file_id).to_string();
-        completed.replace_range(source_range, &item.replace);
+        completed.replace_range(<Range<usize>>::from(item.replace_range), &item.replace);
         let got = format!("({:?}) {}", item.kind, completed);
         expect.assert_eq(&got);
     }
@@ -605,12 +691,40 @@ mod tests {
     }
 
     #[test]
-    fn inherit() {
+    fn inherit_keyword() {
         check("{ i$0 }", "inherit", expect!["(Keyword) { inherit }"]);
         check("let i$0", "inherit", expect!["(Keyword) let inherit"]);
         check_no("let a = i$0", "inherit");
         check_no("let a.i$0", "inherit");
         check_no("let a.${i$0", "inherit");
+    }
+
+    #[test]
+    fn inherit_attr() {
+        check(
+            "let foo = 42; in { inherit $0 }",
+            "foo",
+            expect!["(LetBinding) let foo = 42; in { inherit foo }"],
+        );
+        check(
+            "let foo = 42; in { inherit f$0; }",
+            "foo",
+            expect!["(LetBinding) let foo = 42; in { inherit foo; }"],
+        );
+
+        check_no("let foo = 42; inherit $0 in 42;", "foo");
+        check(
+            "foo: let foo = 42; inherit $0 in 42;",
+            "foo",
+            expect!["(Param) foo: let foo = 42; inherit foo in 42;"],
+        );
+
+        check_no("rec { foo = 42; inherit $0; }", "foo");
+        check(
+            "foo: rec { foo = 42; inherit $0; }",
+            "foo",
+            expect!["(Param) foo: rec { foo = 42; inherit foo; }"],
+        );
     }
 
     #[test]
@@ -857,5 +971,87 @@ stdenv.mkDerivation {
     fn no_invalid_ident() {
         check_no(r#"let "a b" = 1; in a$0"#, "a b");
         check_no(r#"let "a b" = 1; in a$0"#, r#""a b""#);
+    }
+
+    #[test]
+    fn fresh_define_let_in() {
+        check(
+            "let $0 foo.bar = 42; in 42",
+            "foo",
+            expect!["(LetBinding) let foo foo.bar = 42; in 42"],
+        );
+        check(
+            "let foo.bar = 42; $0 in 42",
+            "foo",
+            expect!["(LetBinding) let foo.bar = 42; foo in 42"],
+        );
+    }
+
+    #[test]
+    fn fresh_define_attr() {
+        check(
+            "{ $0 foo.bar = 42; }",
+            "foo",
+            expect!["(Field) { foo foo.bar = 42; }"],
+        );
+        check(
+            "{ foo.bar = 42; $0 }",
+            "foo",
+            expect!["(Field) { foo.bar = 42; foo }"],
+        );
+        check(
+            "{ foo.bar = 42;$0 }",
+            "foo",
+            expect!["(Field) { foo.bar = 42;foo }"],
+        );
+    }
+
+    #[test]
+    fn fresh_define_param_field() {
+        check(
+            "({ $0 }: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({ foo }: 42) { foo = 42; }"],
+        );
+        check(
+            "({$0}: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({foo}: 42) { foo = 42; }"],
+        );
+        check(
+            "({bar,$0}: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({bar,foo}: 42) { foo = 42; }"],
+        );
+        check(
+            "({ bar, $0 }: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({ bar, foo }: 42) { foo = 42; }"],
+        );
+        check(
+            "({ $0... }: 42) { foo = 42; }",
+            "foo",
+            expect!["(Param) ({ foo... }: 42) { foo = 42; }"],
+        );
+    }
+
+    #[test]
+    fn fresh_reference() {
+        check(
+            "let foo = 42; in $0",
+            "foo",
+            expect!["(LetBinding) let foo = 42; in foo"],
+        );
+        check(
+            "let foo = 42; in 1 + $0",
+            "foo",
+            expect!["(LetBinding) let foo = 42; in 1 + foo"],
+        );
+
+        check(
+            "{ foo, bar ? $0 }: 42",
+            "foo",
+            expect!["(Param) { foo, bar ? foo }: 42"],
+        );
     }
 }

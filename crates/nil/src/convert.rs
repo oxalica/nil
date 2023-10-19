@@ -147,7 +147,7 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
         // We don't support indentation yet.
         insert_text_mode: Some(lsp::InsertTextMode::ADJUST_INDENTATION),
         text_edit: Some(lsp::CompletionTextEdit::Edit(lsp::TextEdit {
-            range: to_range(line_map, item.source_range),
+            range: to_range(line_map, item.replace_range),
             new_text: item.replace.into(),
         })),
         detail: item.description,
