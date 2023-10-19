@@ -128,34 +128,43 @@ macro_rules! match_ast {
     }};
 }
 
-/// Pick the most meaningful token at given cursor offset.
+/// Pick the most likely interested token at given cursor offset.
 pub fn best_token_at_offset(node: &SyntaxNode, offset: TextSize) -> Option<SyntaxToken> {
     fn score(tok: SyntaxKind) -> u8 {
         match tok {
             SyntaxKind::ERROR | SyntaxKind::SPACE => 0,
             SyntaxKind::COMMENT => 1,
+
+            // Avoid returning sibling delimiters, which may be in another region.
+            // Sorted by the nesting level in AST.
+            // `{ ...;|b = ... }`
+            T![;] | T![,] => 2,
+            T![=] | T![:] | T![@] => 3,
+            T!['('] | T!['['] | T!['{'] | T!["${"] | T![')'] | T![']'] | T!['}'] => 4,
+
+            // The rest are mostly operators, including `.` and `?`.
+            k if k.is_punct() => 5,
+
+            // Literal parts.
+            T!['"'] | T!["''"] => 10,
             SyntaxKind::PATH_START
             | SyntaxKind::PATH_END
             | SyntaxKind::PATH_FRAGMENT
-            | SyntaxKind::STRING_FRAGMENT => 2,
-            SyntaxKind::STRING_ESCAPE => 3,
-            k if k.is_punct() => 4,
-            k if k.is_keyword() => 5,
+            | SyntaxKind::STRING_FRAGMENT => 11,
+            SyntaxKind::STRING_ESCAPE => 12,
+
+            // Atoms.
+            k if k.is_keyword() => 13,
             // IDENT, INT, and etc.
-            _ => 6,
+            _ => 14,
         }
     }
 
     match node.token_at_offset(offset) {
         TokenAtOffset::None => None,
         TokenAtOffset::Single(tok) => Some(tok),
-        TokenAtOffset::Between(lhs, rhs) => {
-            // Slightly prefer RHS.
-            if score(lhs.kind()) > score(rhs.kind()) {
-                Some(lhs)
-            } else {
-                Some(rhs)
-            }
-        }
+        // Slightly prefer RHS for equal scores.
+        TokenAtOffset::Between(lhs, rhs) if score(lhs.kind()) > score(rhs.kind()) => Some(lhs),
+        TokenAtOffset::Between(_, rhs) => Some(rhs),
     }
 }
