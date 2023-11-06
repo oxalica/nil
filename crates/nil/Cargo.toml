@@ -8,7 +8,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1.0.68"
 argh = "0.1.10"
-async-lsp = { version = "0.0.5", features = ["tokio"] }
+async-lsp = { version = "0.1.0", features = ["tokio"] }
 codespan-reporting = "0.11.1"
 ide = { path = "../ide" }
 log = "0.4.17"
