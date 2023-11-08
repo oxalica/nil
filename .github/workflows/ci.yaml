@@ -36,7 +36,7 @@ jobs:
         channel: [stable, beta]
         include:
           - os: ubuntu-latest
-            # Should be sync with Cargo.toml
+            # Should be sync with Cargo.toml and README.
             channel: '1.70'
     runs-on: ${{ matrix.os }}
     steps:

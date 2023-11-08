@@ -13,7 +13,7 @@ members = [
 version = "0.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-# Should be sync with CI.
+# Should be sync with CI and README.
 rust-version = "1.70"
 
 [profile.dev]
