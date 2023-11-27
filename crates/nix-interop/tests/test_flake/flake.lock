@@ -33,10 +33,23 @@
         "type": "github"
       }
     },
+    "non-flake-file": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-D4N+MuIfbF+WogLprhLa5iQACL0tU1OKVqFhkQNf10A=",
+        "type": "file",
+        "url": "https://raw.githubusercontent.com/NixOS/nix/7304806241fe4f72c5f33a5a929d675c8342fabd/flake.nix"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://raw.githubusercontent.com/NixOS/nix/7304806241fe4f72c5f33a5a929d675c8342fabd/flake.nix"
+      }
+    },
     "root": {
       "inputs": {
         "nix": "nix",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "non-flake-file": "non-flake-file"
       }
     }
   },

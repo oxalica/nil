@@ -37,8 +37,13 @@ pub async fn resolve_flake_locked_inputs(
         .context("Failed to resolve inputs from flake lock")?;
 
     // Ignore the root node which is unlocked. This happens in cycle flake inputs.
-    // TODO: Should come up a way to correctly handle it in database.
-    inputs.retain(|&(_, node)| !std::ptr::eq(node, root_node));
+    // Workaround: It's currently impossible to calculate store paths of type="file" inputs
+    // given only `flake.lock`.
+    // Ref: https://github.com/oxalica/nil/issues/113
+    // and https://github.com/NixOS/nix/issues/9456
+    inputs.retain(|&(_, node)| {
+        !std::ptr::eq(node, root_node) && !matches!(&node.locked, Some(f) if f._type == "file")
+    });
 
     let hashes = inputs
         .iter()
@@ -184,6 +189,8 @@ enum FlakeInput {
 #[serde(rename_all = "camelCase")]
 struct LockedFlakeRef {
     nar_hash: String,
+    #[serde(rename = "type")]
+    _type: String,
     // ...
 }
 
@@ -227,6 +234,8 @@ mod tests {
         let got = resolve_flake_locked_inputs("nix".as_ref(), &lock_src)
             .await
             .unwrap();
+        // NB. This does not contain `non-flake-file`,
+        // see the comment in `resolve_flake_locked_inputs`.
         let expect = HashMap::from_iter([
             (
                 "nixpkgs".to_owned(),

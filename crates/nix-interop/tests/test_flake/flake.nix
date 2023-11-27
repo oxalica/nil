@@ -5,6 +5,10 @@
     flake = false;
     url = "github:NixOS/nix/2.13.3";
   };
+  inputs.non-flake-file = {
+    flake = false;
+    url = "https://raw.githubusercontent.com/NixOS/nix/7304806241fe4f72c5f33a5a929d675c8342fabd/flake.nix";
+  };
 
   outputs = { nixpkgs, ... }: let
     inherit (nixpkgs) lib;
