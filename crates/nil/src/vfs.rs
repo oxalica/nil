@@ -192,6 +192,7 @@ impl LineMap {
         for ((start, end), i) in start_pos_iter.zip(end_pos_iter).zip(0u32..) {
             let mut diffs = Vec::new();
             for (&b, pos) in bytes[start as usize..end as usize].iter().zip(0u32..) {
+                #[allow(clippy::manual_range_patterns)]
                 let diff = match b {
                     0b0000_0000..=0b0111_1111 |                      // utf8_len == 1, utf16_len == 1
                     0b1000_0000..=0b1011_1111 => continue,           // Continuation bytes.
