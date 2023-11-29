@@ -509,10 +509,15 @@ impl MergingSet {
                 ctx.source_map.name_map_rev[ent.name].push(attr_ptr.clone());
 
                 if let Some(prev_set) = &mut ent.set {
-                    // Erase the source information when merging occurs.
-                    // Since the previous definition is not exhaustive now.
-                    // `{ a = { b = 1; }; a.c = 2; }`
-                    prev_set.ptr = None;
+                    // Here we keep the `ptr` of the first definition attrset,
+                    // which is the determinant `rec` one if it happens to be.
+                    // This may be used to report diagnostics in liveness check.
+                    // Covered by test `liveness::tests::merge_rec_attrset`.
+                    // Eg. `{ a = rec { b = 1; }; a.c = 2; }`
+                    //            ^^^ Unused rec.
+                    //
+                    // This does result that the node pointed by `ptr` is non-exhaustive.
+                    // Hope this does not break anything.
 
                     if prev_set.name_kind.is_definition() {
                         ctx.diagnostic(Diagnostic::new(

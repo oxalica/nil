@@ -234,7 +234,14 @@ mod tests {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.files().len(), 1);
         let file = f.files()[0];
-        assert_eq!(db.source_map(file).diagnostics(), Vec::new(), "Lower error");
+
+        let source_map = db.source_map(file);
+        let lower_diags = source_map.diagnostics();
+        assert!(
+            !lower_diags.iter().any(|diag| diag.severity().is_fatal()),
+            "Lower error: {lower_diags:?}",
+        );
+
         let expect = f.markers().iter().map(|p| p.pos).collect::<Vec<_>>();
         let mut got = db
             .liveness_check(file)
@@ -368,5 +375,16 @@ mod tests {
     fn underscore_names() {
         check("x: _y: x");
         check("let __findFile = 42; in <nixpkgs>");
+    }
+
+    // Issue #114
+    #[test]
+    fn merged_rec_attrset() {
+        check("{ test = $0rec { }; test.bar = 42; }");
+        check("{ test = rec { foo = bar; }; test.bar = 42; }");
+        check("{ test = rec { foo = 42; }; test.bar = foo; }");
+        check("{ test = rec { }; test.foo = bar; test.bar = 42; }");
+
+        check("{ test = $0rec { }; test = rec { };}");
     }
 }

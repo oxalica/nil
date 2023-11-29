@@ -41,6 +41,12 @@ pub enum Severity {
     IncompleteSyntax,
 }
 
+impl Severity {
+    pub fn is_fatal(self) -> bool {
+        self != Self::Warning
+    }
+}
+
 impl Diagnostic {
     pub fn new(range: TextRange, kind: DiagnosticKind) -> Self {
         Self {
