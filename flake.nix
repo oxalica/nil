@@ -102,7 +102,7 @@ rec {
           devShells.without-rust = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               # Override the stable rustfmt.
-              rustPkgs.rust-nightly_2023-07-08.availableComponents.rustfmt
+              rustPkgs.rust-nightly_2024-01-01.availableComponents.rustfmt
 
               # Don't include `nix` by default. If would override user's (newer
               # or patched) one, cause damage or misbehavior due to version
@@ -154,7 +154,7 @@ rec {
 
           devShells.fuzz = pkgs.mkShell {
             packages = with pkgs; with rustPkgs; [
-              rust-nightly_2022-08-01
+              rust-nightly_2024-01-01
               cargo-fuzz
               llvmPackages_14.llvm
               jq
