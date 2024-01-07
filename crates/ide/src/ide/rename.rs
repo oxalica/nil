@@ -196,11 +196,11 @@ fn find_name(
     let ptr = AstPtr::new(&node);
 
     let source_map = db.source_map(file_id);
-    if let Some(name) = source_map.name_for_node(ptr.clone()) {
+    if let Some(name) = source_map.name_for_node(ptr) {
         return Some((ptr.text_range(), name));
     }
 
-    if let Some(expr) = source_map.expr_for_node(ptr.clone()) {
+    if let Some(expr) = source_map.expr_for_node(ptr) {
         let nameres = db.name_resolution(file_id);
         if let Some(ResolveResult::Definition(name)) = nameres.get(expr) {
             return Some((ptr.text_range(), *name));

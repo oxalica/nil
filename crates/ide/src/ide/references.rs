@@ -35,7 +35,7 @@ pub(crate) fn references(
         DefKind::Attr(ptr) => {
             // If this is not a name definition, but a usage. We lookup its definition for the
             // query. This is covered by the test `on_usage`.
-            let name = source_map.name_for_node(ptr.clone()).or_else(|| {
+            let name = source_map.name_for_node(ptr).or_else(|| {
                 let expr = source_map.expr_for_node(ptr)?;
                 let ResolveResult::Definition(name) = nameres.get(expr)? else {
                     return None;

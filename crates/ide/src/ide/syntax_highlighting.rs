@@ -99,7 +99,7 @@ pub(crate) fn highlight(
             }
             Some(node) if node.kind() == SyntaxKind::NAME => {
                 let ptr = AstPtr::new(&node);
-                match source_map.name_for_node(ptr.clone()) {
+                match source_map.name_for_node(ptr) {
                     // Definition.
                     Some(name) => {
                         // `inherit (builtins) head;`

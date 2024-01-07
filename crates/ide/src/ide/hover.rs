@@ -51,7 +51,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
 
     let mut name = None;
 
-    if let Some(expr) = source_map.expr_for_node(ptr.clone()) {
+    if let Some(expr) = source_map.expr_for_node(ptr) {
         if let Some(builtin) = nameres.check_builtin(expr, &module) {
             return hover_builtin(builtin, range);
         }
@@ -85,7 +85,7 @@ pub(crate) fn hover(db: &dyn TyDatabase, FilePos { file_id, pos }: FilePos) -> O
         }
     }
 
-    if let Some(name) = name.or_else(|| source_map.name_for_node(ptr.clone())) {
+    if let Some(name) = name.or_else(|| source_map.name_for_node(ptr)) {
         let ty = infer
             .ty_for_name(name)
             .display_with(TY_DETAILED_DISPLAY)

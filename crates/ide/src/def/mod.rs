@@ -21,9 +21,7 @@ use syntax::Parse;
 
 pub use self::kind::ModuleKind;
 pub use self::liveness::LivenessCheckResult;
-pub use self::nameres::{
-    ModuleScopes, NameReference, NameResolution, ResolveResult, ScopeData, ScopeId,
-};
+pub use self::nameres::{ModuleScopes, NameReference, NameResolution, ResolveResult};
 pub use self::path::{Path, PathAnchor, PathData};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 

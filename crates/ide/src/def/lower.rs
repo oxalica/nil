@@ -46,14 +46,14 @@ struct LowerCtx<'a> {
 impl LowerCtx<'_> {
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr) -> ExprId {
         let id = self.module.exprs.alloc(expr);
-        self.source_map.expr_map.insert(ptr.clone(), id);
+        self.source_map.expr_map.insert(ptr, id);
         self.source_map.expr_map_rev.insert(id, ptr);
         id
     }
 
     fn alloc_name(&mut self, text: SmolStr, kind: NameKind, ptr: AstPtr) -> NameId {
         let id = self.module.names.alloc(Name { text, kind });
-        self.source_map.name_map.insert(ptr.clone(), id);
+        self.source_map.name_map.insert(ptr, id);
         self.source_map.name_map_rev.insert(id, vec![ptr]);
         id
     }
@@ -402,7 +402,7 @@ impl MergingSet {
             let value = match from_expr {
                 Some(i) => BindingValue::InheritFrom(i),
                 None => {
-                    let ref_expr = ctx.alloc_expr(Expr::Reference(key.clone()), attr_ptr.clone());
+                    let ref_expr = ctx.alloc_expr(Expr::Reference(key.clone()), attr_ptr);
                     BindingValue::Inherit(ref_expr)
                 }
             };
@@ -474,8 +474,8 @@ impl MergingSet {
             // Set-value or value-value collision.
             .and_modify(|ent| {
                 // Append this location to the existing name.
-                ctx.source_map.name_map.insert(attr_ptr.clone(), ent.name);
-                ctx.source_map.name_map_rev[ent.name].push(attr_ptr.clone());
+                ctx.source_map.name_map.insert(attr_ptr, ent.name);
+                ctx.source_map.name_map_rev[ent.name].push(attr_ptr);
 
                 let prev_ptr = ctx.source_map.nodes_for_name(ent.name).next().unwrap();
                 ctx.diagnostic(
@@ -487,7 +487,7 @@ impl MergingSet {
                 );
             })
             .or_insert_with(|| MergingEntry {
-                name: ctx.alloc_name(key, self.name_kind, attr_ptr.clone()),
+                name: ctx.alloc_name(key, self.name_kind, attr_ptr),
                 set: None,
                 value: Some((attr_ptr, value)),
             });
@@ -505,8 +505,8 @@ impl MergingSet {
             .entry(key.clone())
             .and_modify(|ent| {
                 // Append this location to the existing name.
-                ctx.source_map.name_map.insert(attr_ptr.clone(), ent.name);
-                ctx.source_map.name_map_rev[ent.name].push(attr_ptr.clone());
+                ctx.source_map.name_map.insert(attr_ptr, ent.name);
+                ctx.source_map.name_map_rev[ent.name].push(attr_ptr);
 
                 if let Some(prev_set) = &mut ent.set {
                     // Here we keep the `ptr` of the first definition attrset,

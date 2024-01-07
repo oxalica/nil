@@ -8,11 +8,11 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1.0.68"
 argh = "0.1.10"
-async-lsp = { version = "0.1.0", features = ["tokio"] }
+async-lsp = { version = "0.2.0", features = ["tokio"] }
 codespan-reporting = "0.11.1"
 ide = { path = "../ide" }
 log = "0.4.17"
-lsp-types = "0.94.0"
+lsp-types = "0.95.0"
 macro_rules_attribute = "0.2.0"
 nix-interop = { path = "../nix-interop" }
 serde = "1"
