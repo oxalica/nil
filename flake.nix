@@ -16,7 +16,7 @@ rec {
 
       mtime = self.lastModifiedDate;
       date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
-      rev = self.rev or (throw "Git changes are not committed");
+      rev = self.rev or (lib.warn "Git changes are not committed" (self.dirtyRev or "dirty"));
 
       mkNil = { rustPlatform, nixUnstable, ... }:
         rustPlatform.buildRustPackage {
