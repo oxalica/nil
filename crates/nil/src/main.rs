@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::diagnostic::Severity;
@@ -138,7 +139,7 @@ fn main_diagnostics(args: DiagnosticsArgs) {
 fn diagnostics_for_files(paths: Vec<PathBuf>) -> Result<Option<ide::Severity>> {
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
     if paths.is_empty() {
-        unreachable!();
+        return Err(anyhow!("No files given"));
     }
 
     let mut sources = Vec::new();
