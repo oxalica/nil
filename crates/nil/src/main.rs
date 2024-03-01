@@ -139,7 +139,7 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             if max_severity > Severity::Warning {
                 process::exit(1)
             } else {
-                process::exit(0)
+                process::exit(2)
             }
         }
         Err(err) => {
