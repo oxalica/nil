@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use anyhow::{Context, Result};
 use argh::FromArgs;
 use codespan_reporting::diagnostic::Severity;
@@ -9,6 +8,8 @@ use ide::FileId;
 use ide::FileSet;
 use ide::SourceRoot;
 use ide::VfsPath;
+use ignore::types::TypesBuilder;
+use ignore::WalkBuilder;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -83,6 +84,8 @@ fn main() {
         return;
     }
 
+    setup_logger();
+
     if let Some(subcommand) = args.subcommand {
         return match subcommand {
             Subcommand::Diagnostics(args) => main_diagnostics(args),
@@ -90,8 +93,6 @@ fn main() {
             Subcommand::Ssr(args) => main_ssr(args),
         };
     }
-
-    setup_logger();
 
     if !args.stdio && (io::stdin().is_terminal() || io::stdout().is_terminal()) {
         // TODO: Make this a hard error.
@@ -136,29 +137,56 @@ fn main_diagnostics(args: DiagnosticsArgs) {
     }
 }
 
-fn diagnostics_for_files(paths: Vec<PathBuf>) -> Result<Option<ide::Severity>> {
+fn diagnostics_for_files(mut roots: Vec<PathBuf>) -> Result<Option<ide::Severity>> {
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-    if paths.is_empty() {
-        return Err(anyhow!("No files given"));
+    let mut walk = if roots.is_empty() {
+        WalkBuilder::new(".")
+    } else {
+        WalkBuilder::new(roots.pop().expect("non_empty vec has an item"))
+    };
+
+    walk.types({
+        let mut builder = TypesBuilder::new();
+        builder
+            .add("nix", "*.nix")
+            .expect("parsing glob '*.nix' will never fail");
+        builder.select("nix");
+        builder.build().expect("building types will never fail")
+    });
+
+    for root in roots {
+        walk.add(root);
     }
+
+    let walk = walk.build();
 
     let mut sources = Vec::new();
     let mut file_set = FileSet::default();
     let mut change = Change::default();
-    for (id, path) in paths.iter().enumerate() {
-        let file = FileId(id as u32);
-
-        let src = if path.as_os_str() == "-" {
-            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
-        } else {
-            fs::read_to_string(path).context("Failed to read file")?
+    for (id, entry) in walk.enumerate() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                tracing::error!("{err}");
+                continue;
+            }
         };
 
-        let src: Arc<str> = src.into();
-        sources.push((file, path, src.clone()));
+        let file = FileId(id as u32);
+        let src = if entry.is_stdin() {
+            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
+        } else {
+            if entry.path().is_dir() {
+                continue;
+            }
+            fs::read_to_string(entry.path()).context("Failed to read file")?
+        };
 
-        change.change_file(file, src);
-        file_set.insert(file, VfsPath::new(path));
+        let path = entry.into_path();
+        let src: Arc<str> = src.into();
+        change.change_file(file, src.clone());
+        file_set.insert(file, VfsPath::new(&path));
+        sources.push((file, path, src));
     }
 
     change.set_roots(vec![SourceRoot::new_local(file_set, None)]);
@@ -172,7 +200,7 @@ fn diagnostics_for_files(paths: Vec<PathBuf>) -> Result<Option<ide::Severity>> {
     let mut max_severity = None;
     for (id, path, src) in sources {
         let diagnostics = snapshot.diagnostics(id).expect("No cancellation");
-        emit_diagnostics(path, &src, &mut writer, &mut diagnostics.iter().cloned())?;
+        emit_diagnostics(&path, &src, &mut writer, &mut diagnostics.iter().cloned())?;
 
         max_severity = std::cmp::max(
             max_severity,
