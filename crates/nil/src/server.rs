@@ -161,11 +161,14 @@ impl Server {
         let (server_caps, final_caps) = negotiate_capabilities(&params);
         self.capabilities = final_caps;
 
-        // TODO: Use `workspaceFolders`.
+        // TODO: Multi-workspace support.
         let root_path = match params
-            .root_uri
+            .workspace_folders
             .as_ref()
-            .and_then(|uri| uri.to_file_path().ok())
+            .into_iter()
+            .flatten()
+            .next()
+            .and_then(|ws| ws.uri.to_file_path().ok())
         {
             Some(path) => path,
             None => std::env::current_dir().expect("Failed to the current directory"),
