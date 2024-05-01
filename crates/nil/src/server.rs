@@ -378,7 +378,7 @@ impl Server {
             };
 
             if matches!(typ, FileChangeType::CREATED | FileChangeType::CHANGED) {
-                match (|| -> std::io::Result<_> {
+                let ret = (|| -> std::io::Result<_> {
                     #[cfg(unix)]
                     use rustix::fs::{fcntl_getfl, fcntl_setfl, OFlags, OpenOptionsExt};
 
@@ -408,7 +408,8 @@ impl Server {
                     let mut buf = String::new();
                     file.read_to_string(&mut buf)?;
                     Ok(buf)
-                })() {
+                })();
+                match ret {
                     Ok(text) => self.set_vfs_file_content(uri, text),
                     Err(err) if matches!(err.kind(), ErrorKind::NotFound) => {
                         // File gets removed at the time calling `open()`.
@@ -1057,7 +1058,7 @@ impl Drop for Progress {
 fn with_catch_unwind<T>(ctx: &str, f: impl FnOnce() -> Result<T> + UnwindSafe) -> Result<T> {
     static INSTALL_PANIC_HOOK: Once = Once::new();
     thread_local! {
-        static PANIC_LOCATION: Cell<String> = Cell::new(String::new());
+        static PANIC_LOCATION: Cell<String> = const { Cell::new(String::new()) };
     }
 
     INSTALL_PANIC_HOOK.call_once(|| {

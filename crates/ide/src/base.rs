@@ -128,7 +128,7 @@ impl FileSet {
         &self.paths[&file]
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + ExactSizeIterator + '_ {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (FileId, &'_ VfsPath)> + '_ {
         self.paths.iter().map(|(&file, path)| (file, path))
     }
 }
@@ -159,7 +159,7 @@ impl SourceRoot {
         self.file_set.path_for_file(file)
     }
 
-    pub fn files(&self) -> impl Iterator<Item = (FileId, &'_ VfsPath)> + ExactSizeIterator + '_ {
+    pub fn files(&self) -> impl ExactSizeIterator<Item = (FileId, &'_ VfsPath)> + '_ {
         self.file_set.iter()
     }
 

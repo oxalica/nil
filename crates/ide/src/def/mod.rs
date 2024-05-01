@@ -181,11 +181,11 @@ impl Module {
         self.entry_expr
     }
 
-    pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &'_ Expr)> + ExactSizeIterator + '_ {
+    pub fn exprs(&self) -> impl ExactSizeIterator<Item = (ExprId, &'_ Expr)> + '_ {
         self.exprs.iter()
     }
 
-    pub fn names(&self) -> impl Iterator<Item = (NameId, &'_ Name)> + ExactSizeIterator + '_ {
+    pub fn names(&self) -> impl ExactSizeIterator<Item = (NameId, &'_ Name)> + '_ {
         self.names.iter()
     }
 
