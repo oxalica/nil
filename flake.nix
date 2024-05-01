@@ -18,7 +18,7 @@ rec {
       date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
       rev = self.rev or (lib.warn "Git changes are not committed" (self.dirtyRev or "dirty"));
 
-      mkNil = { rustPlatform, nixUnstable, ... }:
+      mkNil = { rustPlatform, nixVersions, ... }:
         rustPlatform.buildRustPackage {
           pname = "nil";
           version = "unstable-${date}";
@@ -29,7 +29,7 @@ rec {
             allowBuiltinFetchGit = false;
           };
 
-          nativeBuildInputs = [ nixUnstable.out ];
+          nativeBuildInputs = [ (nixVersions.latest or nixVersions.unstable) ];
 
           CFG_RELEASE = "git-${rev}";
 
@@ -148,7 +148,7 @@ rec {
           # See comments above.
           devShells.full = devShells.default.overrideAttrs (old: {
             nativeBuildInputs = old.nativeBuildInputs ++ [
-              pkgs.nixUnstable.out
+              (pkgs.nixVersions.latest or pkgs.nixVersions.unstable).out
             ];
           });
 
