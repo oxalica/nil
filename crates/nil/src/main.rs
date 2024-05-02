@@ -1,7 +1,15 @@
 use anyhow::{Context, Result};
 use argh::FromArgs;
+use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::term::termcolor::WriteColor;
-use ide::{AnalysisHost, Severity};
+use ide::AnalysisHost;
+use ide::Change;
+use ide::FileId;
+use ide::FileSet;
+use ide::SourceRoot;
+use ide::VfsPath;
+use ignore::types::TypesBuilder;
+use ignore::WalkBuilder;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -39,15 +47,15 @@ enum Subcommand {
 
 #[derive(Debug, FromArgs)]
 #[argh(subcommand, name = "diagnostics")]
-/// Check and print diagnostics for a file.
+/// Check and print diagnostics for Nix files.
 /// Exit with non-zero code if there are any diagnostics. (`1` for errors, `2` if only warnings)
 /// WARNING: The output format is for human and should not be relied on.
 struct DiagnosticsArgs {
-    /// nix file to check, or read from stdin for `-`.
+    /// nix files to check, or read from stdin for `-`.
     /// NB. You need `--` before `-` for paths starting with `-`,
     /// to disambiguous it from flags.
     #[argh(positional)]
-    path: PathBuf,
+    paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, FromArgs)]
@@ -76,6 +84,8 @@ fn main() {
         return;
     }
 
+    setup_logger();
+
     if let Some(subcommand) = args.subcommand {
         return match subcommand {
             Subcommand::Diagnostics(args) => main_diagnostics(args),
@@ -83,8 +93,6 @@ fn main() {
             Subcommand::Ssr(args) => main_ssr(args),
         };
     }
-
-    setup_logger();
 
     if !args.stdio && (io::stdin().is_terminal() || io::stdout().is_terminal()) {
         // TODO: Make this a hard error.
@@ -111,32 +119,12 @@ fn main() {
 }
 
 fn main_diagnostics(args: DiagnosticsArgs) {
-    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+    let ret = diagnostics_for_files(args.paths);
 
-    let ret = (|| -> Result<Option<Severity>> {
-        let path = &*args.path;
-
-        let src = if path.as_os_str() == "-" {
-            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
-        } else {
-            fs::read_to_string(path).context("Failed to read file")?
-        };
-
-        let (analysis, file) = AnalysisHost::new_single_file(&src);
-        let diags = analysis
-            .snapshot()
-            .diagnostics(file)
-            .expect("No cancellation");
-
-        let mut writer = StandardStream::stdout(ColorChoice::Auto);
-        emit_diagnostics(path, &src, &mut writer, &mut diags.iter().cloned())?;
-
-        Ok(diags.iter().map(|diag| diag.severity()).max())
-    })();
     match ret {
         Ok(None) => process::exit(0),
         Ok(Some(max_severity)) => {
-            if max_severity > Severity::Warning {
+            if max_severity > ide::Severity::Warning {
                 process::exit(1)
             } else {
                 process::exit(0)
@@ -147,6 +135,83 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             process::exit(1);
         }
     }
+}
+
+fn diagnostics_for_files(mut roots: Vec<PathBuf>) -> Result<Option<ide::Severity>> {
+    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+    let mut walk = if roots.is_empty() {
+        WalkBuilder::new(".")
+    } else {
+        WalkBuilder::new(roots.pop().expect("non_empty vec has an item"))
+    };
+
+    walk.types({
+        let mut builder = TypesBuilder::new();
+        builder
+            .add("nix", "*.nix")
+            .expect("parsing glob '*.nix' will never fail");
+        builder.select("nix");
+        builder.build().expect("building types will never fail")
+    });
+
+    for root in roots {
+        walk.add(root);
+    }
+
+    let walk = walk.build();
+
+    let mut sources = Vec::new();
+    let mut file_set = FileSet::default();
+    let mut change = Change::default();
+    for (id, entry) in walk.enumerate() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                tracing::error!("{err}");
+                continue;
+            }
+        };
+
+        let file = FileId(id as u32);
+        let src = if entry.is_stdin() {
+            io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
+        } else {
+            if entry.path().is_dir() {
+                continue;
+            }
+            fs::read_to_string(entry.path()).context("Failed to read file")?
+        };
+
+        let path = entry.into_path();
+        let src: Arc<str> = src.into();
+        change.change_file(file, src.clone());
+        file_set.insert(file, VfsPath::new(&path));
+        sources.push((file, path, src));
+    }
+
+    change.set_roots(vec![SourceRoot::new_local(file_set, None)]);
+
+    let mut analysis = AnalysisHost::new();
+    analysis.apply_change(change);
+
+    let snapshot = analysis.snapshot();
+
+    let mut writer = StandardStream::stdout(ColorChoice::Auto);
+    let mut max_severity = None;
+    for (id, path, src) in sources {
+        let diagnostics = snapshot.diagnostics(id).expect("No cancellation");
+        emit_diagnostics(&path, &src, &mut writer, &mut diagnostics.iter().cloned())?;
+
+        max_severity = std::cmp::max(
+            max_severity,
+            diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.severity())
+                .max(),
+        );
+    }
+
+    Ok(max_severity)
 }
 
 fn main_parse(args: ParseArgs) {
@@ -255,7 +320,7 @@ fn emit_diagnostics(
     writer: &mut dyn WriteColor,
     diags: &mut dyn Iterator<Item = ide::Diagnostic>,
 ) -> Result<()> {
-    use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
+    use codespan_reporting::diagnostic::{Diagnostic, Label};
     use codespan_reporting::files::SimpleFiles;
     use codespan_reporting::term;
 
