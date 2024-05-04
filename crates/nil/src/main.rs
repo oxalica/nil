@@ -136,10 +136,10 @@ fn main_diagnostics(args: DiagnosticsArgs) {
     match ret {
         Ok(None) => process::exit(0),
         Ok(Some(max_severity)) => {
-            if max_severity > Severity::Warning {
-                process::exit(1)
+            if max_severity == Severity::Warning {
+                process::exit(2)
             } else {
-                process::exit(0)
+                process::exit(1)
             }
         }
         Err(err) => {
