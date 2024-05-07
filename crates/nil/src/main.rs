@@ -40,8 +40,9 @@ enum Subcommand {
 #[derive(Debug, FromArgs)]
 #[argh(subcommand, name = "diagnostics")]
 /// Check and print diagnostics for a file.
-/// Exit with non-zero code if there are any diagnostics. (`1` for errors, `2` if only warnings)
-/// WARNING: The output format is for human and should not be relied on.
+/// Output will be empty if there are no errors/warnigns.
+/// Exit with non-zero code if there are any errors. (`0` for only warnings)
+/// WARNING: The output format is for humans and should not be relied on.
 struct DiagnosticsArgs {
     /// nix file to check, or read from stdin for `-`.
     /// NB. You need `--` before `-` for paths starting with `-`,
