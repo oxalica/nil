@@ -23,7 +23,7 @@ and is regularly updated.
   1. Install nix >= 2.4 and make sure the binary `nix` is in your `PATH`.
   1. Build and install via `cargo install --git https://github.com/oxalica/nil nil`
 
-## Install with [Flake](https://nixos.wiki/wiki/Flakes)
+## Install with [Flake](https://wiki.nixos.org/wiki/Flakes)
 
 This repo is also packaged via Nix flakes. The language server package is
 available in the default flake output `github:oxalica/nil#`, under `bin/nil`.
