@@ -57,7 +57,7 @@ struct SetNixosOptionsEvent(NixosOptions);
 
 pub struct Server {
     // States.
-    /// This contains an internal RWLock and must not lock together with `vfs`.
+    /// This contains an internal `RwLock` and must not lock together with `vfs`.
     host: AnalysisHost,
     vfs: Arc<RwLock<Vfs>>,
     opened_files: HashMap<Url, FileData>,
@@ -904,7 +904,7 @@ impl Server {
             match self.opened_files.get_mut(&uri) {
                 // Update if changed.
                 Some(file_data) if file_data.diagnostics != diagnostics => {
-                    file_data.diagnostics = diagnostics.clone();
+                    file_data.diagnostics.clone_from(&diagnostics);
                 }
                 _ => continue,
             }

@@ -46,4 +46,4 @@ jobs:
       - name: cargo-outdated
         run: |
           rm Cargo.lock # Ignore trivially updatable compatible versions.
-          cargo outdated --workspace --exit-code 1
+          cargo outdated --workspace --exit-code 1 --exclude=lsp-types

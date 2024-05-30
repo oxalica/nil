@@ -547,10 +547,6 @@ mod tests {
     use super::*;
     use crate::tests::parse;
 
-    trait HasSyntaxNode {
-        fn has_syntax_node(&self) -> &SyntaxNode;
-    }
-
     trait AstTest {
         fn should_eq(&self, expect: &str);
     }
