@@ -14,6 +14,9 @@ rec {
       inherit (builtins) substring;
       inherit (nixpkgs) lib;
 
+      # For rustfmt and fuzz.
+      nightlyVersion = "2024-05-01";
+
       mtime = self.lastModifiedDate;
       date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
       rev = self.rev or (lib.warn "Git changes are not committed" (self.dirtyRev or "dirty"));
@@ -102,7 +105,7 @@ rec {
           devShells.without-rust = pkgs.mkShell {
             nativeBuildInputs = with pkgs; [
               # Override the stable rustfmt.
-              rustPkgs.rust-nightly_2024-01-01.availableComponents.rustfmt
+              rustPkgs."rust-nightly_${nightlyVersion}".availableComponents.rustfmt
 
               # Don't include `nix` by default. If would override user's (newer
               # or patched) one, cause damage or misbehavior due to version
@@ -153,8 +156,8 @@ rec {
           });
 
           devShells.fuzz = pkgs.mkShell {
-            packages = with pkgs; with rustPkgs; [
-              rust-nightly_2024-01-01
+            packages = with pkgs; [
+              rustPkgs."rust-nightly_${nightlyVersion}"
               cargo-fuzz
               llvmPackages_14.llvm
               jq
