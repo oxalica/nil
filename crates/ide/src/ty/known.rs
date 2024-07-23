@@ -85,7 +85,7 @@ static GENERIC_INPUT_DECL: Lazy<Ty> = Lazy::new(|| {
     )
 });
 
-/// <https://nixos.wiki/wiki/Flakes>
+/// <https://wiki.nixos.org/wiki/Flakes>
 pub fn flake(inputs: &[(&str, Ty)]) -> Ty {
     let inputs_decl_ty = Ty::Attrset(Attrset::from_internal(
         inputs.iter().map(|(name, ty)| {
