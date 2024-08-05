@@ -12,6 +12,8 @@ async-lsp = { version = "0.2.0", features = ["tokio"] }
 codespan-reporting = "0.11.1"
 ide = { path = "../ide" }
 log = "0.4.17"
+# The main URI type since 0.96 changed with greatly reduced interoperationality,
+# see: https://github.com/gluon-lang/lsp-types/issues/284
 lsp-types = "0.95.0"
 macro_rules_attribute = "0.2.0"
 nix-interop = { path = "../nix-interop" }

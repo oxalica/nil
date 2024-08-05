@@ -665,7 +665,7 @@ mod tests {
         check_lower(
             "1.2e3",
             expect![[r#"
-                0: Literal(Float(OrderedFloat(1200.0)))
+                0: Literal(Float(1200.0))
             "#]],
         );
         check_lower(
