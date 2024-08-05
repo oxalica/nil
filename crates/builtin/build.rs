@@ -114,34 +114,33 @@ fn dump_builtin_infos() -> Vec<BuiltinInfo> {
         .arg("__dump-language")
         .json::<DumpLanguage>()
     {
-        return std::iter::empty()
-            .chain(
-                lang.builtins
-                    .into_iter()
-                    .map(|(name, builtin)| BuiltinInfo {
-                        name,
-                        kind: "Function".into(),
-                        doc: builtin.doc,
-                        args: builtin.args,
-                        impure_only: false,
-                        experimental_feature: builtin.experimental_feature,
-                    }),
-            )
-            .chain(lang.constants.into_iter().map(|(name, constant)| {
-                let kind = if constant.type_.eq_ignore_ascii_case("set") {
+        let builtins = match lang {
+            DumpLanguage::V2 { builtins } => builtins,
+            DumpLanguage::V1 {
+                mut builtins,
+                constants,
+            } => {
+                builtins.extend(constants);
+                builtins
+            }
+        };
+        return builtins
+            .into_iter()
+            .map(|(name, builtin)| BuiltinInfo {
+                name,
+                kind: if !builtin.args.is_empty() {
+                    "Function"
+                } else if builtin.type_.is_some_and(|s| s.eq_ignore_ascii_case("set")) {
                     "Attrset"
                 } else {
                     "Const"
-                };
-                BuiltinInfo {
-                    name,
-                    kind: kind.into(),
-                    doc: constant.doc,
-                    args: Vec::new(),
-                    impure_only: constant.impure_only,
-                    experimental_feature: None,
                 }
-            }))
+                .into(),
+                doc: builtin.doc,
+                args: builtin.args,
+                impure_only: builtin.impure_only,
+                experimental_feature: builtin.experimental_feature,
+            })
             .collect();
     }
 
@@ -200,19 +199,18 @@ struct BuiltinInfo {
 }
 
 #[derive(Debug, Deserialize)]
-struct DumpLanguage {
-    builtins: DumpBuiltins,
-    constants: BTreeMap<String, DumpConstant>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct DumpConstant {
-    doc: String,
-    impure_only: bool,
-    // TODO
-    #[serde(rename = "type")]
-    type_: String,
+#[serde(untagged)]
+enum DumpLanguage {
+    // Nix < 2.24
+    V1 {
+        builtins: DumpBuiltins,
+        constants: DumpBuiltins,
+    },
+    // Nix >= 2.24
+    V2 {
+        #[serde(flatten)]
+        builtins: BTreeMap<String, DumpBuiltin>,
+    },
 }
 
 // Keep names sorted.
@@ -221,8 +219,13 @@ type DumpBuiltins = BTreeMap<String, DumpBuiltin>;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DumpBuiltin {
+    #[serde(default)]
     args: Vec<String>,
     doc: String,
     #[serde(default)]
     experimental_feature: Option<String>,
+    #[serde(default)]
+    impure_only: bool,
+    #[serde(rename = "type")]
+    type_: Option<String>,
 }
