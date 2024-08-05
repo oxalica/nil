@@ -76,22 +76,15 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
     // 1. Efficiency.
     // 2. Less false-positives.
     // 3. Reject not-really-absolute `mirror:` URIs.
-    const FILTERS: &[&str] = &[
-        // Common URLs.
-        "https:",
-        "http:",
-        "ftp:",
-        "file:",
-        // Flake-refs.
-        // https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-flake.html#types
-        "path:",
-        "git+",
-        "tarball+",
-        "github:",
-        "sourcehut:",
-    ];
 
-    if !FILTERS.iter().any(|prefix| uri.starts_with(prefix)) {
+    // https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-flake.html#types
+    const FLAKE_REFS: &[&str] = &["path:", "git+", "tarball+", "github:", "sourcehut:"];
+    // Common URLs.
+    const FILTERS: &[&str] = &["https:", "http:", "ftp:", "file:"];
+
+    let is_flake_ref = FLAKE_REFS.iter().any(|prefix| uri.starts_with(prefix));
+
+    if !is_flake_ref && !FILTERS.iter().any(|prefix| uri.starts_with(prefix)) {
         return None;
     }
 
@@ -132,8 +125,10 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
 
     // Trim `?` and `#` parts, which are special for flake-ref.
     // Not a part of original URI.
-    uri.set_query(None);
-    uri.set_fragment(None);
+    if is_flake_ref {
+        uri.set_query(None);
+        uri.set_fragment(None);
+    }
 
     Some(uri)
 }
@@ -196,7 +191,7 @@ mod tests {
                 github:NixOS/nixpkgs -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
                 "github:NixOS/nixpkgs/nixos-22.05" -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
                 "github:NixOS/nixpkgs/pull/190594/head" -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
-                "https://example.com?foo=1#bar" -> https://example.com/: https://example.com/
+                "https://example.com?foo=1#bar" -> https://example.com/?foo=1#bar: https://example.com/?foo=1#bar
             "#]],
         );
     }
