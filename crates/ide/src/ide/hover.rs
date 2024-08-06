@@ -329,6 +329,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "asserts on nix docs"]
     fn builtin_global() {
         check(
             "$0true",
@@ -408,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "asserts on nix docs"]
     fn builtin_attrpath() {
         check(
             "builtins.head$0",
