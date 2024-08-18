@@ -344,7 +344,7 @@ mod tests {
                 It can be returned by
                 [comparison operators](@docroot@/language/operators.md#Comparison)
                 and used in
-                [conditional expressions](@docroot@/language/constructs.md#Conditionals).
+                [conditional expressions](@docroot@/language/syntax.md#Conditionals).
 
                 The name `true` is not special, and can be shadowed:
 
@@ -438,7 +438,7 @@ mod tests {
                 It can be returned by
                 [comparison operators](@docroot@/language/operators.md#Comparison)
                 and used in
-                [conditional expressions](@docroot@/language/constructs.md#Conditionals).
+                [conditional expressions](@docroot@/language/syntax.md#Conditionals).
 
                 The name `true` is not special, and can be shadowed:
 
@@ -460,7 +460,7 @@ mod tests {
                 `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, … }`
 
                 `builtins.builtins`
-                Contains all the [built-in functions](@docroot@/language/builtins.md) and values.
+                Contains all the built-in functions and values.
 
                 Since built-in functions were added over time, [testing for attributes](./operators.md#has-attribute) in `builtins` can be used for graceful fallback on older Nix installations:
 
