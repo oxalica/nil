@@ -160,7 +160,7 @@ pub(crate) fn highlight(
                 HlTag::Operator(HlOperator::Comparison)
             }
             T![+] | T![-] | T![*] | T![/] => HlTag::Operator(HlOperator::Arithmetic),
-            T![++] | T!["//"] => HlTag::Operator(HlOperator::Aggregation),
+            T![++] | T![|>] | T!["//"] => HlTag::Operator(HlOperator::Aggregation),
             T!['{'] | T!['}'] | T!["${"] => HlTag::Punct(HlPunct::Brace),
             T!['['] | T![']'] => HlTag::Punct(HlPunct::Bracket),
             T!['('] | T![')'] => HlTag::Punct(HlPunct::Paren),

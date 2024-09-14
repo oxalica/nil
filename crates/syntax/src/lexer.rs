@@ -110,6 +110,7 @@ regex_dfa! {
 
         DOT3 = r"\.\.\.",
         MINUS_GT = r"->",
+        PIPE = r"\|>",
         OR2 = r"\|\|",
         AND2 = r"&&",
         EQ2 = r"==",
