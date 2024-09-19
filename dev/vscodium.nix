@@ -1,17 +1,20 @@
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 with pkgs;
 let
   codium = vscode-with-extensions.override {
     vscode = vscodium;
     vscodeExtensions = [
       (vscode-extensions.jnoortheen.nix-ide.overrideAttrs (old: {
-        patches = old.patches or [] ++ [
+        patches = old.patches or [ ] ++ [
           ./nix-ide-semantic-highlighting.patch
         ];
       }))
     ];
   };
-in writeShellScriptBin "codium-test" ''
+in
+writeShellScriptBin "codium-test" ''
   set -e
   dir="''${XDG_CACHE_HOME:-~/.cache}/nil-codium"
   ${coreutils}/bin/mkdir -p "$dir/User"

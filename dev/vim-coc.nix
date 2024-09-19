@@ -1,4 +1,6 @@
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 let
   # vim
   customRC = ''
@@ -102,7 +104,6 @@ let
     nil.nix.flake.autoEvalInputs = true;
     nil.nix.maxMemoryMB = 2048;
   };
-
 
   cocConfigHome = pkgs.writeTextFile {
     name = "coc-config";

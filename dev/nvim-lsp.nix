@@ -2,7 +2,9 @@
 # Run `nvim-test` inside the shell to test.
 # Env vars:
 # - `NIL_PATH`: The path to "nil" LSP binary. Default: `target/debug/nil`
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 let
   neovim = pkgs.neovim.override {
     configure = {
@@ -95,7 +97,8 @@ let
     }
   '';
 
-in pkgs.runCommand "nvim-lsp" { } ''
+in
+pkgs.runCommand "nvim-lsp" { } ''
   mkdir -p $out/bin
   ln -s ${neovim}/bin/nvim $out/bin/nvim-lsp
 ''
