@@ -113,6 +113,7 @@ def! {
     LT_EQ = [<=],
     MINUS_GT = [->],
     NOT_EQ = [!=],
+    PIPE = [|>],
     OR2 = [||],
     PLUS2 = [++],
     QUOTE2 = ["''"],

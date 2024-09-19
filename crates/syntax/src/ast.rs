@@ -10,6 +10,7 @@ pub enum BinaryOpKind {
     Imply,
     Or,
     And,
+    Pipe,
 
     Equal,
     NotEqual,
@@ -276,6 +277,7 @@ impl Expr {
                     BinaryOpKind::Imply => 1,
                     BinaryOpKind::Or => 3,
                     BinaryOpKind::And => 5,
+                    BinaryOpKind::Pipe => 6,
                     BinaryOpKind::Equal | BinaryOpKind::NotEqual => 7,
                     BinaryOpKind::Less
                     | BinaryOpKind::Greater
@@ -382,6 +384,7 @@ asts! {
                 let op = match tok.kind() {
                     T![->] => BinaryOpKind::Imply,
                     T![&&] => BinaryOpKind::And,
+                    T![|>] => BinaryOpKind::Pipe,
                     T![||] => BinaryOpKind::Or,
                     T![==] => BinaryOpKind::Equal,
                     T![!=] => BinaryOpKind::NotEqual,

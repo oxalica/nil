@@ -250,7 +250,7 @@ impl<'db> InferCtx<'db> {
                         self.unify_var(lhs_ty, rhs_ty);
                         lhs_ty
                     }
-                    BinaryOpKind::Concat => {
+                    BinaryOpKind::Concat | BinaryOpKind::Pipe => {
                         let ret_ty = Ty::List(self.new_ty_var()).intern(self);
                         self.unify_var(lhs_ty, ret_ty);
                         self.unify_var(rhs_ty, ret_ty);

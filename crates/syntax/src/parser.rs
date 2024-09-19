@@ -884,6 +884,7 @@ impl SyntaxKind {
             T![*] |
             T![/] => (17, 18),
             T![++] => (20, 19),
+            T![|>] => (21, 22),
             // Postfix `?` => 21
             // Prefix `-` => 23
             _ if self.can_start_atom_expr() => (25, 26), // APPLY
