@@ -116,7 +116,7 @@ rec {
 
               jq
               pre-commit
-              nixpkgs-fmt
+              nixfmt-rfc-style
               (import ./dev/nvim-lsp.nix { inherit pkgs; })
               (import ./dev/vim-coc.nix { inherit pkgs; })
               (import ./dev/vim-lsp.nix { inherit pkgs; })

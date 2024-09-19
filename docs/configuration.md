@@ -23,7 +23,7 @@ Default configuration:
       // External formatter command (with arguments).
       // It should accepts file content in stdin and print the formatted code into stdout.
       // Type: [string] | null
-      // Example: ["nixpkgs-fmt"]
+      // Example: ["nixfmt"]
       "command": null,
     },
     "diagnostics": {

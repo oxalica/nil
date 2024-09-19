@@ -97,7 +97,7 @@ let
     nil.server.path = pkgs.writeShellScript "nil" ''
       exec "$NIL_PATH" "$@"
     '';
-    nil.formatting.command = [ "${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt" ];
+    nil.formatting.command = [ (pkgs.lib.getExe pkgs.nixfmt-rfc-style) ];
     nil.diagnostics.excludedFiles = [ "generated.nix" ];
     nil.nix.flake.autoEvalInputs = true;
     nil.nix.maxMemoryMB = 2048;

@@ -88,7 +88,7 @@ let
         ['nil'] = {
           testSetting = 42,
           formatting = {
-            command = { "nixpkgs-fmt" },
+            command = { "nixfmt" },
           },
         },
       },

@@ -70,7 +70,7 @@ Merge this setting into your `coc-settings.json` (open with `:CocConfig`).
       // Uncomment these to tweak settings.
       // "settings": {
       //   "nil": {
-      //     "formatting": { "command": ["nixpkgs-fmt"] }
+      //     "formatting": { "command": ["nixfmt"] }
       //   }
       // }
     }
@@ -108,7 +108,7 @@ Add the following elisp code to your configuration. (using `use-package`)
   :after (lsp-mode)
   :demand t
   :custom
-  (lsp-nix-nil-formatter ["nixpkgs-fmt"]))
+  (lsp-nix-nil-formatter ["nixfmt"]))
 
 (use-package nix-mode
   :hook (nix-mode . lsp-deferred)
@@ -144,7 +144,7 @@ Modify the extension's settings in your `settings.json`.
   // Uncomment these to tweak settings.
   // "nix.serverSettings": {
   //   "nil": {
-  //     "formatting": { "command": ["nixpkgs-fmt"] }
+  //     "formatting": { "command": ["nixfmt"] }
   //   }
   // }
 }
