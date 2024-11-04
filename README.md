@@ -118,6 +118,21 @@ Add the following elisp code to your configuration. (using `use-package`)
 There are various other configurations to tweak. Refer to the
 [specific manual page](https://emacs-lsp.github.io/lsp-mode/page/lsp-nix-nil/) for more details.
 
+### Emacs with [lsp-bridge](https://github.com/manateelazycat/lsp-bridge/)
+
+Add the following elisp code to your configuration. 
+
+```elisp
+(use-package lsp-bridge
+  :straight '(lsp-bridge :type git :host github :repo "manateelazycat/lsp-bridge"
+            :files (:defaults "*.el" "*.py" "acm" "core" "langserver" "multiserver" "resources")
+            :build (:not compile))
+  :init
+  (global-lsp-bridge-mode)
+  :config
+  (setq lsp-bridge-nix-lsp-server "nil"))
+```
+
 ### Emacs with [eglot](https://github.com/joaotavora/eglot)
 
 Add the following elisp code to your configuration. (using `use-package`)
@@ -131,7 +146,6 @@ Add the following elisp code to your configuration. (using `use-package`)
   :hook
   (nix-mode . eglot-ensure))
 ```
-
 ### VSCode/VSCodium with [Nix IDE](https://github.com/nix-community/vscode-nix-ide)
 
 Modify the extension's settings in your `settings.json`.
