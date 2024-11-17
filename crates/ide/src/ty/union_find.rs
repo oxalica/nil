@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+/// The union find algorithm to get a partitioning of a set.
 #[derive(Debug, Clone, Default)]
 pub struct UnionFind<T>(Vec<(Option<T>, u32, u8)>);
 

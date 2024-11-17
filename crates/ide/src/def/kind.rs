@@ -40,6 +40,8 @@ pub enum ModuleKind {
 }
 
 impl ModuleKind {
+    /// Get the [ModuleKind] of a [FileId].
+    /// Either look it up from the DB or [guess] it.
     pub(crate) fn module_kind_query(db: &dyn DefDatabase, file_id: FileId) -> Arc<ModuleKind> {
         let module = db.module(file_id);
 
@@ -54,6 +56,8 @@ impl ModuleKind {
     }
 }
 
+/// Parse a nix flake.
+/// Extract inputs and outputs of the flake.
 fn parse_flake_nix(module: &Module) -> ModuleKind {
     let mut explicit_inputs = HashMap::new();
     let mut param_inputs = HashMap::new();
@@ -102,12 +106,13 @@ fn parse_flake_nix(module: &Module) -> ModuleKind {
     }
 }
 
+/// Guess the type of a module.
+/// Returns either [ModuleKind::Package] or [ModuleKind::Config].
 fn guess(module: &Module) -> ModuleKind {
     let entry_expr = peel_expr(module, module.entry_expr);
 
     // Try to parse as package definition.
-    if_chain! {
-        // Must be a lambda expression with Pat.
+    if_chain! {        // Must be a lambda expression with Pat.
         if let Expr::Lambda(_, Some(_pat), body_expr) = &module[entry_expr];
         // The body must be a reference or function application (typically,
         // `stdenv.mkDerivation`).

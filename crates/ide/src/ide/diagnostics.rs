@@ -1,5 +1,6 @@
 use crate::{DefDatabase, Diagnostic, FileId};
 
+/// Get all diagnostics for a file.
 pub(crate) fn diagnostics(db: &dyn DefDatabase, file: FileId) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
 

@@ -1,3 +1,4 @@
+///! Conversion between LSP and IDE types.
 use crate::{semantic_tokens, LineMap, Result, Vfs};
 use async_lsp::{ErrorCode, ResponseError};
 use ide::{

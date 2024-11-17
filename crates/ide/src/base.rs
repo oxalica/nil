@@ -71,7 +71,7 @@ impl VfsPath {
         }
     }
 
-    /// Returns an `impl Display` struct for human.
+    /// Returns an human readable `impl Display` struct.
     #[must_use]
     pub fn display(&self) -> impl fmt::Display + '_ {
         struct Display<'a>(&'a VfsPath);
@@ -142,7 +142,9 @@ impl fmt::Debug for FileSet {
 /// A workspace unit, typically a Flake package.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceRoot {
+    /// A list of files.
     file_set: FileSet,
+    /// The entry file.
     entry: Option<FileId>,
 }
 
@@ -168,6 +170,7 @@ impl SourceRoot {
     }
 }
 
+/// A mapping from [SourceRootId] to [FlakeInfo]
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct FlakeGraph {
     pub nodes: HashMap<SourceRootId, FlakeInfo>,
@@ -176,8 +179,11 @@ pub struct FlakeGraph {
 // FIXME: Make this a tree structure.
 #[derive(Clone, PartialEq, Eq)]
 pub struct FlakeInfo {
+    /// Id related with the flake content.
     pub flake_file: FileId,
+    /// The flake inputs.
     pub input_store_paths: HashMap<String, VfsPath>,
+    /// The flake outputs.
     pub input_flake_outputs: HashMap<String, FlakeOutput>,
 }
 
@@ -210,6 +216,7 @@ impl<T> InFile<T> {
     }
 }
 
+/// A position inside of a file.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct FilePos {
     pub file_id: FileId,
@@ -222,6 +229,7 @@ impl FilePos {
     }
 }
 
+/// A range inside of a file.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct FileRange {
     pub file_id: FileId,
@@ -238,6 +246,8 @@ impl FileRange {
     }
 }
 
+/// The DB storing files.
+/// [FileID] and [SourceRootId] are used.
 #[salsa::query_group(SourceDatabaseStorage)]
 pub trait SourceDatabase {
     #[salsa::input]
@@ -258,10 +268,13 @@ pub trait SourceDatabase {
     fn nixos_options(&self) -> Arc<NixosOptions>;
 }
 
+/// Return the flake info for a [SourceRootId].
 fn source_root_flake_info(db: &dyn SourceDatabase, sid: SourceRootId) -> Option<Arc<FlakeInfo>> {
     db.flake_graph().nodes.get(&sid).cloned().map(Arc::new)
 }
 
+/// A change to the [SourceDataBase].
+/// Use [Self::apply] to apply all changes to the DB.
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Change {
     pub flake_graph: Option<FlakeGraph>,

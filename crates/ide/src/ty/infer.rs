@@ -22,6 +22,7 @@ impl AttrSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TyVar(u32);
 
+/// A type used in inference.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Ty {
     Unknown,
@@ -49,14 +50,17 @@ impl Ty {
     }
 }
 
+/// A nix attrset.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Attrset {
+    /// Map from names to types.
     fields: BTreeMap<SmolStr, (TyVar, AttrSource)>,
     // This is the type for all non-static fields.
     // Is this really the same as `super::Attrset::rest`?
     dyn_ty: Option<TyVar>,
 }
 
+/// Result from inference.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferenceResult {
     name_ty_map: ArenaMap<NameId, super::Ty>,
@@ -73,11 +77,13 @@ impl InferenceResult {
     }
 }
 
+/// Infer a type for a DB-file.
 pub(crate) fn infer_query(db: &dyn TyDatabase, file: FileId) -> Arc<InferenceResult> {
     let expect_ty = db.module_expected_ty(file);
     infer_with(db, file, expect_ty)
 }
 
+/// Type inference with expected type.
 pub(crate) fn infer_with(
     db: &dyn TyDatabase,
     file: FileId,
@@ -113,14 +119,17 @@ impl InferCtx<'_> {
         TyVar(self.table.push(Ty::Unknown))
     }
 
+    /// Get the type for a given [NameId].
     fn ty_for_name(&self, i: NameId) -> TyVar {
         TyVar(u32::from(i.into_raw()))
     }
 
+    /// Get the type for a given ExprId.
     fn ty_for_expr(&self, i: ExprId) -> TyVar {
         TyVar(self.module.names().len() as u32 + u32::from(i.into_raw()))
     }
 
+    /// Import an external type from [super::Ty].
     fn import_external(&mut self, ty: super::Ty) -> TyVar {
         let ty = match ty {
             super::Ty::Unknown => Ty::Unknown,
@@ -134,6 +143,7 @@ impl InferCtx<'_> {
         TyVar(self.table.push(ty))
     }
 
+    /// Infer the type of an expression.
     fn infer_expr(&mut self, e: ExprId) -> TyVar {
         let ty = self.infer_expr_inner(e);
         let placeholder_ty = self.ty_for_expr(e);
@@ -141,6 +151,7 @@ impl InferCtx<'_> {
         ty
     }
 
+    /// Subroutine of [infer_expr].
     fn infer_expr_inner(&mut self, e: ExprId) -> TyVar {
         match &self.module[e] {
             Expr::Missing => self.new_ty_var(),
@@ -351,6 +362,7 @@ impl InferCtx<'_> {
         }
     }
 
+    /// Infer the type of a binding by joining inherits and statics into field values.
     fn infer_bindings(&mut self, bindings: &Bindings) -> Attrset {
         let inherit_from_tys = bindings
             .inherit_froms

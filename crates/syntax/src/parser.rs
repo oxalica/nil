@@ -7,6 +7,7 @@ use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
 const MAX_STEPS: usize = 100_000_000;
 const MAX_DEPTHS: usize = 500;
 
+/// Result of parsing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Parse {
     green: GreenNode,
@@ -18,6 +19,7 @@ impl Parse {
         self.green.clone()
     }
 
+    /// Get the root node of the parse result.
     pub fn root(&self) -> SourceFile {
         SourceFile::cast(self.syntax_node()).expect("The entry node is SourceFile")
     }

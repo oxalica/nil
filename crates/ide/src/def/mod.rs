@@ -25,48 +25,62 @@ pub use self::nameres::{ModuleScopes, NameReference, NameResolution, ResolveResu
 pub use self::path::{Path, PathAnchor, PathData};
 pub use syntax::ast::{BinaryOpKind as BinaryOp, UnaryOpKind as UnaryOp};
 
+/// Database for definitions.
 #[salsa::query_group(DefDatabaseStorage)]
 pub trait DefDatabase: SourceDatabase {
     #[salsa::interned]
     fn intern_path(&self, path_data: PathData) -> Path;
 
+    /// Parse a file and return the parse result.
     fn parse(&self, file_id: FileId) -> Parse;
 
+    /// Get the module and its source map.
     fn module_with_source_map(&self, file_id: FileId) -> (Arc<Module>, Arc<ModuleSourceMap>);
 
+    /// Get the module of given [FileId].
     fn module(&self, file_id: FileId) -> Arc<Module>;
 
+    /// Get the source map of given [FileId].
     fn source_map(&self, file_id: FileId) -> Arc<ModuleSourceMap>;
 
+    /// Get the module kind of given [FileId].
     #[salsa::invoke(ModuleKind::module_kind_query)]
     fn module_kind(&self, file_id: FileId) -> Arc<ModuleKind>;
 
     #[salsa::invoke(Module::module_references_query)]
+    /// Get the module References of given [FileId].
     fn module_references(&self, file_id: FileId) -> Arc<HashSet<FileId>>;
 
+    /// Get the source root referrer graph of given [SourceRootId].
     fn source_root_referrer_graph(
         &self,
         sid: SourceRootId,
     ) -> Arc<HashMap<FileId, ModuleReferrers>>;
 
+    /// Ge the source root closure.
     fn source_root_closure(&self, id: SourceRootId) -> Arc<HashSet<FileId>>;
 
     // The result is not wrapped in Arc. Typically, the number of referrers is just 1 or 0.
     // And also this method is not call so often.
     fn module_referrers(&self, file_id: FileId) -> ModuleReferrers;
 
+    /// Resolve a path by looking it up in the Vfs.
     #[salsa::invoke(Path::resolve_path_query)]
     fn resolve_path(&self, path: Path) -> Option<VfsPath>;
 
+    /// Get the module scopes.
     #[salsa::invoke(ModuleScopes::module_scopes_query)]
     fn scopes(&self, file_id: FileId) -> Arc<ModuleScopes>;
 
+    /// Get the name  resolution of given file.
     #[salsa::invoke(NameResolution::name_resolution_query)]
     fn name_resolution(&self, file_id: FileId) -> Arc<NameResolution>;
 
+    /// Get the name references.
     #[salsa::invoke(NameReference::name_reference_query)]
     fn name_reference(&self, file_id: FileId) -> Arc<NameReference>;
 
+    /// Get the liveness check.
     #[salsa::invoke(liveness::liveness_check_query)]
     fn liveness_check(&self, file_id: FileId) -> Arc<LivenessCheckResult>;
 }
@@ -147,14 +161,20 @@ fn source_root_closure(db: &dyn DefDatabase, id: SourceRootId) -> Arc<HashSet<Fi
     Arc::new(closure)
 }
 
+/// A single nix module. Most of a time a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
+    /// The module expressions.
     exprs: Arena<Expr>,
+    /// The module name bindings.
     names: Arena<Name>,
+    /// The module entry expression.
     entry_expr: ExprId,
 }
 
+/// Expression index into an arena.
 pub type ExprId = Idx<Expr>;
+/// Expression index into an arena.
 pub type NameId = Idx<Name>;
 
 impl ops::Index<ExprId> for Module {
@@ -215,7 +235,11 @@ impl Module {
 
 pub type AstPtr = syntax::SyntaxNodePtr;
 
+/// Module source map.
+/// Contains expr and name maps as well as their reverses.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
+/// Module source map.
+/// Contains expr and name maps as well as their reverses.
 pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
@@ -259,9 +283,10 @@ impl ModuleSourceMap {
         &self.diagnostics
     }
 }
-
+/// A nix expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
+    /// Missing expression. Only used internally.
     Missing,
     Reference(SmolStr),
     Literal(Literal),
@@ -285,6 +310,7 @@ pub enum Expr {
 }
 
 impl Expr {
+    /// Recursively call function f on all children.
     pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match self {
             Self::Missing | Self::Reference(_) | Self::Literal(_) | Self::CurPos => {}
@@ -332,12 +358,14 @@ impl Expr {
     }
 }
 
+/// Name binding of an Expression.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Name {
     pub text: SmolStr,
     pub kind: NameKind,
 }
 
+/// Name binding kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NameKind {
     LetIn,
@@ -353,6 +381,7 @@ impl NameKind {
     }
 }
 
+/// A literal.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     Int(i64),
@@ -361,6 +390,7 @@ pub enum Literal {
     Path(Path),
 }
 
+/// A pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pat {
     pub fields: Box<[(Option<NameId>, Option<ExprId>)]>,
@@ -369,6 +399,7 @@ pub struct Pat {
 
 pub type Attrpath = Box<[ExprId]>;
 
+/// List of bindings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bindings {
     pub statics: Box<[(NameId, BindingValue)]>,

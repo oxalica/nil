@@ -41,6 +41,7 @@ pub struct LivenessCheckResult {
 }
 
 impl LivenessCheckResult {
+    /// Turn the liveness check results into DB Diagnostics.
     pub fn to_diagnostics<'a>(
         &'a self,
         db: &dyn DefDatabase,
@@ -77,6 +78,7 @@ impl LivenessCheckResult {
     }
 }
 
+/// Query to the DB to get liveness faults.
 pub(crate) fn liveness_check_query(
     db: &dyn DefDatabase,
     file_id: FileId,
@@ -153,7 +155,7 @@ pub(crate) fn liveness_check_query(
         }
 
         // Record unused let-bindings and continue traversal inside them,
-        // as if themselves are reachable.
+        // as if they are reachable.
         unused_defs.extend(discovered_let_rhs.iter().map(|(&name, _)| name));
         stack.extend(discovered_let_rhs.iter().map(|(_, &rhs)| rhs));
     }
@@ -161,7 +163,7 @@ pub(crate) fn liveness_check_query(
     // Finally, collect unused lambda parameters, "with" expressions and "rec" attrsets.
     // It's intended to not reporting them if they are only referenced by some unused let-bindings.
     // Unused let-bindings may be caused by unfinished codes or typos,
-    // situation may be changed when user tries to fixing them.
+    // situation may be changed when user tries to fix them.
     let mut unused_withs = Vec::new();
     let mut unused_recs = Vec::new();
     for (expr, kind) in module.exprs() {

@@ -21,6 +21,8 @@ pub(crate) fn options_to_config_ty(db: &dyn TyDatabase) -> Ty {
     Ty::Attrset(Attrset::from_internal(fields, None))
 }
 
+/// Create a [Ty] from [OptionTy].
+/// [OptionTy] was automically retrieved from nixpks option declaration.
 fn from_raw_ty(ty: &OptionTy) -> Ty {
     match ty {
         OptionTy::Any => ty!(?),
@@ -44,6 +46,7 @@ fn from_raw_ty(ty: &OptionTy) -> Ty {
     }
 }
 
+/// Get the input types of all flake inputs.
 pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<HashMap<String, Ty>> {
     let Some(info) = db.source_root_flake_info(sid) else {
         return Arc::default();
@@ -56,6 +59,7 @@ pub(crate) fn flake_input_tys(db: &dyn TyDatabase, sid: SourceRootId) -> Arc<Has
     Arc::new(tys)
 }
 
+/// Get the type from flake outputs.
 fn from_flake_output(out: &FlakeOutput) -> Ty {
     let FlakeOutput::Attrset(set) = out else {
         return from_flake_output_inner(out, None);
@@ -73,6 +77,7 @@ fn from_flake_output(out: &FlakeOutput) -> Ty {
     Ty::Attrset(Attrset::from_internal(fields, None))
 }
 
+/// Subroutine in [from_flake_output].
 fn from_flake_output_inner(out: &FlakeOutput, generic_system_depth: Option<usize>) -> Ty {
     match out {
         FlakeOutput::Leaf(leaf) => match leaf.type_ {

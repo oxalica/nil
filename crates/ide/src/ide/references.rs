@@ -8,6 +8,7 @@ enum DefKind {
     With(AstPtr),
 }
 
+/// Return all references of this expression.
 pub(crate) fn references(
     db: &dyn DefDatabase,
     FilePos { file_id, pos }: FilePos,

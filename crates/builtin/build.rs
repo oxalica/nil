@@ -198,6 +198,7 @@ struct BuiltinInfo {
     experimental_feature: Option<String>,
 }
 
+/// Nix dump language V1 or V2.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum DumpLanguage {

@@ -1,3 +1,5 @@
+///! List of known types.
+///! Includes derivations, fetchtree, flakes, builtins and packages.
 use super::{AttrSource, Attrset, Ty};
 use once_cell::sync::Lazy;
 

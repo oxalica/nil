@@ -582,7 +582,7 @@ impl Server {
                 .filter(|p| p.exists())?;
             Some((input_name, path))
         })() {
-            tracing::info!("Evaluating NixOS options from {}", nixpkgs_path.display());
+            tracing::info!("Evaluating NixOS options of {}", nixpkgs_path.display());
 
             let _progress = Progress::new(
                 &client,

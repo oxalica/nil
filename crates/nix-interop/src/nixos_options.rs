@@ -7,6 +7,7 @@ use serde::{de, Deserialize};
 use syntax::semantic::escape_string;
 use tokio::process::Command;
 
+/// Load the nixos options.
 pub async fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result<NixosOptions> {
     let nixpkgs_path = nixpkgs_path
         .to_str()
@@ -130,6 +131,7 @@ impl<'de> de::Deserialize<'de> for RelatedPackage {
     }
 }
 
+/// Raw nix types.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "name")]
 pub enum Ty {

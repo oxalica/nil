@@ -34,6 +34,7 @@ pub enum DiagnosticKind {
     UnusedRec,
 }
 
+/// Severity of a diagnostic.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
     Warning,

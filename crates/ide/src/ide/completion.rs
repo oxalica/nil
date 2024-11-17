@@ -84,6 +84,7 @@ impl From<NameKind> for CompletionItemKind {
     }
 }
 
+/// Completion context.
 struct Context<'a> {
     module: &'a Module,
     source_map: &'a ModuleSourceMap,
@@ -99,6 +100,7 @@ struct Context<'a> {
     completions: Vec<CompletionItem>,
 }
 
+/// Get all completions for a file.
 pub(crate) fn completions(
     db: &dyn TyDatabase,
     fpos @ FilePos { file_id, pos }: FilePos,
