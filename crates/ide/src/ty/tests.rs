@@ -180,6 +180,12 @@ fn select() {
 }
 
 #[test]
+fn pipe() {
+    check("f: 1 |> f", expect!["(int → ?) → ?"]);
+    check("f: f <| 1", expect!["(int → ?) → ?"]);
+}
+
+#[test]
 fn external() {
     check_all_expect(
         "let a = a; in a",

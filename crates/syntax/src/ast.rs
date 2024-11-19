@@ -25,6 +25,9 @@ pub enum BinaryOpKind {
     Sub,
     Mul,
     Div,
+
+    PipeLeft,
+    PipeRight,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -263,16 +266,20 @@ impl Expr {
     }
 
     pub fn contains_without_paren(&self, inner: &Self) -> bool {
-        fn bp(e: &Expr) -> Option<u8> {
+        const MIN_BP: i8 = i8::MIN;
+        const MAX_BP: i8 = i8::MAX;
+
+        fn bp(e: &Expr) -> Option<i8> {
             Some(match e {
                 Expr::With(_)
                 | Expr::Lambda(_)
                 | Expr::LetIn(_)
                 | Expr::IfThenElse(_)
-                | Expr::Assert(_) => TOPLEVEL,
+                | Expr::Assert(_) => MIN_BP,
 
                 // Binary and unary ops. They follow `infix_bp` in parser.
                 Expr::BinaryOp(e) => match e.op_kind()? {
+                    BinaryOpKind::PipeLeft | BinaryOpKind::PipeRight => 0,
                     BinaryOpKind::Imply => 1,
                     BinaryOpKind::Or => 3,
                     BinaryOpKind::And => 5,
@@ -307,18 +314,15 @@ impl Expr {
                 | Expr::Ref(_) => 29,
 
                 // Special. See below.
-                Expr::Paren(_) => PAREN,
+                Expr::Paren(_) => MAX_BP,
             })
         }
 
-        const TOPLEVEL: u8 = 0;
-        const PAREN: u8 = 31;
-
         match (bp(self), bp(inner)) {
             // Special case 1: `Paren`s can safely contain or be contained by anything.
-            (Some(PAREN), _) | (_, Some(PAREN)) => true,
+            (Some(MAX_BP), _) | (_, Some(MAX_BP)) => true,
             // Special case 2: top-levels can contain each other without ambiguity.
-            (Some(TOPLEVEL), Some(TOPLEVEL)) => true,
+            (Some(MIN_BP), Some(MIN_BP)) => true,
             // Otherwise, expressions with lower binding power contain higher ones.
             (Some(outer), Some(inner)) => outer < inner,
             // `false` by default.
@@ -382,6 +386,8 @@ asts! {
                 let op = match tok.kind() {
                     T![->] => BinaryOpKind::Imply,
                     T![&&] => BinaryOpKind::And,
+                    T![|>] => BinaryOpKind::PipeRight,
+                    T![<|] => BinaryOpKind::PipeLeft,
                     T![||] => BinaryOpKind::Or,
                     T![==] => BinaryOpKind::Equal,
                     T![!=] => BinaryOpKind::NotEqual,

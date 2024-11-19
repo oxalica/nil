@@ -109,6 +109,8 @@ regex_dfa! {
         QUOTE2 = r"''",
 
         DOT3 = r"\.\.\.",
+        OR_GT = r"\|>",
+        LT_OR = r"<\|",
         MINUS_GT = r"->",
         OR2 = r"\|\|",
         AND2 = r"&&",
@@ -651,6 +653,20 @@ mod tests {
                 INT "3"
                 COMMENT "/***/"
                 INT "4"
+            "#]],
+        );
+    }
+
+    #[test]
+    fn pipe() {
+        check_lex(
+            "1<|2|>3",
+            expect![[r#"
+                INT "1"
+                LT_OR "<|"
+                INT "2"
+                OR_GT "|>"
+                INT "3"
             "#]],
         );
     }

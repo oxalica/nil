@@ -1,0 +1,39 @@
+SOURCE_FILE@0..27
+  LIST@0..26
+    L_BRACK@0..1 "["
+    PAREN@1..13
+      L_PAREN@1..2 "("
+      BINARY_OP@2..12
+        BINARY_OP@2..9
+          BINARY_OP@2..6
+            LITERAL@2..3
+              INT@2..3 "1"
+            MINUS_GT@3..5 "->"
+            LITERAL@5..6
+              INT@5..6 "2"
+          OR_GT@6..8 "|>"
+          LITERAL@8..9
+            INT@8..9 "3"
+        OR_GT@9..11 "|>"
+        LITERAL@11..12
+          INT@11..12 "4"
+      R_PAREN@12..13 ")"
+    PAREN@13..25
+      L_PAREN@13..14 "("
+      BINARY_OP@14..24
+        LITERAL@14..15
+          INT@14..15 "5"
+        LT_OR@15..17 "<|"
+        BINARY_OP@17..24
+          LITERAL@17..18
+            INT@17..18 "6"
+          LT_OR@18..20 "<|"
+          BINARY_OP@20..24
+            LITERAL@20..21
+              INT@20..21 "7"
+            MINUS_GT@21..23 "->"
+            LITERAL@23..24
+              INT@23..24 "8"
+      R_PAREN@24..25 ")"
+    R_BRACK@25..26 "]"
+  SPACE@26..27 "\n"

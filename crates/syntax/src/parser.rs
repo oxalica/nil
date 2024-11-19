@@ -367,12 +367,12 @@ impl<'i> Parser<'i> {
     /// Operator level expression (low priority).
     /// Maybe consume nothing.
     fn expr_operator_opt(&mut self) {
-        self.expr_bp(0);
+        self.expr_bp(i8::MIN);
     }
 
     // Pratt parser.
     // Ref: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
-    fn expr_bp(&mut self, min_bp: u8) {
+    fn expr_bp(&mut self, min_bp: i8) {
         // Always consume whitespace first, even though not `allow_prefix`.
         let Some(tok) = self.peek_non_ws() else {
             self.error(ErrorKind::ExpectExpr);
@@ -847,7 +847,7 @@ impl SyntaxKind {
     }
 
     #[rustfmt::skip]
-    fn prefix_bp(self) -> Option<u8> {
+    fn prefix_bp(self) -> Option<i8> {
         // See `infix_bp`.
         Some(match self {
             T![!] => 13,
@@ -857,7 +857,7 @@ impl SyntaxKind {
     }
 
     #[rustfmt::skip]
-    fn postfix_bp(self) -> Option<u8> {
+    fn postfix_bp(self) -> Option<i8> {
         // See `infix_bp`.
         Some(match self {
             T![?] => 21,
@@ -866,8 +866,10 @@ impl SyntaxKind {
     }
 
     #[rustfmt::skip]
-    fn infix_bp(self) -> Option<(u8, u8)> {
+    fn infix_bp(self) -> Option<(i8, i8)> {
         Some(match self {
+            T![|>] => (-1, 0),
+            T![<|] => (0, -1),
             T![->] => (2, 1),
             T![||] => (3, 4),
             T![&&] => (5, 6),
@@ -892,4 +894,4 @@ impl SyntaxKind {
     }
 }
 
-const APPLY_RBP: u8 = 26;
+const APPLY_RBP: i8 = 26;
