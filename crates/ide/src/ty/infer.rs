@@ -213,6 +213,17 @@ impl<'db> InferCtx<'db> {
                 self.unify_var(then_ty, else_ty);
                 then_ty
             }
+            &Expr::Apply(lam, arg)
+            | &Expr::Binary(Some(BinaryOpKind::PipeRight), arg, lam)
+            | &Expr::Binary(Some(BinaryOpKind::PipeLeft), lam, arg) => {
+                let param_ty = self.new_ty_var();
+                let ret_ty = self.new_ty_var();
+                let lam_ty = self.infer_expr(lam);
+                self.unify_var_ty(lam_ty, Ty::Lambda(param_ty, ret_ty));
+                let arg_ty = self.infer_expr(arg);
+                self.unify_var(arg_ty, param_ty);
+                ret_ty
+            }
             &Expr::Binary(op, lhs, rhs) => {
                 let lhs_ty = self.infer_expr(lhs);
                 let rhs_ty = self.infer_expr(rhs);
@@ -256,6 +267,8 @@ impl<'db> InferCtx<'db> {
                         self.unify_var(rhs_ty, ret_ty);
                         ret_ty
                     }
+                    // Already handled by the outer match.
+                    BinaryOpKind::PipeLeft | BinaryOpKind::PipeRight => unreachable!(),
                 }
             }
             &Expr::Unary(op, arg) => {
@@ -269,15 +282,6 @@ impl<'db> InferCtx<'db> {
                     // TODO: The argument is int | bool.
                     Some(UnaryOpKind::Negate) => arg_ty,
                 }
-            }
-            &Expr::Apply(lam, arg) => {
-                let param_ty = self.new_ty_var();
-                let ret_ty = self.new_ty_var();
-                let lam_ty = self.infer_expr(lam);
-                self.unify_var_ty(lam_ty, Ty::Lambda(param_ty, ret_ty));
-                let arg_ty = self.infer_expr(arg);
-                self.unify_var(arg_ty, param_ty);
-                ret_ty
             }
             Expr::HasAttr(set_expr, path) => {
                 // TODO: Store the information of referenced paths somehow.
