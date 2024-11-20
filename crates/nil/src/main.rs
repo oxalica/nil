@@ -49,6 +49,10 @@ struct DiagnosticsArgs {
     /// to disambiguous it from flags.
     #[argh(positional)]
     path: PathBuf,
+
+    /// treat warnings like errors and exit with non-zero code.
+    #[argh(switch)]
+    deny_warnings: bool,
 }
 
 #[derive(Debug, FromArgs)]
@@ -114,6 +118,12 @@ fn main() {
 fn main_diagnostics(args: DiagnosticsArgs) {
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 
+    let fail_at_or_above_severity = if args.deny_warnings {
+        Severity::Warning
+    } else {
+        Severity::Error
+    };
+
     let ret = (|| -> Result<Option<Severity>> {
         let path = &*args.path;
 
@@ -137,7 +147,7 @@ fn main_diagnostics(args: DiagnosticsArgs) {
     match ret {
         Ok(None) => process::exit(0),
         Ok(Some(max_severity)) => {
-            if max_severity > Severity::Warning {
+            if max_severity >= fail_at_or_above_severity {
                 process::exit(1)
             } else {
                 process::exit(0)
