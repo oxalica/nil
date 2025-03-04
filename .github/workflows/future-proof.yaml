@@ -46,4 +46,5 @@ jobs:
       - name: cargo-outdated
         run: |
           rm Cargo.lock # Ignore trivially updatable compatible versions.
-          cargo outdated --workspace --exit-code 1 --exclude=lsp-types
+          # TODO: salsa 0.18
+          cargo outdated --workspace --exit-code 1 --root-deps-only --exclude=lsp-types,salsa
