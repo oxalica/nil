@@ -83,18 +83,30 @@ rec {
         rustPkgs = rust-overlay.packages.${system};
 
         pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
-          set -e
+          set -eu
+          export PATH="$PATH''${PATH:+:}"${
+            lib.escapeShellArg (
+              lib.makeBinPath [
+                pkgs.nixfmt-rfc-style
+                pkgs.fd
+                pkgs.findutils
+              ]
+            )
+          }
+
           die() { echo "$*" >&2; exit 1; }
 
           if git_dir="$(git rev-parse --show-toplevel)"; then
             cd "$git_dir"
           fi
           cargo fmt --all --check \
-            || die 'Format failed'
+            || die 'cargo fmt failed'
+          fd -e nix --exclude=crates/syntax/test_data | xargs nixfmt --check \
+            || die 'nixfmt failed'
           cargo clippy --workspace --all-targets -- -Dwarnings \
-            || die 'Clippy failed'
+            || die 'clippy failed'
 
-          ( cd editors/coc-nil; npm run lint )
+          cd editors/coc-nil && npm run lint
         '';
 
       in
