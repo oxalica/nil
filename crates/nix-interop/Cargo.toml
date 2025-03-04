@@ -19,3 +19,6 @@ rustix = { version = "0.38.3", default-features = false, features = ["process", 
 
 [dev-dependencies]
 tokio = { version = "1.27.0", features = ["macros", "parking_lot", "rt", "sync"] } # parking_lot is required for `OnceCell::const_new`.
+
+[lints]
+workspace = true

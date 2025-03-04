@@ -24,3 +24,15 @@ debug = 1
 
 [profile.release]
 lto = true
+
+[workspace.lints.clippy]
+dbg-macro = "warn"
+todo = "warn"
+
+doc-markdown = "warn"
+manual-let-else = "warn"
+semicolon-if-nothing-returned = "warn"
+uninlined-format-args = "warn"
+
+# WAIT: https://github.com/rust-lang/rust-clippy/issues/11436
+missing-panics-doc = "allow"

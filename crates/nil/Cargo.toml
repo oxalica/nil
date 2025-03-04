@@ -40,3 +40,6 @@ features = [
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "0.38.3", default-features = false, features = ["fs", "std"] }
+
+[lints]
+workspace = true
