@@ -24,3 +24,6 @@ url = "2.3.1"
 [dev-dependencies]
 anyhow = "1.0.60"
 expect-test = "1.4.0"
+
+[lints]
+workspace = true

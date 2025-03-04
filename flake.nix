@@ -82,31 +82,6 @@ rec {
         pkgs = nixpkgs.legacyPackages.${system};
         rustPkgs = rust-overlay.packages.${system};
 
-        clippyFlags = lib.concatStringsSep " " [
-          "-D"
-          "warnings"
-
-          "-D"
-          "clippy::dbg_macro"
-          "-D"
-          "clippy::todo"
-
-          "-D"
-          "clippy::doc_markdown"
-          "-D"
-          "clippy::manual-let-else"
-          "-D"
-          "clippy::missing-panics-doc"
-          "-D"
-          "clippy::semicolon_if_nothing_returned"
-          "-D"
-          "clippy::uninlined_format_args"
-
-          # FIXME: https://github.com/rust-lang/rust-clippy/issues/11436
-          "-A"
-          "clippy::missing_panics_doc"
-        ];
-
         pre-commit = pkgs.writeShellScriptBin "pre-commit" ''
           set -e
           die() { echo "$*" >&2; exit 1; }
@@ -116,7 +91,7 @@ rec {
           fi
           cargo fmt --all --check \
             || die 'Format failed'
-          cargo clippy --workspace --all-targets -- ${clippyFlags} \
+          cargo clippy --workspace --all-targets -- -Dwarnings \
             || die 'Clippy failed'
 
           ( cd editors/coc-nil; npm run lint )
@@ -161,7 +136,6 @@ rec {
 
           RUST_BACKTRACE = "short";
           NIXPKGS = nixpkgs;
-          CLIPPY_FLAGS = clippyFlags;
 
           # bash
           shellHook = ''

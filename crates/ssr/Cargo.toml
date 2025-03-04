@@ -14,3 +14,6 @@ syntax = { path = "../syntax" }
 
 [dev-dependencies]
 expect-test = "1.4.1"
+
+[lints]
+workspace = true
