@@ -22,7 +22,7 @@ pub(crate) fn negotiate_capabilities(
     let is_neovim = init_params
         .client_info
         .as_ref()
-        .map_or(false, |info| info.name == "Neovim");
+        .is_some_and(|info| info.name == "Neovim");
 
     let final_caps = NegotiatedCapabilities {
         client_show_message_request: test!(

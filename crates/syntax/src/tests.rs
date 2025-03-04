@@ -19,7 +19,7 @@ fn run_test(dir: &Path, ok: bool) {
         .unwrap()
         .filter_map(|entry| {
             let path = entry.unwrap().path();
-            if path.extension().map_or(false, |ext| ext == "nix") {
+            if path.extension().is_some_and(|ext| ext == "nix") {
                 Some(path)
             } else {
                 None

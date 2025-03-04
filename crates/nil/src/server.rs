@@ -294,7 +294,7 @@ impl Server {
                 .ok()
                 .as_ref()
                 .and_then(|path| path.file_name())
-                .map_or(false, |name| name == FLAKE_FILE)
+                .is_some_and(|name| name == FLAKE_FILE)
         {
             self.spawn_load_flake_workspace();
         }

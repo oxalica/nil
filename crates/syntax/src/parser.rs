@@ -67,7 +67,7 @@ struct Parser<'i> {
     depth: usize,
 }
 
-impl<'i> Parser<'i> {
+impl Parser<'_> {
     /// Parse the whole source file.
     fn parse(mut self) -> Parse {
         self.start_node(SOURCE_FILE);
@@ -669,7 +669,7 @@ impl<'i> Parser<'i> {
                         self.finish_node();
                     }
                     // Use lookahead for ending condition, since `;` might not be typed yet.
-                    while self.peek_non_ws().map_or(false, SyntaxKind::can_start_attr) {
+                    while self.peek_non_ws().is_some_and(SyntaxKind::can_start_attr) {
                         self.attr_opt(false);
                     }
                     self.want(T![;]);
