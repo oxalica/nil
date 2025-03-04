@@ -116,6 +116,32 @@ let in { foo = "bar"; }
 { foo = "bar"; }
 ```
 
+### `remove_unused_binding`
+
+Remove an unused pattern binding.
+
+```nix
+{ foo, bar }:{ foo = 1; }
+```
+=>
+```nix
+{ foo }:{ foo = 1; }
+```
+
+Or, remove an unused let binding.
+
+```nix
+let
+  foo.bar = 1;
+  foo.baz = 2;
+in {}
+```
+=>
+```nix
+let
+in {}
+```
+
 ### `rewrite_string_to_indented` and `rewrite_indented_to_string`
 
 Rewrite between double quoted strings and indented strings

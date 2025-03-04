@@ -19,6 +19,7 @@ mod flatten_attrset;
 mod pack_bindings;
 mod remove_empty_inherit;
 mod remove_empty_let_in;
+mod remove_unused_binding;
 mod rewrite_string;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
@@ -49,6 +50,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         pack_bindings::pack_bindings,
         remove_empty_inherit::remove_empty_inherit,
         remove_empty_let_in::remove_empty_let_in,
+        remove_unused_binding::remove_unused_binding,
         rewrite_string::quote_attr,
         rewrite_string::rewrite_indented_to_string,
         rewrite_string::rewrite_string_to_indented,
