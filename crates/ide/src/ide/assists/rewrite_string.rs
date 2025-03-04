@@ -122,7 +122,7 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
     let syntax = node.syntax();
     if syntax
         .parent()
-        .map_or(false, |parent| parent.kind() == SyntaxKind::ATTR_PATH)
+        .is_some_and(|parent| parent.kind() == SyntaxKind::ATTR_PATH)
     {
         return None;
     }

@@ -108,7 +108,7 @@ struct InferCtx<'db> {
     table: UnionFind<Ty>,
 }
 
-impl<'db> InferCtx<'db> {
+impl InferCtx<'_> {
     fn new_ty_var(&mut self) -> TyVar {
         TyVar(self.table.push(Ty::Unknown))
     }
