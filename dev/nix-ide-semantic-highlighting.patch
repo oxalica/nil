@@ -1,12 +1,10 @@
-diff --git a/package.json b/package.json
 --- a/package.json
 +++ b/package.json
-@@ -100,7 +100,15 @@
-         "editor.insertSpaces": true,
-         "editor.tabSize": 2
+@@ -124,6 +124,14 @@
+         "category": "Nix IDE",
+         "command": "nix-ide.restartLanguageServer"
        }
--    }
-+    },
++    ],
 +    "semanticTokenScopes": [
 +      {
 +        "language": "nix",
@@ -14,8 +12,6 @@ diff --git a/package.json b/package.json
 +          "*.withAttribute": ["markup.underline"]
 +        }
 +      }
-+    ]
+     ]
    },
    "devDependencies": {
-     "@commitlint/cli": "*",
-
