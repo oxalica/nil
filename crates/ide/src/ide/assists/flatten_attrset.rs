@@ -87,7 +87,7 @@ pub(super) fn flatten_attrset(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "flatten_attrset",
-        "Flatten Attrset RHS into outer level bindings",
+        format!("Flatten into `{prefix_path}.<attr> = ..`"),
         AssistKind::RefactorRewrite,
         edits,
     );

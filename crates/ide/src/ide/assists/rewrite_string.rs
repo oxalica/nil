@@ -30,11 +30,11 @@ pub(super) fn rewrite_uri_to_string(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "rewrite_uri_to_string",
-        "Rewrite the URI literal to a double quoted string",
+        format!("Quote as `\"{token}\"`"),
         AssistKind::QuickFix,
         vec![TextEdit {
             delete: token.text_range(),
-            insert: format!(r#""{}""#, token.text()).into(),
+            insert: format!("\"{token}\"").into(),
         }],
     );
 
@@ -63,11 +63,11 @@ pub(super) fn quote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "quote_attr",
-        "Put the attribute name in double quotes",
+        format!("Quote as \"{token}\""),
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: node.syntax().text_range(),
-            insert: format!(r#""{}""#, token.text()).into(),
+            insert: format!("\"{token}\"").into(),
         }],
     );
     Some(())
@@ -95,7 +95,7 @@ pub(super) fn unquote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     if is_valid_ident(&text) {
         ctx.add(
             "unquote_attr",
-            "Remove the double quotes from the attribute name",
+            format!("Unquote as `{text}`"),
             AssistKind::RefactorRewrite,
             vec![TextEdit {
                 delete: node.syntax().text_range(),
@@ -198,7 +198,7 @@ pub(super) fn rewrite_string_to_indented(ctx: &mut AssistsCtx<'_>) -> Option<()>
 
     ctx.add(
         "rewrite_string_to_indented",
-        "Rewrite the double quoted string to an indented string",
+        "Rewrite to indented string",
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: node.syntax().text_range(),
@@ -250,7 +250,7 @@ pub(super) fn rewrite_indented_to_string(ctx: &mut AssistsCtx<'_>) -> Option<()>
 
     ctx.add(
         "rewrite_indented_to_string",
-        "Rewrite the indented string to a double quoted string",
+        "Rewrite to double-quoted string",
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: node.syntax().text_range(),
