@@ -347,6 +347,7 @@ impl InferCtx<'_> {
                 let set_ty = Ty::Attrset(set).intern(self);
                 self.infer_set_field(set_ty, Some("body".into()), AttrSource::Unknown)
             }
+            Expr::CurPos => self.import_external(known::CUR_POS.clone()),
         }
     }
 

@@ -186,6 +186,15 @@ fn pipe() {
 }
 
 #[test]
+fn cur_pos() {
+    // Cannot be shadowed.
+    check(
+        "let __curPos = 1; in __curPos",
+        expect!["{ column: int, file: string, line: int }"],
+    );
+}
+
+#[test]
 fn external() {
     check_all_expect(
         "let a = a; in a",

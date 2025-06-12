@@ -1,6 +1,17 @@
 use super::{AttrSource, Attrset, Ty};
 use once_cell::sync::Lazy;
 
+/// `__curPos`, a contextual keyword handled on lowering.
+///
+/// <https://docs.lix.systems/manual/lix/stable/language/constructs.html#keywords-__curPos>
+pub static CUR_POS: Lazy<Ty> = Lazy::new(|| {
+    ty!({
+        "column": int,
+        "file": string,
+        "line": int,
+    })
+});
+
 pub static DERIVATION: Lazy<Ty> = Lazy::new(|| {
     ty!({
         "name": string,

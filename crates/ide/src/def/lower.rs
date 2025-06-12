@@ -13,6 +13,11 @@ use syntax::semantic::{
 };
 use syntax::Parse;
 
+/// A contextual keyword handled on lowering.
+///
+/// <https://docs.lix.systems/manual/lix/stable/language/constructs.html#keywords-__curPos>
+const KW_CUR_POS: &str = "__curPos";
+
 pub(super) fn lower(
     db: &dyn DefDatabase,
     file_id: FileId,
@@ -81,7 +86,12 @@ impl LowerCtx<'_> {
                 let name = e
                     .token()
                     .map_or_else(Default::default, |tok| tok.text().into());
-                self.alloc_expr(Expr::Reference(name), ptr)
+                let e = if name == KW_CUR_POS {
+                    Expr::CurPos
+                } else {
+                    Expr::Reference(name)
+                };
+                self.alloc_expr(e, ptr)
             }
             ast::Expr::Apply(e) => {
                 let func = self.lower_expr_opt(e.function());

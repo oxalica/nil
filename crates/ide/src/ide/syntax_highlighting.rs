@@ -83,6 +83,9 @@ pub(crate) fn highlight(
         match tok.parent() {
             Some(node) if node.kind() == SyntaxKind::REF => {
                 let expr = source_map.expr_for_node(AstPtr::new(&node))?;
+                if matches!(module[expr], Expr::CurPos) {
+                    return Some(HlTag::Keyword(HlKeyword::Other));
+                }
                 if let Some(builtin) = nameres.check_builtin(expr, &module) {
                     // Special case boolean literals.
                     if matches!(builtin, "true" | "false") {
@@ -238,6 +241,9 @@ mod tests {
         // Contextual keywords.
         check("let or = 1; in a $0or", expect!["NameRef(LetIn)"]);
         check("{ $0or = 1; }", expect!["NameDef(PlainAttrset)"]);
+
+        check("let $0__curPos = 1; in __curPos", expect!["NameDef(LetIn)"]);
+        check("let __curPos = 1; in $0__curPos", expect!["Keyword(Other)"]);
     }
 
     #[test]

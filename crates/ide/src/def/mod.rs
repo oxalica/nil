@@ -281,12 +281,13 @@ pub enum Expr {
     Attrset(Bindings),
     LetAttrset(Bindings),
     RecAttrset(Bindings),
+    CurPos,
 }
 
 impl Expr {
     pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match self {
-            Self::Missing | Self::Reference(_) | Self::Literal(_) => {}
+            Self::Missing | Self::Reference(_) | Self::Literal(_) | Self::CurPos => {}
             Self::Lambda(_, pat, body) => {
                 if let Some(p) = pat {
                     p.fields
