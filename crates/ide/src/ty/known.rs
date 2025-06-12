@@ -211,10 +211,12 @@ pub fn flake(inputs: &[(&str, Ty)]) -> Ty {
 ///
 /// The first `&str` is the field name of flake output attrset, the second `usize` is the depth
 /// of the system field under that the former field. Eg.
-/// - `("packages", 0)` means "outputs.packages.<system>".
-///                                              ^ 0
-/// - `("hydraJobs", 1)` means "outputs.hydraJobs.<name>.<system>".
-///                                               ^0     ^1
+/// ```text
+/// `("packages", 0)`: "outputs.packages.<system>"
+///                                      ^ 0
+/// `("hydraJobs", 1)`: "outputs.hydraJobs.<name>.<system>".
+///                                        ^0     ^1
+/// ```
 pub const FLAKE_OUTPUT_GENERIC_SYSTEM_FIELDS: &[(&str, usize)] = &[
     ("apps", 0),
     ("checks", 0),
