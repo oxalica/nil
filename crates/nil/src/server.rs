@@ -180,7 +180,7 @@ impl Server {
         if let Some(options) = params.initialization_options {
             if options.as_object().filter(|o| !o.is_empty()).is_some() {
                 tracing::debug!("Initialization options: {options}");
-                self.on_update_config(UpdateConfigEvent(options));
+                let _ = self.on_update_config(UpdateConfigEvent(options));
             }
         }
 
@@ -395,10 +395,9 @@ impl Server {
                     let mut file = options.open(&path)?;
                     let ft = file.metadata()?.file_type();
                     if !ft.is_file() {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("non-regular file type: {ft:?}"),
-                        ));
+                        return Err(std::io::Error::other(format!(
+                            "non-regular file type: {ft:?}"
+                        )));
                     }
 
                     // Remove the O_NONBLOCK flag for blocking read.

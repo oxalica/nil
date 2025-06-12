@@ -98,7 +98,7 @@ impl Vfs {
         // This is not quite efficient, but we already do many O(n) traversals.
         let (new_text, line_map) = LineMap::normalize(new_text);
         let new_text = <Arc<str>>::from(new_text);
-        log::trace!("File {:?} content changed: {:?}", file, new_text);
+        log::trace!("File {file:?} content changed: {new_text:?}");
         self.files[file.0 as usize] = (new_text.clone(), Arc::new(line_map));
         self.change.change_file(file, new_text);
         Ok(())
