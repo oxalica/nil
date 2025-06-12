@@ -20,7 +20,7 @@ rec {
       inherit (nixpkgs) lib;
 
       # For rustfmt and fuzz.
-      nightlyVersion = "2025-03-01";
+      nightlyVersion = "2025-06-01";
 
       mtime = self.lastModifiedDate;
       date = "${substring 0 4 mtime}-${substring 4 2 mtime}-${substring 6 2 mtime}";
