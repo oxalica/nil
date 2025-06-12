@@ -12,7 +12,7 @@ use lsp_types::{
     Position, PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
     TextDocumentPositionParams, Url,
 };
-use nix_interop::DEFAULT_IMPORT_FILE;
+use nix_interop::{DEFAULT_IMPORT_FILE, FLAKE_FILE};
 use std::sync::Arc;
 use text_size::{TextRange, TextSize};
 
@@ -346,10 +346,14 @@ pub(crate) fn to_document_link(
                 LinkTarget::VfsPath(vpath) => {
                     let path = vpath.as_path()?;
                     let default_child = path.join(DEFAULT_IMPORT_FILE);
+                    let flake_child = path.join(FLAKE_FILE);
                     let target_path = if path.is_file() {
                         path
                     } else if default_child.is_file() {
                         &default_child
+                    } else if flake_child.is_file() {
+                        // For relative flake URIs (paths), we want to jump to `flake.nix`.
+                        &flake_child
                     } else {
                         return None;
                     };

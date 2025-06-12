@@ -18,7 +18,7 @@ use crate::FlakeUrl;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResolvedInput {
-    pub store_path: String,
+    pub store_path: Option<String>,
     pub is_flake: bool,
 }
 
@@ -48,22 +48,26 @@ pub async fn resolve_flake_locked_inputs(
     let hashes = inputs
         .iter()
         .map(|(input_name, node)| {
-            let hash = &node
+            let Some(hash) = &node
                 .locked
                 .as_ref()
                 .with_context(|| format!("Input {input_name:?} is not locked"))?
-                .nar_hash;
+                .nar_hash
+            else {
+                return Ok(None);
+            };
 
             // Validate since we'll wrap this in Nix strings below.
             ensure!(
                 hash.bytes().all(|b| b != b'\\' && b != b'"'),
                 "Invalid nar hash",
             );
-            Ok(format!("\"{hash}\" "))
+            Ok(Some(format!("\"{hash}\" ")))
         })
+        .filter_map(Result::transpose)
         .collect::<Result<String>>()?;
 
-    let store_paths = nix_eval_expr_json::<Vec<String>>(
+    let mut store_paths = nix_eval_expr_json::<Vec<String>>(
         nix_command,
         &format!(
             r#"
@@ -78,10 +82,14 @@ pub async fn resolve_flake_locked_inputs(
             "#
         ),
     )
-    .await?;
+    .await?
+    .into_iter();
 
-    let resolved = std::iter::zip(inputs, store_paths)
-        .map(|((input_name, node), store_path)| {
+    let resolved = inputs
+        .into_iter()
+        .map(|(input_name, node)| {
+            let store_path = matches!(&node.locked, Some(l) if l.nar_hash.is_some())
+                .then(|| store_paths.next().unwrap());
             let resolved = ResolvedInput {
                 is_flake: node.flake,
                 store_path,
@@ -188,7 +196,10 @@ enum FlakeInput {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LockedFlakeRef {
-    nar_hash: String,
+    // Local references may not be locked.
+    // See: <https://github.com/oxalica/nil/issues/164>
+    #[serde(default)]
+    nar_hash: Option<String>,
     #[serde(rename = "type")]
     _type: String,
     // ...
@@ -240,14 +251,18 @@ mod tests {
             (
                 "nixpkgs".to_owned(),
                 ResolvedInput {
-                    store_path: "/nix/store/hap5a6iw5rccl21adfxh5b3lk2c8qnmj-source".to_owned(),
+                    store_path: Some(
+                        "/nix/store/hap5a6iw5rccl21adfxh5b3lk2c8qnmj-source".to_owned(),
+                    ),
                     is_flake: true,
                 },
             ),
             (
                 "nix".to_owned(),
                 ResolvedInput {
-                    store_path: "/nix/store/5598lqiaw5qjgn661w74q2a6kivgiksa-source".to_owned(),
+                    store_path: Some(
+                        "/nix/store/5598lqiaw5qjgn661w74q2a6kivgiksa-source".to_owned(),
+                    ),
                     is_flake: false,
                 },
             ),

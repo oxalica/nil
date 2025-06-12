@@ -751,7 +751,7 @@ impl Server {
         // We only need the map for input -> store path.
         let input_store_paths = inputs
             .into_iter()
-            .map(|(key, input)| (key, VfsPath::new(input.store_path)))
+            .filter_map(|(key, input)| Some((key, VfsPath::new(input.store_path?))))
             .collect();
         Ok(Some(FlakeInfo {
             flake_file,
