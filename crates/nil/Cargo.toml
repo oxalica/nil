@@ -9,7 +9,7 @@ rust-version.workspace = true
 anyhow = "1.0.68"
 argh = "0.1.10"
 async-lsp = { version = "0.2.0", features = ["tokio"] }
-codespan-reporting = "0.11.1"
+codespan-reporting = "0.12"
 ide = { path = "../ide" }
 log = "0.4.17"
 # The main URI type since 0.96 changed with greatly reduced interoperationality,
@@ -39,7 +39,7 @@ features = [
 ]
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "0.38.3", default-features = false, features = ["fs", "std"] }
+rustix = { version = "1", default-features = false, features = ["fs", "std"] }
 
 [lints]
 workspace = true
