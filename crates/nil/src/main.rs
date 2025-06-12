@@ -271,15 +271,15 @@ fn emit_diagnostics(
             ide::Severity::IncompleteSyntax | ide::Severity::Error => Severity::Error,
             ide::Severity::Warning => Severity::Warning,
         };
-        let labels = std::iter::once(Label::primary(cr_file, to_range(diag.range)))
-            .chain(diag.notes.iter().map(|(frange, note)| {
+        let labels = std::iter::once(Label::primary(cr_file, to_range(diag.range))).chain(
+            diag.notes.iter().map(|(frange, note)| {
                 Label::secondary(cr_file, to_range(frange.range)).with_message(note)
-            }))
-            .collect();
+            }),
+        );
         let diag = Diagnostic::new(severity)
             .with_code(diag.code())
             .with_message(diag.message())
-            .with_labels(labels);
+            .with_labels_iter(labels);
 
         term::emit(writer, &config, &files, &diag)?;
     }
