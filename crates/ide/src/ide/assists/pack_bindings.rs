@@ -1,4 +1,4 @@
-//! Pack multiple bindings with the same prefix into nested one.
+//! Pack one or more implicit bindings of implicit Attrset into explicit nested one.
 //! FIXME: Indentations are not reformatted well.
 //!
 //! ```nix
@@ -34,8 +34,11 @@ pub(super) fn pack_bindings(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let source_map = ctx.db.source_map(file);
     let name = source_map.name_for_node(AstPtr::new(cursor_attr.syntax()))?;
 
-    // Ignore unique binding.
-    if source_map.nodes_for_name(name).count() <= 1 {
+    // Ignore unique final binding `foo.|bar = ..;`, but still enable the
+    // conversion `foo.|bar.baz = ..` => `foo.bar = { baz = .. };`.
+    if source_map.nodes_for_name(name).count() == 1
+        && cursor_path.attrs().last().as_ref() == Some(&cursor_attr)
+    {
         return None;
     }
 
@@ -125,7 +128,7 @@ pub(super) fn pack_bindings(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "pack_bindings",
-        "Pack all bindings of this Attr into nested Attrset",
+        format!("Pack into nested `{} = {{ .. }}`", cursor_attr.syntax()),
         AssistKind::RefactorRewrite,
         edits,
     );
@@ -139,11 +142,30 @@ mod tests {
     define_check_assist!(super::pack_bindings);
 
     #[test]
-    fn no_single() {
+    fn no_final() {
         check_no("{ $0foo = 42; }");
-        check_no("{ $0foo.bar = 42; }");
         check_no("{ foo.$0bar = 42; }");
         check_no("{ $0foo = { bar = 1; baz = 1; } }");
+    }
+
+    #[test]
+    fn single() {
+        check(
+            "{ ${1}.$0foo.bar = 1; ${1}.foo.qux = 2; }",
+            expect![[r#"
+            {
+            ${1}.foo = { bar = 1;
+            }; ${1}.foo.qux = 2; }
+        "#]],
+        );
+        check(
+            "{ services.asdf$0.enable = true; }",
+            expect![[r#"
+            {
+            services.asdf = { enable = true;
+            }; }
+        "#]],
+        );
     }
 
     #[test]
@@ -152,9 +174,8 @@ mod tests {
     }
 
     #[test]
-    fn no_dynamic() {
+    fn dynamic() {
         check_no("{ $0${1}.foo = 1; ${1}.bar = 2; }");
-        check_no("{ ${1}.$0foo.foo = 1; ${1}.foo.bar = 2; }");
     }
 
     #[test]

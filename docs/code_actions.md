@@ -63,7 +63,7 @@ foo.baz = 2;
 
 ### `pack_bindings`
 
-Pack multiple bindings with the same prefix into nested one.
+Pack one or more implicit bindings of implicit Attrset into explicit nested one.
 FIXME: Indentations are not reformatted well.
 
 ```nix
