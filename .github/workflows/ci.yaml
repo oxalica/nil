@@ -21,11 +21,11 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Prepare devShell
-        run: nix develop --command true
+        run: nix develop ./dev --command true
       - name: Install NPM packages
-        run: nix develop --command bash -c 'cd editors/coc-nil && npm ci'
-      - name: Run pre-commit
-        run: nix develop --command pre-commit
+        run: nix develop ./dev --command bash -c 'cd editors/coc-nil && npm ci'
+      - name: Run pre-push
+        run: nix develop ./dev --command bash ./dev/pre-push.sh
 
   test:
     name: Test
@@ -49,12 +49,12 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
           nix_path: nixpkgs=channel:nixpkgs-unstable
       - name: Build
-        run: nix develop .#full --command cargo build --workspace --all-targets
+        run: nix develop ./dev#full --command cargo build --workspace --all-targets
       - name: Test
-        run: nix develop .#full --command cargo test --workspace --all-targets
+        run: nix develop ./dev#full --command cargo test --workspace --all-targets
       # Waiting for https://github.com/bheisler/criterion.rs/pull/703
       - name: Test with ignored
-        run: nix develop .#full --command cargo test --workspace --all-targets -- --ignored
+        run: nix develop ./dev#full --command cargo test --workspace --all-targets -- --ignored
 
   nix-flake:
     name: Flake package
