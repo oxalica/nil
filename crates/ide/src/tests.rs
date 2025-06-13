@@ -127,7 +127,7 @@ impl Fixture {
                             let target = VfsPath::new(target);
                             flake_info.input_store_paths.insert(name.into(), target);
                         } else {
-                            bail!("Unknow property {prop}");
+                            bail!("Unknown property {prop}");
                         }
                     }
                 } else if iter.next().is_some() {

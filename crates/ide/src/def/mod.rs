@@ -101,7 +101,7 @@ fn source_root_referrer_graph(
     db: &dyn DefDatabase,
     sid: SourceRootId,
 ) -> Arc<HashMap<FileId, ModuleReferrers>> {
-    // Assert our inline threshould costs no extra memory.
+    // Assert our inline threshold costs no extra memory.
     const _: [(); std::mem::size_of::<Vec<FileId>>()] =
         [(); std::mem::size_of::<ModuleReferrers>()];
 

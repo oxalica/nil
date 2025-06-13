@@ -4,6 +4,7 @@ extend-exclude = [
 ]
 
 [default.extend-words]
+typ = "typ" # Uncollide keyword `type`.
 froms = "froms"
 regist = "regist" # coc.nvim `registLanguageClient`
 withs = "withs"

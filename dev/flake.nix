@@ -41,7 +41,10 @@
                 # mismatch.
                 # If you do want a locked one, use `devShells.full` below.
 
-                fd # Used by pre-push
+                # Used by pre-push
+                fd
+                typos
+
                 nodejs
                 watchman # Required by coc.nvim for file watching.
 

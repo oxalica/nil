@@ -118,14 +118,14 @@ fn main() {
 fn main_diagnostics(args: DiagnosticsArgs) {
     let ret = emit_diagnostics_for_files(&args.paths);
 
-    let fail_threshould = if args.deny_warnings {
+    let fail_threshold = if args.deny_warnings {
         Severity::Warning
     } else {
         Severity::Error
     };
 
     match ret {
-        Ok(Some(severity)) if severity >= fail_threshould => process::exit(1),
+        Ok(Some(severity)) if severity >= fail_threshold => process::exit(1),
         Ok(_) => {}
         Err(err) => {
             eprintln!("{err:#}");

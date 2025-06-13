@@ -1,5 +1,5 @@
 //! Liveness check of names.
-//! It locates uncessary or inaccessible bindings and expressions, based on name resolution.
+//! It locates unnecessary or inaccessible bindings and expressions, based on name resolution.
 //!
 //! Our goals are,
 //! - Applicable.
