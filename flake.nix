@@ -23,7 +23,12 @@ rec {
       rev = self.rev or (lib.warn "Git changes are not committed" (self.dirtyRev or "dirty"));
 
       mkNil =
-        { rustPlatform, nixVersions, ... }:
+        {
+          rustPlatform,
+          nixVersions,
+          nixfmt-rfc-style,
+          ...
+        }:
         rustPlatform.buildRustPackage {
           pname = "nil";
           version = "unstable-${date}";
@@ -37,6 +42,7 @@ rec {
           nativeBuildInputs = [ (nixVersions.latest or nixVersions.unstable) ];
 
           CFG_RELEASE = "git-${rev}";
+          CFG_DEFAULT_FORMATTER = lib.getExe nixfmt-rfc-style;
 
           meta = {
             inherit description;

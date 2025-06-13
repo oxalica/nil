@@ -16,6 +16,11 @@ use std::process;
 use std::sync::Arc;
 use text_size::TextRange;
 
+const DEFAULT_FORMATTER: &str = match option_env!("CFG_DEFAULT_FORMATTER") {
+    Some(cmd) => cmd,
+    None => "nixfmt",
+};
+
 pub(crate) fn goto_definition(
     snap: StateSnapshot,
     params: GotoDefinitionParams,
@@ -219,10 +224,10 @@ pub(crate) fn formatting(
         Ok(stdout)
     }
 
-    let cmd =
-        snap.config.formatting_command.as_ref().context(
-            "No formatter configured. Set the nil.formatting.command LSP server setting.",
-        )?;
+    let cmd = match &snap.config.formatting_command {
+        Some(cmd) => cmd,
+        None => &vec![DEFAULT_FORMATTER.to_owned()],
+    };
 
     let (file_content, line_map) = {
         let vfs = snap.vfs();
@@ -230,8 +235,15 @@ pub(crate) fn formatting(
         (vfs.content_for_file(file), line_map)
     };
 
-    let new_content = run_with_stdin(cmd, <Arc<[u8]>>::from(file_content.clone()))
-        .with_context(|| format!("Failed to run formatter {cmd:?}"))?;
+    let new_content =
+        run_with_stdin(cmd, <Arc<[u8]>>::from(file_content.clone())).with_context(|| {
+            let note = if snap.config.formatting_command.is_none() {
+                ", set `nil.formatting.command` in LSP setting to override the default"
+            } else {
+                ""
+            };
+            format!("Failed to run formatter {cmd:?}{note}")
+        })?;
 
     if new_content == *file_content {
         return Ok(None);
