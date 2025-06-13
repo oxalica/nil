@@ -1,7 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use argh::FromArgs;
 use codespan_reporting::term::termcolor::WriteColor;
-use ide::{AnalysisHost, Severity};
+use ide::{AnalysisHost, Change, FileId, FileSet, Severity, SourceRoot, VfsPath};
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -44,15 +44,15 @@ enum Subcommand {
 /// Exit with non-zero code if there are any errors. (`0` for only warnings)
 /// WARNING: The output format is for humans and should not be relied on.
 struct DiagnosticsArgs {
-    /// nix file to check, or read from stdin for `-`.
-    /// NB. You need `--` before `-` for paths starting with `-`,
-    /// to disambiguous it from flags.
-    #[argh(positional)]
-    path: PathBuf,
-
     /// treat warnings like errors and exit with non-zero code.
     #[argh(switch)]
     deny_warnings: bool,
+
+    /// nix files to check, or read from stdin for `-`.
+    /// NB. You need `--` before `-` for paths starting with `-`,
+    /// to disambiguous it from flags.
+    #[argh(positional)]
+    paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, FromArgs)]
@@ -116,16 +116,34 @@ fn main() {
 }
 
 fn main_diagnostics(args: DiagnosticsArgs) {
-    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+    let ret = emit_diagnostics_for_files(&args.paths);
 
-    let fail_at_or_above_severity = if args.deny_warnings {
+    let fail_threshould = if args.deny_warnings {
         Severity::Warning
     } else {
         Severity::Error
     };
 
-    let ret = (|| -> Result<Option<Severity>> {
-        let path = &*args.path;
+    match ret {
+        Ok(Some(severity)) if severity >= fail_threshould => process::exit(1),
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("{err:#}");
+            process::exit(1);
+        }
+    }
+}
+
+fn emit_diagnostics_for_files(paths: &[PathBuf]) -> Result<Option<ide::Severity>> {
+    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+
+    ensure!(!paths.is_empty(), "no file is provided");
+
+    let mut sources = Vec::new();
+    let mut file_set = FileSet::default();
+    let mut change = Change::default();
+    for (id, path) in paths.iter().enumerate() {
+        let file = FileId(id as u32);
 
         let src = if path.as_os_str() == "-" {
             io::read_to_string(io::stdin().lock()).context("Failed to read from stdin")?
@@ -133,31 +151,35 @@ fn main_diagnostics(args: DiagnosticsArgs) {
             fs::read_to_string(path).context("Failed to read file")?
         };
 
-        let (analysis, file) = AnalysisHost::new_single_file(&src);
-        let diags = analysis
-            .snapshot()
-            .diagnostics(file)
-            .expect("No cancellation");
+        let src: Arc<str> = src.into();
+        sources.push((file, path, src.clone()));
 
-        let mut writer = StandardStream::stdout(ColorChoice::Auto);
-        emit_diagnostics(path, &src, &mut writer, &mut diags.iter().cloned())?;
-
-        Ok(diags.iter().map(|diag| diag.severity()).max())
-    })();
-    match ret {
-        Ok(None) => process::exit(0),
-        Ok(Some(max_severity)) => {
-            if max_severity >= fail_at_or_above_severity {
-                process::exit(1)
-            } else {
-                process::exit(0)
-            }
-        }
-        Err(err) => {
-            eprintln!("{err:#}");
-            process::exit(1);
-        }
+        change.change_file(file, src);
+        file_set.insert(file, VfsPath::new(path));
     }
+
+    change.set_roots(vec![SourceRoot::new_local(file_set, None)]);
+
+    let mut analysis = AnalysisHost::new();
+    analysis.apply_change(change);
+
+    let snapshot = analysis.snapshot();
+
+    let mut writer = StandardStream::stdout(ColorChoice::Auto);
+    let mut max_severity = None;
+    for (id, path, src) in sources {
+        let diagnostics = snapshot.diagnostics(id).expect("No cancellation");
+        emit_diagnostics(path, &src, &mut writer, &mut diagnostics.iter().cloned())?;
+
+        // Note: None < Some(_)
+        max_severity = diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.severity())
+            .max()
+            .max(max_severity);
+    }
+
+    Ok(max_severity)
 }
 
 fn main_parse(args: ParseArgs) {
