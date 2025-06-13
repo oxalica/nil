@@ -54,7 +54,12 @@ let
   # Dummy `pkgs`.
   pkgs = import (nixpkgs + "/pkgs/pkgs-lib") {
     inherit lib;
-    pkgs = null;
+    pkgs = {
+      config = {
+        # Referenced by <https://github.com/NixOS/nixpkgs/commit/feef690b05cf2d16e711e4df16b14c56d5815378>
+        allowAliases = false;
+      };
+    };
   };
   utils = import (nixpkgs + "/nixos/lib/utils.nix") {
     inherit config lib;
