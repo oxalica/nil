@@ -1,9 +1,6 @@
-use itertools::Itertools;
-use syntax::ast::{self, AstNode};
-use syntax::{match_ast, NixLanguage, SyntaxKind, SyntaxToken, TextRange};
-
-use crate::ide::expand_selection::expand_selection;
 use crate::{DefDatabase, FileId};
+use itertools::Itertools;
+use syntax::{SyntaxKind, SyntaxToken, TextRange};
 
 #[derive(Debug, Clone)]
 pub enum InlayHintKind {
