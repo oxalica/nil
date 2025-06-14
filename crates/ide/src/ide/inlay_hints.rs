@@ -31,11 +31,10 @@ pub(crate) fn inlay_hints(
         ),
     };
 
+    // TODO: detect trivial when we can not show the hint
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attribute_node = tok
-                // Grab the attrset
-                .prev_sibling_or_token()?
                 .parent()?
                 // Grab the attrpath part, without space
                 .first_child_by_kind(&|u: SyntaxKind| u == SyntaxKind::ATTR_PATH)?
