@@ -6,10 +6,11 @@ use lsp_types::{
     CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse,
     DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentLink,
     DocumentLinkParams, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, Location, Position, PrepareRenameResponse, Range,
-    ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams, SemanticTokens,
-    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
-    SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url, WorkspaceEdit,
+    GotoDefinitionResponse, Hover, HoverParams, InlayHint, InlayHintParams, Location, Position,
+    PrepareRenameResponse, Range, ReferenceParams, RenameParams, SelectionRange,
+    SelectionRangeParams, SemanticTokens, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, TextDocumentPositionParams, TextEdit, Url,
+    WorkspaceEdit,
 };
 use nix_interop::DEFAULT_IMPORT_FILE;
 use std::process;
@@ -321,4 +322,21 @@ pub(crate) fn parent_module(
         .map(|file| convert::to_location(&vfs, FileRange::new(file, TextRange::default())))
         .collect();
     Ok(Some(GotoDefinitionResponse::Array(locs)))
+}
+
+pub(crate) fn inlay_hints(
+    snap: StateSnapshot,
+    params: InlayHintParams,
+) -> Result<Option<Vec<InlayHint>>> {
+    let (file, range, line_map) = {
+        let vfs = snap.vfs();
+        let (file, line_map) = convert::from_file(&vfs, &params.text_document)?;
+        let (_, range) = convert::from_range(&vfs, file, params.range)?;
+        (file, range, line_map)
+    };
+
+    let hint_result = snap.analysis.inlay_hints(file, Some(range))?;
+    let hints = convert::to_inlay_hints(&line_map, hint_result);
+
+    Ok(Some(hints))
 }

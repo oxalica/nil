@@ -2,15 +2,15 @@ use crate::{semantic_tokens, LineMap, Result, Vfs};
 use async_lsp::{ErrorCode, ResponseError};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
-    HlRange, HlRelated, HoverResult, Link, LinkTarget, NameKind, Severity, SymbolTree, TextEdit,
-    WorkspaceEdit,
+    HlRange, HlRelated, HoverResult, InlayHintKind, InlayHintResult, Link, LinkTarget, NameKind,
+    Severity, SymbolTree, TextEdit, WorkspaceEdit,
 };
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
     DiagnosticSeverity, DiagnosticTag, DocumentHighlight, DocumentHighlightKind, DocumentLink,
-    DocumentSymbol, Documentation, Hover, Location, MarkupContent, MarkupKind, NumberOrString,
-    Position, PrepareRenameResponse, Range, SemanticToken, SymbolKind, TextDocumentIdentifier,
-    TextDocumentPositionParams, Url,
+    DocumentSymbol, Documentation, Hover, InlayHint, InlayHintLabel, Location, MarkupContent,
+    MarkupKind, NumberOrString, Position, PrepareRenameResponse, Range, SemanticToken, SymbolKind,
+    TextDocumentIdentifier, TextDocumentPositionParams, Url,
 };
 use nix_interop::DEFAULT_IMPORT_FILE;
 use std::sync::Arc;
@@ -386,4 +386,28 @@ pub(crate) fn from_document_link(
     let file_id = vfs.file_for_uri(&uri)?;
     let (line_map, range) = from_range(vfs, file_id, link.range)?;
     Ok((uri, FileRange::new(file_id, range), line_map))
+}
+
+pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) -> Vec<InlayHint> {
+    hints
+        .iter()
+        .map(|hint| {
+            let InlayHintResult { range, kind } = hint;
+            match kind {
+                InlayHintKind::AttrsetAttribute(s) => InlayHint {
+                    position: {
+                        let (line, character) = line_map.line_col_for_pos(range.start());
+                        Position { line, character }
+                    },
+                    label: InlayHintLabel::String(s.clone()),
+                    kind: None,
+                    text_edits: None,
+                    tooltip: None,
+                    padding_left: None,
+                    padding_right: None,
+                    data: None,
+                },
+            }
+        })
+        .collect()
 }
