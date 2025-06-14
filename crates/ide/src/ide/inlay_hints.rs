@@ -31,17 +31,21 @@ pub(crate) fn inlay_hints(
         ),
     };
 
-    // TODO: detect trivial when we can not show the hint
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
-            let attribute_node = tok
-                .parent()?
-                // Grab the attrpath part, without space
+            let attribute_node = tok.parent()?;
+
+            let attrname_node = attribute_node
                 .first_child_by_kind(&|u: SyntaxKind| u == SyntaxKind::ATTR_PATH)?
                 .children()
                 .filter(|node| !node.kind().is_trivia());
 
-            let attr_name = attribute_node.map(|node| node.to_string()).join(".");
+            // HACK: detect trivial when we can not show the hint
+            if attribute_node.text_range().len() < 200.into() {
+                return None;
+            }
+
+            let attr_name = attrname_node.map(|node| node.to_string()).join(".");
             Some(InlayHintKind::AttrsetAttribute(attr_name))
         } else {
             None
@@ -88,11 +92,29 @@ mod tests {
 
     #[test]
     fn hint() {
-        check("$0{ foo = true; }", expect!["foo"]);
-        check("$0{ foo = [true true true]; }", expect!["foo"]);
+        check("$0{ foo = true; }", expect![]);
+        check("$0{ foo = [true true true]; }", expect![]);
         check(
-            "$0{ foo.bar = { baz = [true true true]; }; }",
-            expect!["baz,foo.bar"],
+            r"
+                $0{
+                    foo.bar = {
+                        _0 = true;
+                        _1 = true;
+                        _2 = true;
+                        _3 = true;
+                        _4 = true;
+                        _5 = true;
+                        _6 = true;
+                        _7 = true;
+                        _8 = true;
+                        _9 = true;
+                        _10 = true;
+                        _11 = true;
+                        baz = [true true true];
+                    };
+                }
+            ",
+            expect!["foo.bar"],
         );
     }
 }
