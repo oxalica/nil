@@ -6,6 +6,7 @@ mod file_references;
 mod goto_definition;
 mod highlight_related;
 mod hover;
+mod inlay_hints;
 mod links;
 mod references;
 mod rename;
@@ -30,6 +31,7 @@ pub use completion::{CompletionItem, CompletionItemKind};
 pub use goto_definition::GotoDefinitionResult;
 pub use highlight_related::HlRelated;
 pub use hover::HoverResult;
+pub use inlay_hints::{InlayHintKind, InlayHintResult};
 pub use links::{Link, LinkTarget};
 pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
@@ -206,6 +208,14 @@ impl Analysis {
 
     pub fn highlight_related(&self, fpos: FilePos) -> Cancellable<Vec<HlRelated>> {
         self.with_db(|db| highlight_related::highlight_related(db, fpos).unwrap_or_default())
+    }
+
+    pub fn inlay_hints(
+        &self,
+        file: FileId,
+        range: Option<TextRange>,
+    ) -> Cancellable<Vec<InlayHintResult>> {
+        self.with_db(|db| inlay_hints::inlay_hints(db, file, range))
     }
 
     //// Custom extensions ////
