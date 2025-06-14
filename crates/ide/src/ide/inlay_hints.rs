@@ -1,6 +1,8 @@
 use itertools::Itertools;
-use syntax::{ast, match_ast, SyntaxKind, SyntaxToken, TextRange};
+use syntax::ast::{self, AstNode};
+use syntax::{match_ast, NixLanguage, SyntaxKind, SyntaxToken, TextRange};
 
+use crate::ide::expand_selection::expand_selection;
 use crate::{DefDatabase, FileId};
 
 #[derive(Debug, Clone)]
@@ -29,29 +31,21 @@ pub(crate) fn inlay_hints(
         ),
     };
 
-    // TODO:
-    // What is the best way to match ast?
-    // It would be nice to match on the shape `{ ... = <expr> ; }`
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
-        let prev_token = {
-            let mut iter = std::iter::successors(Some(tok.clone()), |tok| tok.prev_token());
-            iter.next();
-            iter.find_or_first(|tok| !tok.kind().is_trivia())
-        };
-        let next_token = {
-            let mut iter = std::iter::successors(Some(tok.clone()), |tok| tok.next_token());
-            iter.next();
-            iter.find_or_first(|tok| !tok.kind().is_trivia())
-        };
+        if tok.kind() == SyntaxKind::SEMICOLON {
+            let attribute_node = tok
+                // Grab the attrset
+                .prev_sibling_or_token()?
+                .parent()?
+                // Grab the attrpath part, without space
+                .first_child_by_kind(&|u: SyntaxKind| u == SyntaxKind::ATTR_PATH)?
+                .children()
+                .filter(|node| !node.kind().is_trivia());
 
-        match (prev_token, next_token) {
-            (Some(prev), Some(next))
-                if prev.kind() == SyntaxKind::EQ && next.kind() == SyntaxKind::SEMICOLON =>
-            {
-                // TODO: inlay hint label
-                Some(InlayHintKind::AttrsetAttribute("text".into()))
-            }
-            _ => None,
+            let attr_name = attribute_node.map(|node| node.to_string()).join(".");
+            Some(InlayHintKind::AttrsetAttribute(attr_name))
+        } else {
+            None
         }
     };
 
@@ -86,6 +80,11 @@ mod tests {
 
     #[test]
     fn hint() {
-        check("$0{ foo = true; }", expect!["fail"]);
+        // check("$0{ foo = true; }", expect!["fail"]);
+        // check("$0{ foo = [true true true]; }", expect!["fail"]);
+        check(
+            "$0{ foo.bar = { baz = [true true true]; }; }",
+            expect!["fail"],
+        );
     }
 }

@@ -396,7 +396,7 @@ pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) ->
             match kind {
                 InlayHintKind::AttrsetAttribute(s) => InlayHint {
                     position: {
-                        let (line, character) = line_map.line_col_for_pos(range.start());
+                        let (line, character) = line_map.line_col_for_pos(range.end());
                         Position { line, character }
                     },
                     label: InlayHintLabel::String(s.clone()),
@@ -404,7 +404,7 @@ pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) ->
                     text_edits: None,
                     tooltip: None,
                     padding_left: None,
-                    padding_right: None,
+                    padding_right: Some(true),
                     data: None,
                 },
             }
