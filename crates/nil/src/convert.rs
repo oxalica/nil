@@ -399,12 +399,12 @@ pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) ->
                         let (line, character) = line_map.line_col_for_pos(range.end());
                         Position { line, character }
                     },
-                    label: InlayHintLabel::String(s.clone()),
+                    label: InlayHintLabel::String(format!("= {s}")),
                     kind: None,
                     text_edits: None,
                     tooltip: None,
-                    padding_left: None,
-                    padding_right: Some(true),
+                    padding_left: Some(true),
+                    padding_right: None,
                     data: None,
                 },
             }
