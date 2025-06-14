@@ -63,7 +63,7 @@ pub(crate) fn inlay_hints(
 #[cfg(test)]
 mod tests {
     use crate::tests::TestDB;
-    use crate::{DefDatabase, FilePos};
+    use crate::{DefDatabase, FilePos, InlayHintKind, InlayHintResult};
     use expect_test::{expect, Expect};
 
     #[track_caller]
@@ -72,18 +72,27 @@ mod tests {
         let FilePos { file_id, .. } = f[0];
         assert_eq!(db.parse(file_id).errors(), &[]);
 
-        let hints = super::inlay_hints(&db, file_id, None);
-        eprintln!("{:?}", hints);
-        expect.assert_eq("unimplemented");
+        let hints = super::inlay_hints(&db, file_id, None)
+            .iter()
+            .map(|hint| {
+                let InlayHintResult { kind, .. } = hint;
+                match kind {
+                    InlayHintKind::AttrsetAttribute(label) => label.to_owned(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        expect.assert_eq(&hints);
     }
 
     #[test]
     fn hint() {
-        // check("$0{ foo = true; }", expect!["fail"]);
-        // check("$0{ foo = [true true true]; }", expect!["fail"]);
+        check("$0{ foo = true; }", expect!["foo"]);
+        check("$0{ foo = [true true true]; }", expect!["foo"]);
         check(
             "$0{ foo.bar = { baz = [true true true]; }; }",
-            expect!["fail"],
+            expect!["baz,foo.bar"],
         );
     }
 }
