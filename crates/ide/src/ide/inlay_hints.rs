@@ -40,6 +40,10 @@ pub(crate) fn inlay_hints(
     range: Option<TextRange>,
     config: InlayHintsConfig,
 ) -> Vec<InlayHintResult> {
+    let Some(threshold) = config.binding_end_hints_min_lines else {
+        return vec![];
+    };
+
     let root_node = db.parse(file).syntax_node();
 
     let (first_tok, end_pos) = match range {
@@ -50,9 +54,6 @@ pub(crate) fn inlay_hints(
         ),
     };
 
-    let binding_end_hints_min_lines = config
-        .binding_end_hints_min_lines
-        .unwrap_or(NonZero::new(25).expect("25 is nonzero"));
 
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
@@ -76,7 +77,7 @@ pub(crate) fn inlay_hints(
                 NonZero::new(count).expect("must have positive amount of lines")
             };
 
-            if spaning_lines < binding_end_hints_min_lines {
+            if spaning_lines < threshold {
                 return None;
             }
 
