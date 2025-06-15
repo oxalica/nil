@@ -73,7 +73,7 @@ pub struct Config {
     pub diagnostics_ignored: HashSet<String>,
     #[parse("/formatting/command", parse = Config::parse_optional_command)]
     pub formatting_command: Option<Vec<String>>,
-    #[parse("/diagnostics/bindingEndHintMinLines", parse = Config::parse_nonzero_usize)]
+    #[parse("/diagnostics/bindingEndHintMinLines", default = NonZero::new(25), parse = Config::parse_nonzero_usize)]
     pub binding_end_hints_min_lines: Option<NonZero<usize>>,
     #[parse("/nix/binary", default = "nix".into())]
     pub nix_binary: PathBuf,
@@ -105,8 +105,14 @@ impl Config {
     }
 
     fn parse_nonzero_usize(&mut self, v: Option<usize>) -> anyhow::Result<Option<NonZero<usize>>> {
-        let nz = v.map(|raw_value| NonZero::new(raw_value).expect("value must be positive"));
-        Ok(nz)
+        match v {
+            Some(value) => {
+                let nz = NonZero::new(value);
+                ensure!(nz.is_some(), "value must be nonzero");
+                Ok(nz)
+            }
+            None => Ok(None),
+        }
     }
 
     pub fn nix_max_memory(&self) -> Option<u64> {
