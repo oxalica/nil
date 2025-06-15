@@ -1,10 +1,24 @@
 use crate::{DefDatabase, FileId};
 use itertools::Itertools;
+use std::fmt::Display;
+use syntax::ast::{self, AstNode};
 use syntax::{SyntaxKind, SyntaxToken, TextRange};
 
 #[derive(Debug, Clone)]
 pub enum InlayHintKind {
-    AttrsetAttribute(String),
+    LetBindingEnd(String),
+    AttrsetBindingEnd(String),
+    RecAttrsetBindingEnd(String),
+}
+
+impl Display for InlayHintKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LetBindingEnd(s) => write!(f, "= let {s}"),
+            Self::AttrsetBindingEnd(s) => write!(f, "= {s}"),
+            Self::RecAttrsetBindingEnd(s) => write!(f, "= rec {s}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -30,14 +44,28 @@ pub(crate) fn inlay_hints(
 
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
-            let mut attribute_node = tok
-                .parent()?
+            let attr_path_value = tok.parent()?;
+
+            let is_rec_attr = ast::AttrSet::cast(attr_path_value.parent()?)
+                .map(|attr| attr.rec_token())
+                .flatten()
+                .is_some();
+            let is_let = ast::LetIn::cast(attr_path_value.parent()?).is_some();
+
+            let mut attr_path = attr_path_value
                 .first_child_by_kind(&|u: SyntaxKind| u == SyntaxKind::ATTR_PATH)?
                 .children()
                 .filter(|node| !node.kind().is_trivia());
 
-            let attr_name = attribute_node.join(".");
-            Some(InlayHintKind::AttrsetAttribute(attr_name))
+            let attr_name = attr_path.join(".");
+
+            if is_let {
+                Some(InlayHintKind::LetBindingEnd(attr_name))
+            } else if is_rec_attr {
+                Some(InlayHintKind::RecAttrsetBindingEnd(attr_name))
+            } else {
+                Some(InlayHintKind::AttrsetBindingEnd(attr_name))
+            }
         } else {
             None
         }
@@ -58,8 +86,9 @@ pub(crate) fn inlay_hints(
 #[cfg(test)]
 mod tests {
     use crate::tests::TestDB;
-    use crate::{DefDatabase, FilePos, InlayHintKind, InlayHintResult};
+    use crate::{DefDatabase, FilePos};
     use expect_test::{expect, Expect};
+    use itertools::Itertools;
 
     #[track_caller]
     fn check(fixture: &str, expect: Expect) {
@@ -68,26 +97,36 @@ mod tests {
         assert_eq!(db.parse(file_id).errors(), &[]);
 
         let hints = super::inlay_hints(&db, file_id, None)
-            .iter()
-            .map(|hint| {
-                let InlayHintResult { kind, .. } = hint;
-                match kind {
-                    InlayHintKind::AttrsetAttribute(label) => label.to_owned(),
-                }
-            })
-            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|hint| hint.kind)
             .join(",");
 
         expect.assert_eq(&hints);
     }
 
     #[test]
-    fn hint() {
-        check("$0{ foo = true; }", expect!["foo"]);
-        check("$0{ foo = [true true true]; }", expect!["foo"]);
+    fn attrset_hint() {
+        check("$0{ foo = true; }", expect!["= foo"]);
+        check("$0{ foo = [true true true]; }", expect!["= foo"]);
         check(
             "$0{ foo.bar = { baz = [true true true]; }; }",
-            expect!["baz,foo.bar"],
+            expect!["= baz,= foo.bar"],
         );
+    }
+
+    #[test]
+    fn rec_attrset_hint() {
+        check("$0rec { foo = true; }", expect!["= rec foo"]);
+        check("$0rec{ foo = [true true true]; }", expect!["= rec foo"]);
+        check(
+            "$0{ foo.bar = rec{ baz = [true true true]; }; }",
+            expect!["= rec baz,= foo.bar"],
+        );
+    }
+
+    #[test]
+    fn let_hint() {
+        check("$0let foo = true; in null", expect!["= let foo"]);
+        check("$0let foo = [true true true]; in {}", expect!["= let foo"]);
     }
 }

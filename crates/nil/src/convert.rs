@@ -2,8 +2,8 @@ use crate::{semantic_tokens, LineMap, Result, Vfs};
 use async_lsp::{ErrorCode, ResponseError};
 use ide::{
     Assist, AssistKind, CompletionItem, CompletionItemKind, Diagnostic, FileId, FilePos, FileRange,
-    HlRange, HlRelated, HoverResult, InlayHintKind, InlayHintResult, Link, LinkTarget, NameKind,
-    Severity, SymbolTree, TextEdit, WorkspaceEdit,
+    HlRange, HlRelated, HoverResult, InlayHintResult, Link, LinkTarget, NameKind, Severity,
+    SymbolTree, TextEdit, WorkspaceEdit,
 };
 use lsp_types::{
     self as lsp, CodeAction, CodeActionKind, CodeActionOrCommand, DiagnosticRelatedInformation,
@@ -401,20 +401,20 @@ pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) ->
         .map(|hint| {
             let InlayHintResult { range, kind } = hint;
 
-            match kind {
-                InlayHintKind::AttrsetAttribute(s) => InlayHint {
-                    position: {
-                        let (line, character) = line_map.line_col_for_pos(range.end());
-                        Position { line, character }
-                    },
-                    label: InlayHintLabel::String(format!("= {s}")),
-                    kind: None,
-                    text_edits: None,
-                    tooltip: None,
-                    padding_left: Some(true),
-                    padding_right: None,
-                    data: None,
+            let label = kind.to_string();
+
+            InlayHint {
+                position: {
+                    let (line, character) = line_map.line_col_for_pos(range.end());
+                    Position { line, character }
                 },
+                label: InlayHintLabel::String(label),
+                kind: None,
+                text_edits: None,
+                tooltip: None,
+                padding_left: Some(true),
+                padding_right: None,
+                data: None,
             }
         })
         .collect()
