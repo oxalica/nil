@@ -1,6 +1,7 @@
 use crate::{DefDatabase, FileId};
 use itertools::Itertools;
 use std::fmt::Display;
+use std::num::NonZero;
 use syntax::ast::{self, AstNode};
 use syntax::{SyntaxKind, SyntaxToken, TextRange};
 
@@ -27,10 +28,16 @@ pub struct InlayHintResult {
     pub kind: InlayHintKind,
 }
 
+#[derive(Debug, Clone)]
+pub struct InlayHintsConfig {
+    pub binding_end_hints_min_lines: Option<NonZero<usize>>,
+}
+
 pub(crate) fn inlay_hints(
     db: &dyn DefDatabase,
     file: FileId,
     range: Option<TextRange>,
+    config: InlayHintsConfig,
 ) -> Vec<InlayHintResult> {
     let root_node = db.parse(file).syntax_node();
 
@@ -41,6 +48,11 @@ pub(crate) fn inlay_hints(
             range.end(),
         ),
     };
+
+    // TODO: compare line diff and filter here
+    let binding_end_hints_min_lines = config
+        .binding_end_hints_min_lines
+        .unwrap_or(NonZero::new(25).expect("25 is nonzero"));
 
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
@@ -85,6 +97,7 @@ pub(crate) fn inlay_hints(
 
 #[cfg(test)]
 mod tests {
+    use crate::ide::inlay_hints::InlayHintsConfig;
     use crate::tests::TestDB;
     use crate::{DefDatabase, FilePos};
     use expect_test::{expect, Expect};
@@ -96,7 +109,10 @@ mod tests {
         let FilePos { file_id, .. } = f[0];
         assert_eq!(db.parse(file_id).errors(), &[]);
 
-        let hints = super::inlay_hints(&db, file_id, None)
+        let inlay_hint_config = InlayHintsConfig {
+            binding_end_hints_min_lines: None,
+        };
+        let hints = super::inlay_hints(&db, file_id, None, inlay_hint_config)
             .into_iter()
             .map(|hint| hint.kind)
             .join(",");

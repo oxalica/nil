@@ -31,7 +31,7 @@ pub use completion::{CompletionItem, CompletionItemKind};
 pub use goto_definition::GotoDefinitionResult;
 pub use highlight_related::HlRelated;
 pub use hover::HoverResult;
-pub use inlay_hints::{InlayHintKind, InlayHintResult};
+pub use inlay_hints::{InlayHintKind, InlayHintResult, InlayHintsConfig};
 pub use links::{Link, LinkTarget};
 pub use rename::RenameResult;
 pub use symbol_hierarchy::SymbolTree;
@@ -214,8 +214,9 @@ impl Analysis {
         &self,
         file: FileId,
         range: Option<TextRange>,
+        config: InlayHintsConfig,
     ) -> Cancellable<Vec<InlayHintResult>> {
-        self.with_db(|db| inlay_hints::inlay_hints(db, file, range))
+        self.with_db(|db| inlay_hints::inlay_hints(db, file, range, config))
     }
 
     //// Custom extensions ////

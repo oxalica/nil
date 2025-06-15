@@ -1,6 +1,7 @@
 use anyhow::ensure;
 use lsp_types::Url;
 use std::collections::HashSet;
+use std::num::NonZero;
 use std::path::PathBuf;
 
 pub const CONFIG_KEY: &str = "nil";
@@ -72,6 +73,8 @@ pub struct Config {
     pub diagnostics_ignored: HashSet<String>,
     #[parse("/formatting/command", parse = Config::parse_optional_command)]
     pub formatting_command: Option<Vec<String>>,
+    #[parse("/diagnostics/bindingEndHintMinLines", parse = Config::parse_nonzero_usize)]
+    pub binding_end_hints_min_lines: Option<NonZero<usize>>,
     #[parse("/nix/binary", default = "nix".into())]
     pub nix_binary: PathBuf,
     #[parse("/nix/maxMemoryMB", default = Some(2048))]
@@ -99,6 +102,11 @@ impl Config {
     ) -> anyhow::Result<Option<Vec<String>>> {
         ensure!(v != Some(Vec::new()), "command must not be empty");
         Ok(v)
+    }
+
+    fn parse_nonzero_usize(&mut self, v: Option<usize>) -> anyhow::Result<Option<NonZero<usize>>> {
+        let nz = v.map(|raw_value| NonZero::new(raw_value).expect("value must be positive"));
+        Ok(nz)
     }
 
     pub fn nix_max_memory(&self) -> Option<u64> {

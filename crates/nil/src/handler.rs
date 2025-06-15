@@ -1,7 +1,7 @@
 use crate::{convert, StateSnapshot};
 use anyhow::{ensure, Context, Result};
 use async_lsp::{ErrorCode, ResponseError};
-use ide::{FileRange, GotoDefinitionResult};
+use ide::{FileRange, GotoDefinitionResult, InlayHintsConfig};
 use lsp_types::{
     CodeActionParams, CodeActionResponse, CompletionParams, CompletionResponse,
     DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentLink,
@@ -335,7 +335,13 @@ pub(crate) fn inlay_hints(
         (file, range, line_map)
     };
 
-    let hint_result = snap.analysis.inlay_hints(file, Some(range))?;
+    let inlay_hint_config = InlayHintsConfig {
+        binding_end_hints_min_lines: snap.config.binding_end_hints_min_lines,
+    };
+
+    let hint_result = snap
+        .analysis
+        .inlay_hints(file, Some(range), inlay_hint_config)?;
     let hints = convert::to_inlay_hints(&line_map, hint_result);
 
     Ok(Some(hints))
