@@ -57,6 +57,18 @@ pub(crate) fn inlay_hints(
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attr_path_value = tok.parent()?;
+            let spaning_lines = {
+                let mut acc = 1;
+                attr_path_value.text().for_each_chunk(|s| {
+                    if s == "\n" {
+                        acc += 1
+                    };
+                });
+                NonZero::new(acc).expect("must have positive amount of lines")
+            };
+            if spaning_lines < binding_end_hints_min_lines {
+                return None;
+            }
 
             let is_rec_attr = ast::AttrSet::cast(attr_path_value.parent()?)
                 .map(|attr| attr.rec_token())
@@ -102,6 +114,7 @@ mod tests {
     use crate::{DefDatabase, FilePos};
     use expect_test::{expect, Expect};
     use itertools::Itertools;
+    use std::num::NonZero;
 
     #[track_caller]
     fn check(fixture: &str, expect: Expect) {
@@ -110,7 +123,7 @@ mod tests {
         assert_eq!(db.parse(file_id).errors(), &[]);
 
         let inlay_hint_config = InlayHintsConfig {
-            binding_end_hints_min_lines: None,
+            binding_end_hints_min_lines: Some(NonZero::new(1).expect("1 is nonzero")),
         };
         let hints = super::inlay_hints(&db, file_id, None, inlay_hint_config)
             .into_iter()
