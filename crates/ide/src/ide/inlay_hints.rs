@@ -56,14 +56,14 @@ pub(crate) fn inlay_hints(
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attr_path_value = tok.parent()?;
 
-            let spaning_lines = {
+            let spanning_lines = {
                 let mut acc = 1_usize; // we count from 1
                 attr_path_value
                     .text()
                     .for_each_chunk(|s| acc += s.matches('\n').count());
                 NonZero::new(acc).expect("must have positive amount of lines")
             };
-            if spaning_lines < threshold {
+            if spanning_lines < threshold {
                 return None;
             }
 
