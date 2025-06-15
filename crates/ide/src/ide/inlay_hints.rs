@@ -49,7 +49,6 @@ pub(crate) fn inlay_hints(
         ),
     };
 
-    // TODO: compare line diff and filter here
     let binding_end_hints_min_lines = config
         .binding_end_hints_min_lines
         .unwrap_or(NonZero::new(25).expect("25 is nonzero"));
@@ -57,15 +56,17 @@ pub(crate) fn inlay_hints(
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attr_path_value = tok.parent()?;
+
             let spaning_lines = {
                 let mut acc = 1;
-                attr_path_value.text().for_each_chunk(|s| {
-                    if s == "\n" {
-                        acc += 1
-                    };
-                });
+                // FIXME: this doesn't work because each chunk can contain more than a "\n" like white
+                // spaces or text
+                // the number of chunks is roughly the number of tokens, but that is not what we
+                // want
+                attr_path_value.text().for_each_chunk(|_| acc += 1);
                 NonZero::new(acc).expect("must have positive amount of lines")
             };
+
             if spaning_lines < binding_end_hints_min_lines {
                 return None;
             }
@@ -116,16 +117,12 @@ mod tests {
     use itertools::Itertools;
     use std::num::NonZero;
 
-    #[track_caller]
-    fn check(fixture: &str, expect: Expect) {
+    fn check(fixture: &str, expect: Expect, config: InlayHintsConfig) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         let FilePos { file_id, .. } = f[0];
         assert_eq!(db.parse(file_id).errors(), &[]);
 
-        let inlay_hint_config = InlayHintsConfig {
-            binding_end_hints_min_lines: Some(NonZero::new(1).expect("1 is nonzero")),
-        };
-        let hints = super::inlay_hints(&db, file_id, None, inlay_hint_config)
+        let hints = super::inlay_hints(&db, file_id, None, config)
             .into_iter()
             .map(|hint| hint.kind)
             .join(",");
@@ -133,21 +130,78 @@ mod tests {
         expect.assert_eq(&hints);
     }
 
+    #[track_caller]
+    fn check_1(fixture: &str, expect: Expect) {
+        check(
+            fixture,
+            expect,
+            InlayHintsConfig {
+                binding_end_hints_min_lines: Some(NonZero::new(1).expect("1 is nonzero")),
+            },
+        )
+    }
+
+    #[track_caller]
+    fn check_none(fixture: &str, expect: Expect) {
+        check(
+            fixture,
+            expect,
+            InlayHintsConfig {
+                binding_end_hints_min_lines: None,
+            },
+        )
+    }
+
+    #[track_caller]
+    fn check_5(fixture: &str, expect: Expect) {
+        check(
+            fixture,
+            expect,
+            InlayHintsConfig {
+                binding_end_hints_min_lines: Some(NonZero::new(5).expect("5 is nonzero")),
+            },
+        )
+    }
+
     #[test]
     fn attrset_hint() {
-        check("$0{ foo = true; }", expect!["= foo"]);
-        check("$0{ foo = [true true true]; }", expect!["= foo"]);
-        check(
+        check_1("$0{ foo = true; }", expect!["= foo"]);
+        check_1("$0{ foo = [true true true]; }", expect!["= foo"]);
+        check_1(
             "$0{ foo.bar = { baz = [true true true]; }; }",
             expect!["= baz,= foo.bar"],
+        );
+        check_none(
+            r"
+            $0{
+                foo =
+                #
+                #
+                #
+                #
+                #
+                true;
+            }
+            ",
+            expect![],
+        );
+        check_5(
+            r"
+            $0{
+                foo =
+                #
+                true;
+            }
+            ",
+            expect![],
         );
     }
 
     #[test]
     fn rec_attrset_hint() {
-        check("$0rec { foo = true; }", expect!["= rec foo"]);
-        check("$0rec{ foo = [true true true]; }", expect!["= rec foo"]);
-        check(
+        check_1("$0rec { foo = true; }", expect!["= rec foo"]);
+        check_1("$0rec{ foo = [true true true]; }", expect!["= rec foo"]);
+        check_1(
             "$0{ foo.bar = rec{ baz = [true true true]; }; }",
             expect!["= rec baz,= foo.bar"],
         );
@@ -155,7 +209,7 @@ mod tests {
 
     #[test]
     fn let_hint() {
-        check("$0let foo = true; in null", expect!["= let foo"]);
-        check("$0let foo = [true true true]; in {}", expect!["= let foo"]);
+        check_1("$0let foo = true; in null", expect!["= let foo"]);
+        check_1("$0let foo = [true true true]; in {}", expect!["= let foo"]);
     }
 }
