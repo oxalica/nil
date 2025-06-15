@@ -1,6 +1,5 @@
 use crate::{DefDatabase, FileId};
 use itertools::Itertools;
-use smol_str::ToSmolStr;
 use std::fmt::Display;
 use std::num::NonZero;
 use syntax::ast::{self, AstNode};
@@ -45,7 +44,6 @@ pub(crate) fn inlay_hints(
     };
 
     let root_node = db.parse(file).syntax_node();
-
     let (first_tok, end_pos) = match range {
         None => (root_node.first_token(), u32::MAX.into()),
         Some(range) => (
@@ -54,29 +52,17 @@ pub(crate) fn inlay_hints(
         ),
     };
 
-
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attr_path_value = tok.parent()?;
 
-            // FIXME: for_each_chunk() doesn't work because each chunk can contain more than a "\n" like white spaces or text
-            //        we will likely be counting "\n" in each chunk, which is not much more efficient
-            //
-            //        On the other hand the number of chunks is roughly the number of tokens, but that is not what we want
             let spaning_lines = {
-                // HACK: an attempt to iterate over all chars
-                // Probably very inefficient
-                let count = attr_path_value
+                let mut acc = 1_usize; // we count from 1
+                attr_path_value
                     .text()
-                    .to_smolstr()
-                    .chars()
-                    .filter(|c| *c == '\n')
-                    .count()
-                    // we count from 1
-                    + 1;
-                NonZero::new(count).expect("must have positive amount of lines")
+                    .for_each_chunk(|s| acc += s.matches('\n').count());
+                NonZero::new(acc).expect("must have positive amount of lines")
             };
-
             if spaning_lines < threshold {
                 return None;
             }
