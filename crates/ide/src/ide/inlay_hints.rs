@@ -1,5 +1,6 @@
 use crate::{DefDatabase, FileId};
 use itertools::Itertools;
+use smol_str::ToSmolStr;
 use std::fmt::Display;
 use std::num::NonZero;
 use syntax::ast::{self, AstNode};
@@ -57,14 +58,22 @@ pub(crate) fn inlay_hints(
         if tok.kind() == SyntaxKind::SEMICOLON {
             let attr_path_value = tok.parent()?;
 
+            // FIXME: for_each_chunk() doesn't work because each chunk can contain more than a "\n" like white spaces or text
+            //        we will likely be counting "\n" in each chunk, which is not much more efficient
+            //
+            //        On the other hand the number of chunks is roughly the number of tokens, but that is not what we want
             let spaning_lines = {
-                let mut acc = 1;
-                // FIXME: this doesn't work because each chunk can contain more than a "\n" like white
-                // spaces or text
-                // the number of chunks is roughly the number of tokens, but that is not what we
-                // want
-                attr_path_value.text().for_each_chunk(|_| acc += 1);
-                NonZero::new(acc).expect("must have positive amount of lines")
+                // HACK: an attempt to iterate over all chars
+                // Probably very inefficient
+                let count = attr_path_value
+                    .text()
+                    .to_smolstr()
+                    .chars()
+                    .filter(|c| *c == '\n')
+                    .count()
+                    // we count from 1
+                    + 1;
+                NonZero::new(count).expect("must have positive amount of lines")
             };
 
             if spaning_lines < binding_end_hints_min_lines {
@@ -194,6 +203,18 @@ mod tests {
             }
             ",
             expect![],
+        );
+        check_5(
+            r"
+            $0{
+                foo =
+                #
+                #
+                #
+                true;
+            }
+            ",
+            expect!["= foo"],
         );
     }
 
