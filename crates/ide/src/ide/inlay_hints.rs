@@ -30,13 +30,13 @@ pub(crate) fn inlay_hints(
 
     let hint_kind = |tok: &SyntaxToken| -> Option<InlayHintKind> {
         if tok.kind() == SyntaxKind::SEMICOLON {
-            let attribute_node = tok
+            let mut attribute_node = tok
                 .parent()?
                 .first_child_by_kind(&|u: SyntaxKind| u == SyntaxKind::ATTR_PATH)?
                 .children()
                 .filter(|node| !node.kind().is_trivia());
 
-            let attr_name = attribute_node.map(|node| node.to_string()).join(".");
+            let attr_name = attribute_node.join(".");
             Some(InlayHintKind::AttrsetAttribute(attr_name))
         } else {
             None
