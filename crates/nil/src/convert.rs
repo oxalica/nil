@@ -391,13 +391,6 @@ pub(crate) fn from_document_link(
 pub(crate) fn to_inlay_hints(line_map: &LineMap, hints: Vec<InlayHintResult>) -> Vec<InlayHint> {
     hints
         .iter()
-        // Drop hints that are on the same line
-        .filter(|hint| {
-            let InlayHintResult { range, .. } = hint;
-            let (line1, _) = line_map.line_col_for_pos(range.start());
-            let (line2, _) = line_map.line_col_for_pos(range.end());
-            line1 != line2
-        })
         .map(|hint| {
             let InlayHintResult { range, kind } = hint;
 
