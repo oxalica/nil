@@ -110,6 +110,9 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Multi-threaded.
   - [x] Request cancellation. `$/cancelRequest`
 
+- [x] Inlay Hints `textDocument/inlayHint`
+  - [x] Display attribute name when the definition is long
+
 [`coc.nvim`]: https://github.com/neoclide/coc.nvim
 [flake-ref]: https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-flake.html#types
 

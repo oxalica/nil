@@ -122,6 +122,7 @@ impl Server {
             .request_snap::<req::CodeActionRequest>(handler::code_action)
             .request_snap::<req::DocumentHighlightRequest>(handler::document_highlight)
             .request_snap::<lsp_ext::ParentModule>(handler::parent_module)
+            .request_snap::<req::InlayHintRequest>(handler::inlay_hints)
             //// Events ////
             .event(Self::on_set_flake_info)
             .event(Self::on_set_nixos_options)
