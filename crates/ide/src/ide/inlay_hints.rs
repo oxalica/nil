@@ -68,8 +68,7 @@ pub(crate) fn inlay_hints(
             }
 
             let is_rec_attr = ast::AttrSet::cast(attr_path_value.parent()?)
-                .map(|attr| attr.rec_token())
-                .flatten()
+                .and_then(|attr| attr.rec_token())
                 .is_some();
             let is_let = ast::LetIn::cast(attr_path_value.parent()?).is_some();
 
@@ -134,7 +133,7 @@ mod tests {
             InlayHintsConfig {
                 binding_end_hints_min_lines: Some(NonZero::new(1).expect("1 is nonzero")),
             },
-        )
+        );
     }
 
     #[track_caller]
@@ -145,7 +144,7 @@ mod tests {
             InlayHintsConfig {
                 binding_end_hints_min_lines: None,
             },
-        )
+        );
     }
 
     #[track_caller]
@@ -156,7 +155,7 @@ mod tests {
             InlayHintsConfig {
                 binding_end_hints_min_lines: Some(NonZero::new(5).expect("5 is nonzero")),
             },
-        )
+        );
     }
 
     #[test]
