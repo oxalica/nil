@@ -92,6 +92,7 @@ pub(crate) fn negotiate_capabilities(
         }),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
         document_highlight_provider: Some(OneOf::Left(true)),
+        inlay_hint_provider: Some(OneOf::Left(true)),
         ..Default::default()
     };
 
