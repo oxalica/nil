@@ -99,7 +99,7 @@ fn main() {
                 experimental_feature: {experimental_feature:?},
             }}"
         );
-        phf_gen.entry(name, &rhs);
+        phf_gen.entry(name, rhs);
     }
 
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("generated.expr");
