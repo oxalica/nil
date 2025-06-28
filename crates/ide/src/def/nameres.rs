@@ -402,8 +402,8 @@ mod tests {
             .flat_map(|scope| match &scope.kind {
                 ScopeKind::Definitions(defs) => {
                     let mut poses = defs
-                        .iter()
-                        .map(|(_, name)| {
+                        .values()
+                        .map(|name| {
                             source_map
                                 .nodes_for_name(*name)
                                 .next()
