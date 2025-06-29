@@ -164,6 +164,11 @@ impl Context<'_> {
             return None;
         }
 
+        // Do not complete inside comments.
+        if let SyntaxKind::COMMENT = self.token.kind() {
+            return None;
+        }
+
         let mut parent = self.token.parent()?;
         if let Some(name) = ast::Name::cast(parent.clone()) {
             parent = name.syntax().parent()?;
