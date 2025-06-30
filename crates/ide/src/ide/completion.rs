@@ -158,14 +158,11 @@ pub(crate) fn completions(
 
 impl Context<'_> {
     fn complete(&mut self) -> Option<()> {
-        // Do not complete inside strings.
+        // Do not complete inside strings or comments.
         // TODO: Escapes and `${}` snippets?
-        if let T!["''"] | T!['"'] | SyntaxKind::STRING_FRAGMENT = self.token.kind() {
-            return None;
-        }
-
-        // Do not complete inside comments.
-        if let SyntaxKind::COMMENT = self.token.kind() {
+        if let T!["''"] | T!['"'] | SyntaxKind::STRING_FRAGMENT | SyntaxKind::COMMENT =
+            self.token.kind()
+        {
             return None;
         }
 
@@ -1058,5 +1055,13 @@ stdenv.mkDerivation {
             "foo",
             expect!["(Param) { foo, bar ? foo }: 42"],
         );
+    }
+
+    #[test]
+    fn no_inside_comment() {
+        check_no("# l$0", "let");
+        check_no("/* l$0 */", "let");
+        check_no("let abc = 1; in # ab$0", "abc");
+        check_no("let abc = 1; in /* ab$0 */", "abc");
     }
 }
