@@ -58,22 +58,6 @@ let
     command -nargs=0 CocShowOutput CocCommand workspace.showOutput languageserver.nix
     command -nargs=0 CocSemanticHighlightInfo call CocActionAsync('showSemanticHighlightInfo')
 
-    " Workaround: https://github.com/EdenEast/nightfox.nvim/issues/236
-    lua vim.treesitter = { highlighter = { hl_map = {} } }
-
-    packadd! nightfox.nvim
-    " https://github.com/EdenEast/nightfox.nvim/issues/218
-    lua <<EOF
-      require("nightfox").setup({
-        options = {
-          modules = {
-            treesitter = true,
-          },
-        },
-      })
-    EOF
-    colorscheme nightfox
-
     highlight link Identifier        TSVariable
     highlight link CocSemPath        Include
     highlight link CocSemVariable    TSVariable
@@ -119,7 +103,6 @@ pkgs.vim_configurable.customize {
       vim-nix # File type and syntax highlighting.
       coc-nvim
       coc-json
-      nightfox-nvim
     ];
   };
 }
