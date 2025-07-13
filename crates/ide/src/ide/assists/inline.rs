@@ -64,7 +64,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "inline",
-        "Inline expression",
+        format!("Inline expression `{}`", token.text()),
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: token.text_range(),
