@@ -46,6 +46,19 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         // TODO: ignore anything else for now
         _ => None,
     }?;
+    let replacement_text = {
+        let node = AstNode::syntax(&replacement);
+        let do_parenthesize = match &replacement {
+            ast::Expr::Lambda(_) => true,
+            _ => false,
+        };
+
+        if do_parenthesize {
+            format!("({})", node.text()).to_smolstr()
+        } else {
+            node.to_smolstr()
+        }
+    };
 
     ctx.add(
         "inline",
@@ -53,7 +66,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         AssistKind::RefactorRewrite,
         vec![TextEdit {
             delete: token.text_range(),
-            insert: AstNode::syntax(&replacement).to_smolstr(),
+            insert: replacement_text,
         }],
     );
 
@@ -63,13 +76,21 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
+    define_check_assist!(super::inline);
 
     #[test]
     fn let_in() {
-        define_check_assist!(super::inline);
         check(
             r#"let a = "foo"; in $0a"#,
             expect![r#"let a = "foo"; in "foo""#],
+        );
+    }
+
+    #[test]
+    fn let_in_lambda() {
+        check(
+            r"let a = x: x; in $0a 1",
+            expect!["let a = x: x; in (x: x) 1"],
         );
     }
 }
