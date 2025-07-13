@@ -1,10 +1,9 @@
 use super::{AssistKind, AssistsCtx};
-use crate::def::ResolveResult;
-use crate::{def::AstPtr, TextEdit};
+use crate::def::{AstPtr, ResolveResult};
+use crate::TextEdit;
 use smol_str::ToSmolStr;
 use syntax::ast::AstNode;
-use syntax::match_ast;
-use syntax::{ast, best_token_at_offset};
+use syntax::{ast, best_token_at_offset, match_ast};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let parse = ctx.db.parse(ctx.frange.file_id);
@@ -49,10 +48,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     }?;
     let replacement_text = {
         let node = AstNode::syntax(&replacement);
-        let do_parenthesize = match &replacement {
-            ast::Expr::Lambda(_) => true,
-            _ => false,
-        };
+        let do_parenthesize = matches!(&replacement, ast::Expr::Lambda(_));
 
         if do_parenthesize && !parenthesized {
             format!("({})", node.text()).to_smolstr()

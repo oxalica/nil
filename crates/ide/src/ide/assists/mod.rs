@@ -16,12 +16,12 @@ macro_rules! define_check_assist {
 mod add_to_top_level_lambda_param;
 mod convert_to_inherit;
 mod flatten_attrset;
+mod inline;
 mod pack_bindings;
 mod remove_empty_inherit;
 mod remove_empty_let_in;
 mod remove_unused_binding;
 mod rewrite_string;
-mod inline;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
 use syntax::ast::{self, AstNode};
