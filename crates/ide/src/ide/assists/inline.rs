@@ -21,7 +21,6 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
                     Some((is_in_paren, AstPtr::new(n.syntax())))
                 },
-                // TODO: are there more nodes to handle?
                 _ => None,
             }
         }
