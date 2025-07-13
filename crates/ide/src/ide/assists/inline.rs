@@ -43,7 +43,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
             Some(definition_value)
         }),
-        // TODO: ignore anything else for now
+        // Only let-ins are rewritable
         _ => None,
     }?;
     let replacement_text = {
