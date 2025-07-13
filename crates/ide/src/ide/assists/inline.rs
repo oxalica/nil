@@ -2,7 +2,7 @@ use super::{AssistKind, AssistsCtx};
 use crate::def::ResolveResult;
 use crate::{def::AstPtr, TextEdit};
 use smol_str::ToSmolStr;
-use syntax::ast::{AstNode, Binding, HasBindings};
+use syntax::ast::AstNode;
 use syntax::match_ast;
 use syntax::{ast, best_token_at_offset};
 
@@ -37,12 +37,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             let definition_value = definition_node.ancestors().find_map(|n| {
                 match_ast! {
                     match n {
-                        ast::LetIn(let_in) => {
-                            let_in.bindings().find_map(|binding| match binding {
-                                Binding::AttrpathValue(path_value) => path_value.value(),
-                                Binding::Inherit(_) => None,
-                            })
-                        },
+                        ast::AttrpathValue(path_value) => path_value.value(),
                         _ => None,
                     }
                 }
@@ -105,6 +100,14 @@ mod tests {
         check(
             "let a = x: x; in ($0a) 1",
             expect!["let a = x: x; in (x: x) 1"],
+        );
+    }
+
+    #[test]
+    fn attr() {
+        check(
+            "rec { foo = 1; bar = $0foo; }",
+            expect!["rec { foo = 1; bar = 1; }"],
         );
     }
 }
