@@ -11,10 +11,17 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
 
     let token = best_token_at_offset(&parse.syntax_node(), ctx.frange.range.start())?;
-    let ptr = token.parent_ancestors().find_map(|node| {
+    let (parenthesized, ptr) = token.parent_ancestors().find_map(|node| {
         match_ast! {
             match node {
-                ast::Ref(n) => Some(AstPtr::new(n.syntax())),
+                ast::Ref(n) => {
+                    let is_in_paren = node.parent()
+                        .map(|parent| ast::Paren::cast(parent).is_some())
+                        .unwrap_or(false);
+
+                    Some((is_in_paren, AstPtr::new(n.syntax())))
+                },
+                // TODO: are there more nodes to handle?
                 _ => None,
             }
         }
@@ -53,7 +60,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             _ => false,
         };
 
-        if do_parenthesize {
+        if do_parenthesize && !parenthesized {
             format!("({})", node.text()).to_smolstr()
         } else {
             node.to_smolstr()
@@ -89,7 +96,14 @@ mod tests {
     #[test]
     fn let_in_lambda() {
         check(
-            r"let a = x: x; in $0a 1",
+            "let a = x: x; in $0a 1",
+            expect!["let a = x: x; in (x: x) 1"],
+        );
+
+        // If for some reason the expression is already parenthesized,
+        // do not duplicate it.
+        check(
+            "let a = x: x; in ($0a) 1",
             expect!["let a = x: x; in (x: x) 1"],
         );
     }
