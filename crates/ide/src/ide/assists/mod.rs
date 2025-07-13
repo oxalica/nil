@@ -21,6 +21,7 @@ mod remove_empty_inherit;
 mod remove_empty_let_in;
 mod remove_unused_binding;
 mod rewrite_string;
+mod inline;
 
 use crate::{DefDatabase, FileRange, TextEdit, WorkspaceEdit};
 use syntax::ast::{self, AstNode};
@@ -56,6 +57,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         rewrite_string::rewrite_string_to_indented,
         rewrite_string::rewrite_uri_to_string,
         rewrite_string::unquote_attr,
+        inline::inline,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);
