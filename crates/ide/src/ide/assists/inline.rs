@@ -1,9 +1,9 @@
 use super::{AssistKind, AssistsCtx};
 use crate::def::{AstPtr, ResolveResult};
 use crate::TextEdit;
-use smol_str::ToSmolStr;
+use smol_str::{SmolStr, ToSmolStr};
 use syntax::ast::AstNode;
-use syntax::{ast, match_ast};
+use syntax::{ast, match_ast, SyntaxNode};
 
 pub(super) fn inline_from_reference(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
@@ -34,19 +34,7 @@ pub(super) fn inline_from_reference(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         // Only let-ins are rewritable
         _ => None,
     }?;
-    let replacement_text = {
-        let replacement_node = replacement.syntax();
-        let parent = covering_node.syntax().parent().and_then(ast::Expr::cast);
-
-        let need_paren =
-            matches!(parent, Some(outer) if !outer.contains_without_paren(&replacement));
-
-        if need_paren {
-            format!("({})", replacement_node.text()).to_smolstr()
-        } else {
-            replacement_node.to_smolstr()
-        }
-    };
+    let replacement_text = maybe_parenthesize(&replacement, covering_node.syntax());
 
     ctx.add(
         "inline_from_reference",
@@ -84,28 +72,18 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         })
         .collect::<Vec<_>>();
 
-    let edits = binding_usages.iter().map(|usage| {
-        let usage_node = usage.to_node(&ctx.ast.syntax());
+    let edits = binding_usages
+        .iter()
+        .map(|usage| {
+            let usage_node = usage.to_node(&ctx.ast.syntax());
+            let replacement_text = maybe_parenthesize(&binding_definition, &usage_node);
 
-        let replacement_text = {
-            let replacement_node = binding_definition.syntax();
-            let parent = usage_node.parent().and_then(ast::Expr::cast);
-
-            let need_paren =
-                matches!(parent, Some(outer) if !outer.contains_without_paren(&binding_definition));
-
-            if need_paren {
-                format!("({})", replacement_node.text()).to_smolstr()
-            } else {
-                replacement_node.to_smolstr()
+            TextEdit {
+                delete: usage.text_range(),
+                insert: replacement_text,
             }
-        };
-
-        TextEdit {
-            delete: usage.text_range(),
-            insert: replacement_text,
-        }
-    }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     ctx.add(
         "inline_from_definition",
@@ -115,6 +93,17 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     );
 
     Some(())
+}
+
+// Parenthesize a node properly given the replacement context
+fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr {
+    let parent = original.parent().and_then(ast::Expr::cast);
+    let need_paren = matches!(parent, Some(outer) if !outer.contains_without_paren(&replacement));
+    if need_paren {
+        format!("({})", replacement.syntax()).to_smolstr()
+    } else {
+        replacement.syntax().to_smolstr()
+    }
 }
 
 #[cfg(test)]
