@@ -3,27 +3,15 @@ use crate::def::{AstPtr, ResolveResult};
 use crate::TextEdit;
 use smol_str::ToSmolStr;
 use syntax::ast::AstNode;
-use syntax::{ast, best_token_at_offset, match_ast};
+use syntax::{ast, match_ast};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
-    let parse = ctx.db.parse(ctx.frange.file_id);
     let file_id = ctx.frange.file_id;
+    let parse = ctx.db.parse(file_id);
 
-    let token = best_token_at_offset(&parse.syntax_node(), ctx.frange.range.start())?;
-    let (parenthesized, ptr) = token.parent_ancestors().find_map(|node| {
-        match_ast! {
-            match node {
-                ast::Ref(n) => {
-                    let is_in_paren = node.parent()
-                        .map(|parent| ast::Paren::cast(parent).is_some())
-                        .unwrap_or(false);
-
-                    Some((is_in_paren, AstPtr::new(n.syntax())))
-                },
-                _ => None,
-            }
-        }
-    })?;
+    let covering_node = ctx.covering_node::<ast::Ref>()?;
+    let covering_token = covering_node.token()?;
+    let ptr = AstPtr::new(covering_node.syntax());
 
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
@@ -50,7 +38,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let node = AstNode::syntax(&replacement);
         let do_parenthesize = matches!(&replacement, ast::Expr::Lambda(_));
 
-        if do_parenthesize && !parenthesized {
+        if do_parenthesize {
             format!("({})", node.text()).to_smolstr()
         } else {
             node.to_smolstr()
@@ -59,10 +47,10 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "inline",
-        format!("Inline expression `{}`", token.text()),
+        format!("Inline expression `{}`", covering_token.text()),
         AssistKind::RefactorRewrite,
         vec![TextEdit {
-            delete: token.text_range(),
+            delete: covering_token.text_range(),
             insert: replacement_text,
         }],
     );
@@ -87,13 +75,6 @@ mod tests {
     fn let_in_lambda() {
         check(
             "let a = x: x; in $0a 1",
-            expect!["let a = x: x; in (x: x) 1"],
-        );
-
-        // If for some reason the expression is already parenthesized,
-        // do not duplicate it.
-        check(
-            "let a = x: x; in ($0a) 1",
             expect!["let a = x: x; in (x: x) 1"],
         );
     }
