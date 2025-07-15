@@ -55,7 +55,7 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     let covering_node = ctx.covering_node::<ast::Attr>()?;
     let source_map = ctx.db.source_map(file_id);
-    let ptr = AstPtr::new(&covering_node.syntax());
+    let ptr = AstPtr::new(covering_node.syntax());
     let name_id = source_map.name_for_node(ptr)?;
 
     let binding_pathvalue = covering_node
@@ -80,16 +80,16 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         rewrites.push(TextEdit {
             delete: parent.text_range(),
             insert: Default::default(),
-        })
+        });
     };
     for usage in binding_usages {
-        let usage_node = usage.to_node(&ctx.ast.syntax());
+        let usage_node = usage.to_node(ctx.ast.syntax());
         let replacement_text = maybe_parenthesize(&binding_definition, &usage_node);
 
         rewrites.push(TextEdit {
             delete: usage.text_range(),
             insert: replacement_text,
-        })
+        });
     }
 
     ctx.add(
@@ -105,7 +105,7 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 // Parenthesize a node properly given the replacement context
 fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr {
     let parent = original.parent().and_then(ast::Expr::cast);
-    let need_paren = matches!(parent, Some(outer) if !outer.contains_without_paren(&replacement));
+    let need_paren = matches!(parent, Some(outer) if !outer.contains_without_paren(replacement));
     if need_paren {
         format!("({})", replacement.syntax()).to_smolstr()
     } else {
