@@ -302,6 +302,7 @@ pub(crate) fn to_code_action(vfs: &Vfs, assist: Assist) -> CodeActionOrCommand {
         kind: Some(match assist.kind {
             AssistKind::QuickFix => CodeActionKind::QUICKFIX,
             AssistKind::RefactorRewrite => CodeActionKind::REFACTOR_REWRITE,
+            AssistKind::RefactorInline => CodeActionKind::REFACTOR_INLINE,
         }),
         diagnostics: None,
         edit: Some(to_workspace_edit(vfs, assist.edits)),

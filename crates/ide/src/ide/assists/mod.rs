@@ -41,6 +41,7 @@ pub struct Assist {
 pub enum AssistKind {
     QuickFix,
     RefactorRewrite,
+    RefactorInline,
 }
 
 pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {

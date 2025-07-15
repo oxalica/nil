@@ -50,8 +50,8 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     ctx.add(
         "inline",
-        format!("Inline expression `{}`", covering_token.text()),
-        AssistKind::RefactorRewrite,
+        format!("Inline binding `{}`", covering_token.text()),
+        AssistKind::RefactorInline,
         vec![TextEdit {
             delete: covering_token.text_range(),
             insert: replacement_text,
