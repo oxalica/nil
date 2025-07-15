@@ -5,7 +5,7 @@ use smol_str::ToSmolStr;
 use syntax::ast::AstNode;
 use syntax::{ast, match_ast};
 
-pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
+pub(super) fn inline_from_reference(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
     let parse = ctx.db.parse(file_id);
 
@@ -64,7 +64,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
-    define_check_assist!(super::inline);
+    define_check_assist!(super::inline_from_reference);
 
     #[test]
     fn let_in() {
