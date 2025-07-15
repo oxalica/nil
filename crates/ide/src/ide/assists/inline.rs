@@ -35,13 +35,16 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         _ => None,
     }?;
     let replacement_text = {
-        let node = AstNode::syntax(&replacement);
-        let do_parenthesize = matches!(&replacement, ast::Expr::Lambda(_));
+        let replacement_node = replacement.syntax();
+        let parent = covering_node.syntax().parent().and_then(ast::Expr::cast);
 
-        if do_parenthesize {
-            format!("({})", node.text()).to_smolstr()
+        let need_paren =
+            matches!(parent, Some(outer) if !outer.contains_without_paren(&replacement));
+
+        if need_paren {
+            format!("({})", replacement_node.text()).to_smolstr()
         } else {
-            node.to_smolstr()
+            replacement_node.to_smolstr()
         }
     };
 
