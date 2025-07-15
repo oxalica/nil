@@ -59,6 +59,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         rewrite_string::rewrite_uri_to_string,
         rewrite_string::unquote_attr,
         inline::inline_from_reference,
+        inline::inline_from_definition,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);
