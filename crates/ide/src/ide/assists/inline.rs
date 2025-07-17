@@ -75,10 +75,9 @@ pub(super) fn inline_from_definition(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let mut rewrites: Vec<TextEdit> = vec![];
     let parent = binding_pathvalue.syntax().parent()?;
     let is_letin = ast::LetIn::cast(parent.clone()).is_some();
-    // FIXME: this would delete into the following expression
     if is_letin {
         rewrites.push(TextEdit {
-            delete: parent.text_range(),
+            delete: binding_pathvalue.syntax().text_range(),
             insert: Default::default(),
         });
     };
@@ -147,6 +146,6 @@ mod tests {
     #[test]
     fn let_in_def() {
         define_check_assist!(super::inline_from_definition);
-        check("let $0a = x: x; in a a", expect!["(x: x) (x: x)"]);
+        check("let $0a = x: x; in a a", expect!["let  in (x: x) (x: x)"]);
     }
 }
