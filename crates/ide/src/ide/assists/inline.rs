@@ -136,4 +136,12 @@ mod tests {
             expect!["rec { foo = 1; bar = 1; }"],
         );
     }
+
+    #[test]
+    fn attr_def() {
+        check(
+            "rec { $0foo = 1; bar = foo; baz = foo; }",
+            expect!["rec { foo = 1; bar = 1; baz = 1; }"],
+        );
+    }
 }
