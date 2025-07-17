@@ -19,12 +19,19 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
             return None;
         };
-        let definition = source_map.nodes_for_name(name).find_map(|ptr| {
-            ptr.to_node(&parse.syntax_node())
-                .ancestors()
-                .flat_map(ast::AttrpathValue::cast)
-                .find_map(|path_value| path_value.value())
-        })?;
+        let definition = {
+            let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
+            // Only provide assist when there is only one node
+            // i.e. `let a.b = 1; a.c = 2; in a` is not supported
+            if let [ptr] = nodes.as_slice() {
+                ptr.to_node(&parse.syntax_node())
+                    .ancestors()
+                    .flat_map(ast::AttrpathValue::cast)
+                    .find_map(|path_value| path_value.value())?
+            } else {
+                return None;
+            }
+        };
 
         rewrites.push(TextEdit {
             delete: usage.syntax().text_range(),
@@ -37,6 +44,12 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             .syntax()
             .ancestors()
             .find_map(ast::AttrpathValue::cast)?;
+
+        // Don't provide assist when there are more than one attrname
+        if path_value.attrpath()?.attrs().count() > 1 {
+            return None;
+        };
+
         let definition = path_value.value()?;
 
         let usages = name_res
@@ -99,14 +112,21 @@ mod tests {
             r#"let a = "foo"; in $0a"#,
             expect![r#"let a = "foo"; in "foo""#],
         );
-    }
-
-    #[test]
-    fn let_in_lambda_ref() {
         check(
             "let a = x: x; in $0a 1",
             expect!["let a = x: x; in (x: x) 1"],
         );
+    }
+
+    #[test]
+    fn let_in_def() {
+        check("let $0a = x: x; in a a", expect!["let  in (x: x) (x: x)"]);
+    }
+
+    #[test]
+    fn no_let_in_multi() {
+        check_no(r#"let a.b = "foo"; a.c = "bar"; in $0a"#);
+        check_no(r#"let a.b$0 = "foo"; a.c = "bar"; in a"#);
     }
 
     #[test]
@@ -115,10 +135,5 @@ mod tests {
             "rec { foo = 1; bar = $0foo; }",
             expect!["rec { foo = 1; bar = 1; }"],
         );
-    }
-
-    #[test]
-    fn let_in_def() {
-        check("let $0a = x: x; in a a", expect!["let  in (x: x) (x: x)"]);
     }
 }
