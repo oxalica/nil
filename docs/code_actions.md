@@ -167,3 +167,14 @@ https://nixos.org
 ```nix
 "https://nixos.org"
 ```
+
+### `inline`
+
+Rewrite a binding to its definition.
+```nix
+let id = x: x; in a 1
+```
+=>
+```nix
+let id = x: x; in (x: x) 1
+```

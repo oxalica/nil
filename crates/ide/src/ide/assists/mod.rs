@@ -16,6 +16,7 @@ macro_rules! define_check_assist {
 mod add_to_top_level_lambda_param;
 mod convert_to_inherit;
 mod flatten_attrset;
+mod inline;
 mod pack_bindings;
 mod remove_empty_inherit;
 mod remove_empty_let_in;
@@ -40,6 +41,7 @@ pub struct Assist {
 pub enum AssistKind {
     QuickFix,
     RefactorRewrite,
+    RefactorInline,
 }
 
 pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
@@ -56,6 +58,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         rewrite_string::rewrite_string_to_indented,
         rewrite_string::rewrite_uri_to_string,
         rewrite_string::unquote_attr,
+        inline::inline,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);
