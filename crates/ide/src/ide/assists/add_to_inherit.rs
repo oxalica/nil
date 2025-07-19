@@ -1,8 +1,8 @@
 use super::{AssistKind, AssistsCtx};
 use crate::def::{AstPtr, BindingValue, Expr};
 use crate::TextEdit;
-use syntax::ast;
 use syntax::ast::AstNode;
+use syntax::{ast, TextRange};
 
 // Add unknown symbols to inherit clauses
 pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
@@ -35,25 +35,32 @@ pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                         .collect::<Vec<_>>();
                     let last_bind = bind_nodes.last()?;
 
-                    let from_expr: String = match bindvalue {
-                        BindingValue::Inherit(_) => "".into(),
-                        BindingValue::InheritFrom(idx) => source_map
-                            .node_for_expr(bindings.inherit_froms[*idx])?
-                            .to_node(ctx.ast.syntax())
-                            .text()
-                            .into(),
+                    let unbound_text = unbound.syntax().text();
+                    let label = match bindvalue {
+                        BindingValue::Inherit(_) => format!("Inherit \"{unbound_text}\""),
+                        BindingValue::InheritFrom(idx) => {
+                            let from_clause = source_map
+                                .node_for_expr(bindings.inherit_froms[*idx])?
+                                .to_node(ctx.ast.syntax())
+                                .text()
+                                .to_string();
+
+                            format!("Inherit \"{unbound_text}\" from {from_clause}")
+                        }
                         // We only generate assist for inherits
                         _ => continue,
                     };
 
-                    let unbound_text = unbound.syntax().text();
                     ctx.add(
                         "add_to_inherit",
-                        format!("Inherit `{unbound_text}` from `{from_expr}`"),
+                        label,
                         AssistKind::RefactorRewrite,
                         vec![TextEdit {
-                            delete: last_bind.text_range(),
-                            insert: format!("{} {}", last_bind.text(), unbound_text).into(),
+                            delete: TextRange::new(
+                                last_bind.text_range().end(),
+                                last_bind.text_range().end(),
+                            ),
+                            insert: format!(" {}", unbound_text).into(),
                         }],
                     );
                 }
