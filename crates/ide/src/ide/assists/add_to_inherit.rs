@@ -1,13 +1,14 @@
 use super::{AssistKind, AssistsCtx};
-use crate::def::{AstPtr, BindingValue, Expr};
+use crate::def::AstPtr;
 use crate::TextEdit;
-use syntax::ast::AstNode;
-use syntax::{ast, TextRange};
+use syntax::ast::{AstNode, Binding, HasBindings};
+use syntax::{ast, SyntaxNode, TextRange};
 
 // Add unknown symbols to inherit clauses
 pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
     let unbound = ctx.covering_node::<ast::Ref>()?;
+    let unbound_text = unbound.syntax().text();
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
@@ -19,54 +20,47 @@ pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         return None;
     }
 
-    let module = ctx.db.module(file_id);
-    let mut stack = vec![module.entry_expr()];
-    while let Some(expr) = stack.pop() {
-        match &module[expr] {
-            Expr::LetIn(bindings, body) => {
-                if let Some((bindname, bindvalue)) =
-                    // Due to the multiplicity of inherit clauses (i.e. `let inherit (lib) foo bar baz; in ...`),
-                    // we only care about the last one where we are going to append the unbound expression.
-                    bindings.statics.last()
-                {
-                    let bind_nodes = source_map
-                        .nodes_for_name(*bindname)
-                        .map(|ptr| ptr.to_node(ctx.ast.syntax()))
-                        .collect::<Vec<_>>();
-                    let last_bind = bind_nodes.last()?;
+    // We walk upwards from the current node, adding suggestion for each parent let in that has an
+    // inherit construct.
+    let mut stack: Vec<SyntaxNode> = vec![unbound.syntax().clone()];
+    while let Some(node) = stack.pop() {
+        if let Some(let_in) = ast::LetIn::cast(node.clone()) {
+            let inherits = let_in
+                .bindings()
+                .filter_map(|binding| match binding {
+                    Binding::Inherit(x) => Some(x),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
 
-                    let unbound_text = unbound.syntax().text();
-                    let label = match bindvalue {
-                        BindingValue::Inherit(_) => format!("Inherit \"{unbound_text}\""),
-                        BindingValue::InheritFrom(idx) => {
-                            let from_clause = source_map
-                                .node_for_expr(bindings.inherit_froms[*idx])?
-                                .to_node(ctx.ast.syntax())
-                                .text()
-                                .to_string();
-
-                            format!("Inherit \"{unbound_text}\" from {from_clause}")
-                        }
-                        // We only generate assist for inherits
-                        _ => continue,
-                    };
+            // Start from the last one to have a consistent order
+            for inherit in inherits.iter().rev() {
+                if let Some(inherit_from) = inherit.from_expr() {
+                    let add_loc = inherit
+                        .attrs()
+                        .last()
+                        .map(|last| last.syntax().text_range())
+                        .unwrap_or(inherit_from.syntax().text_range());
 
                     ctx.add(
                         "add_to_inherit",
-                        label,
+                        format!(
+                            "Inherit \"{}\" from {}",
+                            unbound_text,
+                            inherit_from.syntax().text()
+                        ),
                         AssistKind::RefactorRewrite,
                         vec![TextEdit {
-                            delete: TextRange::new(
-                                last_bind.text_range().end(),
-                                last_bind.text_range().end(),
-                            ),
-                            insert: format!(" {}", unbound_text).into(),
+                            delete: TextRange::new(add_loc.end(), add_loc.end()),
+                            insert: format!(" {unbound_text}").into(),
                         }],
                     );
                 }
-                stack.push(*body);
             }
-            e => e.walk_child_exprs(|e| stack.push(e)),
+        }
+
+        if let Some(parent) = node.parent() {
+            stack.push(parent.clone());
         }
     }
 
@@ -80,13 +74,10 @@ mod tests {
 
     #[test]
     fn simple() {
+        // We go from closest to furthest, the first edit would be the farthest
         check(
-            "let inherit a; in $0foo",
-            expect!["let inherit a foo; in foo"],
-        );
-        check(
-            "let inherit (lib) a; in $0foo",
-            expect!["let inherit (lib) a foo; in foo"],
+            "let inherit (lib) a; inherit (lib.types) b; in $0foo",
+            expect!["let inherit (lib) a foo; inherit (lib.types) b; in foo"],
         );
         check(
             "let inherit (lib.types) a; in $0foo",
