@@ -2,7 +2,7 @@ use super::{AssistKind, AssistsCtx};
 use crate::def::AstPtr;
 use crate::TextEdit;
 use syntax::ast::{AstNode, Binding, HasBindings};
-use syntax::{ast, SyntaxNode, TextRange};
+use syntax::{ast, TextRange};
 
 // Add unknown symbols to inherit clauses
 pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
@@ -22,9 +22,8 @@ pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
     // We walk upwards from the current node, adding suggestion for each parent let in that has an
     // inherit construct.
-    let mut stack: Vec<SyntaxNode> = vec![unbound.syntax().clone()];
-    while let Some(node) = stack.pop() {
-        if let Some(let_in) = ast::LetIn::cast(node.clone()) {
+    for node in unbound.syntax().ancestors() {
+        if let Some(let_in) = ast::LetIn::cast(node) {
             let inherits = let_in
                 .bindings()
                 .filter_map(|binding| match binding {
@@ -33,7 +32,7 @@ pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                 })
                 .collect::<Vec<_>>();
 
-            // Start from the last one to have a consistent order
+            // Start from the last one (closest one) to have a consistent order
             for inherit in inherits.iter().rev() {
                 if let Some(inherit_from) = inherit.from_expr() {
                     let add_loc = inherit
@@ -57,10 +56,6 @@ pub(super) fn add_to_inherit(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                     );
                 }
             }
-        }
-
-        if let Some(parent) = node.parent() {
-            stack.push(parent.clone());
         }
     }
 
