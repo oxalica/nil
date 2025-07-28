@@ -178,3 +178,17 @@ let id = x: x; in a 1
 ```nix
 let id = x: x; in (x: x) 1
 ```
+
+
+### `add_to_inherit`
+
+Append an unbound variable to a let-inherit-in clause in scope.
+```nix
+let inherit (lib) mkMerge;
+in  mkForce
+```
+=>
+```nix
+let inherit (lib) mkMerge mkForce;
+in  mkForce
+```
