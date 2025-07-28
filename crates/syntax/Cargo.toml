@@ -11,7 +11,7 @@ regex-automata = "0.4.0"
 rowan = "0.16"
 
 [dev-dependencies]
-criterion = "0.6"
+criterion = "0.7"
 expect-test = "1.4.0"
 walkdir = "2.3.3"
 
