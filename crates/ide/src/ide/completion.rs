@@ -477,8 +477,8 @@ impl Context<'_> {
 
         let prefix = match_ast! {
             match (node.syntax().parent()?){
-                ast::HasAttr(n) => Prefix::SetExpr(n.set()?.syntax().clone()),
-                ast::Select(n) => Prefix::SetExpr(n.set()?.syntax().clone()),
+                ast::HasAttr(n) => Prefix::SetExpr(n.set()?.unwrap_all_paren().syntax().clone()),
+                ast::Select(n) => Prefix::SetExpr(n.set()?.unwrap_all_paren().syntax().clone()),
                 ast::AttrpathValue(n) => {
                     // We are typing the first word of a binding.
                     if prefix_attrs.peek().is_none() {
