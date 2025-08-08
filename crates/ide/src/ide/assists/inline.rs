@@ -162,4 +162,21 @@ mod tests {
         );
         check_no("let $0foo = 1; in { inherit foo; }");
     }
+
+    #[test]
+    fn no_patfield() {
+        check_no(
+            r#"
+{
+  outputs = {
+    self,
+    nixpkgs,
+    $0flake-utils,
+  }: {
+    inherit flake-utils;
+  };
+}
+        "#,
+        );
+    }
 }
