@@ -7,7 +7,6 @@ use syntax::{ast, SyntaxNode};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
-    let parse = ctx.db.parse(file_id);
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
@@ -24,7 +23,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             // Only provide assist when there is only one node
             // i.e. `let a.b = 1; a.c = 2; in a` is not supported
             if let [ptr] = nodes.as_slice() {
-                ptr.to_node(&parse.syntax_node())
+                ptr.to_node(ctx.ast.syntax())
                     .ancestors()
                     .flat_map(ast::AttrpathValue::cast)
                     .find_map(|path_value| path_value.value())?
@@ -38,6 +37,16 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             insert: maybe_parenthesize(&definition, usage.syntax()),
         });
     } else if let Some(definition) = ctx.covering_node::<ast::Attr>() {
+        let parent = definition.syntax().parent();
+        if
+        // `foo` in { inherit `foo`; } is considered as an attr.
+        parent.clone().and_then(ast::Inherit::cast).is_some()
+        // `foo` in `{ foo }: …` is considered as an attr. PatField is a bind site.
+        || parent.and_then(ast::PatField::cast).is_some()
+        {
+            return None;
+        }
+
         let ptr = AstPtr::new(definition.syntax());
         let name_id = source_map.name_for_node(ptr)?;
         let path_value = definition
@@ -60,7 +69,12 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                     .map(|ptr| ptr.to_node(ctx.ast.syntax())),
                 _ => None,
             })
+            // Don't consider inherit usages for now
+            .filter(|usage| usage.parent().and_then(ast::Inherit::cast).is_none())
             .collect::<Vec<_>>();
+        if usages.is_empty() {
+            return None;
+        }
 
         let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
         if is_letin {
