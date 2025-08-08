@@ -144,4 +144,22 @@ mod tests {
             expect!["rec { foo = 1; bar = 1; baz = 1; }"],
         );
     }
+
+    #[test]
+    fn no_inherit() {
+        check_no(
+            r#"
+{
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+  }: {
+    inherit $0flake-utils;
+  };
+}
+        "#,
+        );
+        check_no("let $0foo = 1; in { inherit foo; }");
+    }
 }
