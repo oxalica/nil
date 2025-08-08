@@ -503,6 +503,10 @@ impl InferCtx<'_> {
                             self.unify_var(dyn_ty_var, var);
                         }
                     }
+                    (Ty::List(a), super::Ty::List(b)) => {
+                        let el = self.import_external(b.as_ref().clone());
+                        self.unify_var(a, el);
+                    }
                     _ => {}
                 }
                 Ty::External(external)
