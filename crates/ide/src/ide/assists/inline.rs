@@ -147,10 +147,7 @@ mod tests {
 
     #[test]
     fn let_in_ref() {
-        check(
-            r#"let a = "foo"; in $0a"#,
-            expect![r#"let a = "foo"; in "foo""#],
-        );
+        check("let a = 1; in $0a", expect!["let a = 1; in 1"]);
         check(
             "let a = x: x; in $0a 1",
             expect!["let a = x: x; in (x: x) 1"],
@@ -164,12 +161,13 @@ mod tests {
 
     #[test]
     fn no_let_in_multi() {
-        check_no(r#"let a.b = "foo"; a.c = "bar"; in $0a"#);
-        check_no(r#"let a.b$0 = "foo"; a.c = "bar"; in a"#);
+        check_no("let a.b = 1; a.c = 2; in $0a");
+        check_no("let a.b$0 = 1; a.c = 2; in a");
+        check_no("let $0a.b = 1; a.c = 2; in a");
     }
 
     #[test]
-    fn attr_ref() {
+    fn rec_attr_ref() {
         check(
             "rec { foo = 1; bar = $0foo; }",
             expect!["rec { foo = 1; bar = 1; }"],
@@ -177,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn attr_def() {
+    fn rec_attr_def() {
         check(
             "rec { $0foo = 1; bar = foo; baz = foo; }",
             expect!["rec { foo = 1; bar = 1; baz = 1; }"],
@@ -186,7 +184,6 @@ mod tests {
 
     #[test]
     fn allow_inherit_usage_def() {
-        // inherit in usage from definition
         check(
             "let $0foo = 1; in { inherit foo; }",
             expect!["let  in { inherit ; foo = 1; }"],
@@ -199,7 +196,6 @@ mod tests {
 
     #[test]
     fn allow_inherit_usage_ref() {
-        // inherit in usage from definition
         check(
             "let foo = 1; in { inherit $0foo; }",
             expect!["let foo = 1; in { inherit ; foo = 1; }"],
@@ -211,9 +207,9 @@ mod tests {
     }
 
     #[test]
-    fn no_inherit_definition() {
-        check_no("with lib; let inherit (lib) $0foo; in foo");
-        check_no("with lib; let inherit (lib) foo; in $0foo");
+    fn no_allow_inherit_as_def() {
+        check_no("let inherit (lib) $0foo; in foo");
+        check_no("let inherit (lib) foo; in $0foo");
     }
 
     #[test]
