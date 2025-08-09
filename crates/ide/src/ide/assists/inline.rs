@@ -69,7 +69,11 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                 _ => None,
             });
 
-            let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
+            let is_letin = path_value
+                .syntax()
+                .parent()
+                .and_then(ast::LetIn::cast)
+                .is_some();
             if is_letin {
                 rewrites.push(TextEdit {
                     delete: path_value.syntax().text_range(),
