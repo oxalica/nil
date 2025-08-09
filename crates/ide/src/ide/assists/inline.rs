@@ -161,36 +161,15 @@ mod tests {
 
     #[test]
     fn no_inherit() {
-        check_no(
-            r#"
-{
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-  }: {
-    inherit $0flake-utils;
-  };
-}
-        "#,
-        );
-        check_no("let $0foo = 1; in { inherit foo; }");
+        check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
+        check("let $0foo = 1; in { inherit foo; }", expect!["let  in { foo = 1; }"]);
+        check_no("with lib; let inherit (lib) $0foo; in foo");
+        check_no("with lib; let inherit (lib) foo; in $0foo");
     }
 
     #[test]
     fn no_patfield() {
-        check_no(
-            r#"
-{
-  outputs = {
-    self,
-    nixpkgs,
-    $0flake-utils,
-  }: {
-    inherit flake-utils;
-  };
-}
-        "#,
-        );
+        check_no("{ outputs = { $0nixpkgs, ... }: { inherit nixpkgs; }; }");
+        check_no("{ outputs = { $0nixpkgs, ... }: nixpkgs; }");
     }
 }
