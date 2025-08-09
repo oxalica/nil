@@ -1,8 +1,9 @@
 use super::{AssistKind, AssistsCtx};
-use crate::def::{AstPtr, ResolveResult};
+use crate::def::{AstPtr, Name, ResolveResult};
 use crate::TextEdit;
+use la_arena::Idx;
 use smol_str::{SmolStr, ToSmolStr};
-use syntax::ast::AstNode;
+use syntax::ast::{AstNode, Expr};
 use syntax::{ast, SyntaxNode, TextRange};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
@@ -10,95 +11,81 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
-    let mut rewrites: Vec<TextEdit> = vec![];
+    let definition_of = |name: Idx<Name>| -> Option<Expr> {
+        let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
+        // Only provide assist when there is only one node
+        // i.e. `let a.b = 1; a.c = 2; in a` is not supported
+        if let [ptr] = nodes.as_slice() {
+            ptr.to_node(ctx.ast.syntax())
+                .parent()?
+                .parent()
+                .and_then(ast::AttrpathValue::cast)
+                .and_then(|path_value| path_value.value())
+        } else {
+            return None;
+        }
+    };
 
+    let mut rewrites: Vec<TextEdit> = vec![];
     if let Some(usage) = ctx.covering_node::<ast::Ref>() {
         let ptr = AstPtr::new(usage.syntax());
-        let expr_id = source_map.expr_for_node(ptr)?;
-        let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
+        let expr = source_map.expr_for_node(ptr)?;
+        let &ResolveResult::Definition(name) = name_res.get(expr)? else {
             return None;
         };
-        let definition = {
-            let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
-            // Only provide assist when there is only one node
-            // i.e. `let a.b = 1; a.c = 2; in a` is not supported
-            if let [ptr] = nodes.as_slice() {
-                ptr.to_node(ctx.ast.syntax())
-                    .ancestors()
-                    .flat_map(ast::AttrpathValue::cast)
-                    .find_map(|path_value| path_value.value())?
-            } else {
-                return None;
-            }
-        };
+        let definition = definition_of(name)?;
+        replace_usage(&mut rewrites, &definition, usage.syntax());
+    } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
+        let attr_syntax = attr.syntax();
 
-        rewrites.push(TextEdit {
-            delete: usage.syntax().text_range(),
-            insert: maybe_parenthesize(&definition, usage.syntax()),
-        });
-    } else if let Some(definition) = ctx.covering_node::<ast::Attr>() {
-        let parent = definition.syntax().parent();
-        if
-        // `foo` in { inherit `foo`; } is considered as an attr.
-        parent.clone().and_then(ast::Inherit::cast).is_some()
-        // `foo` in `{ foo }: …` is considered as an attr. PatField is a bind site.
-        || parent.and_then(ast::PatField::cast).is_some()
-        {
+        // `foo` in `{ foo }: …` is considered as an attr.
+        // PatField is a bind site and doesn't make sense here.
+        if attr_syntax.parent().and_then(ast::PatField::cast).is_some() {
             return None;
         }
 
-        let ptr = AstPtr::new(definition.syntax());
-        let name_id = source_map.name_for_node(ptr)?;
-        let path_value = definition
-            .syntax()
-            .ancestors()
-            .find_map(ast::AttrpathValue::cast)?;
+        // `foo` in { inherit `foo`; } is considered as an attr.
+        if attr_syntax.parent().and_then(ast::Inherit::cast).is_some() {
+            // Attr is an usage here
+            let ptr = AstPtr::new(attr.syntax());
+            let expr_id = source_map.expr_for_node(ptr)?;
+            let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
+                return None;
+            };
+            let definition = definition_of(name)?;
+            replace_usage(&mut rewrites, &definition, attr.syntax());
+        } else {
+            // attr is a definition here
+            let ptr = AstPtr::new(attr.syntax());
+            let name = source_map.name_for_node(ptr)?;
+            let path_value = attr
+                .syntax()
+                .ancestors()
+                .find_map(ast::AttrpathValue::cast)?;
 
-        // Don't provide assist when there are more than one attrname
-        if path_value.attrpath()?.attrs().count() > 1 {
-            return None;
-        };
+            // Don't provide assist when there are more than one attrname
+            if path_value.attrpath()?.attrs().count() > 1 {
+                return None;
+            };
 
-        let definition = path_value.value()?;
-
-        let usages = name_res.iter().filter_map(|(id, res)| match res {
-            &ResolveResult::Definition(def) if def == name_id => source_map
-                .node_for_expr(id)
-                .map(|ptr| ptr.to_node(ctx.ast.syntax())),
-            _ => None,
-        });
-
-        let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
-        if is_letin {
-            rewrites.push(TextEdit {
-                delete: path_value.syntax().text_range(),
-                insert: Default::default(),
+            let definition = path_value.value()?;
+            let usages = name_res.iter().filter_map(|(id, res)| match res {
+                &ResolveResult::Definition(def) if def == name => source_map
+                    .node_for_expr(id)
+                    .map(|ptr| ptr.to_node(ctx.ast.syntax())),
+                _ => None,
             });
-        };
 
-        for usage in usages {
-            let parent = usage.parent();
-            if let Some(inherit) = parent.and_then(ast::Inherit::cast) {
-                // Delete one inherit field
+            let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
+            if is_letin {
                 rewrites.push(TextEdit {
-                    delete: usage.text_range(),
-                    insert: "".into(),
+                    delete: path_value.syntax().text_range(),
+                    insert: Default::default(),
                 });
+            };
 
-                // Insert new binding right after
-                rewrites.push(TextEdit {
-                    delete: TextRange::new(
-                        inherit.syntax().text_range().end(),
-                        inherit.syntax().text_range().end(),
-                    ),
-                    // Unambiguous and never need parens
-                    insert: format!(" {} = {};", usage.text(), definition.syntax().text()).into(),
-                });
-            } else {
-                rewrites.push(TextEdit {
-                    delete: usage.text_range(),
-                    insert: maybe_parenthesize(&definition, &usage),
-                });
+            for usage in usages {
+                replace_usage(&mut rewrites, &definition, &usage);
             }
         }
     } else {
@@ -123,6 +110,33 @@ fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr
         format!("({})", replacement.syntax()).to_smolstr()
     } else {
         replacement.syntax().to_smolstr()
+    }
+}
+
+// Replace an usage of a binding
+fn replace_usage(rewrites: &mut Vec<TextEdit>, replacement: &ast::Expr, original: &SyntaxNode) {
+    let parent = original.parent();
+    if let Some(inherit) = parent.and_then(ast::Inherit::cast) {
+        // Delete one inherit field
+        rewrites.push(TextEdit {
+            delete: original.text_range(),
+            insert: Default::default(),
+        });
+
+        // Insert new binding right after
+        rewrites.push(TextEdit {
+            delete: TextRange::new(
+                inherit.syntax().text_range().end(),
+                inherit.syntax().text_range().end(),
+            ),
+            // Unambiguous and never need parens
+            insert: format!(" {} = {};", original.text(), replacement.syntax().text()).into(),
+        });
+    } else {
+        rewrites.push(TextEdit {
+            delete: original.text_range(),
+            insert: maybe_parenthesize(&replacement, &original),
+        });
     }
 }
 
