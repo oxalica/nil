@@ -11,7 +11,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
-    let definition_of = |name: Idx<Name>| -> Option<Expr> {
+    let definition_of = |name: Idx<Name>| -> Option<(Expr, ast::AttrpathValue)> {
         let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
         // Only provide assist when there is only one node
         // i.e. `let a.b = 1; a.c = 2; in a` is not supported
@@ -19,10 +19,12 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             ptr.to_node(ctx.ast.syntax())
                 .parent()?
                 .parent()
-                .and_then(ast::AttrpathValue::cast)
-                .and_then(|path_value| path_value.value())
+                .and_then(|node| {
+                    let path_value = ast::AttrpathValue::cast(node)?;
+                    Some((path_value.value()?, path_value))
+                })
         } else {
-            return None;
+            None
         }
     };
 
@@ -33,42 +35,44 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let &ResolveResult::Definition(name) = name_res.get(expr)? else {
             return None;
         };
-        let definition = definition_of(name)?;
+        let (definition, _) = definition_of(name)?;
         replace_usage(&mut rewrites, &definition, usage.syntax());
     } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
         let attr_syntax = attr.syntax();
 
         // `foo` in `{ foo }: …` is considered as an attr.
-        // PatField is a bind site and doesn't make sense here.
+        // PatField is a bind site without definition so doesn't make sense here.
         if attr_syntax.parent().and_then(ast::PatField::cast).is_some() {
             return None;
         }
 
         // `foo` in { inherit `foo`; } is considered as an attr.
-        if attr_syntax.parent().and_then(ast::Inherit::cast).is_some() {
+        if attr_syntax.parent().and_then(ast::Inherit::cast).is_some()
+            && attr_syntax
+                .parent()?
+                .parent()
+                .and_then(ast::LetIn::cast)
+                .is_none()
+        {
             // Attr is an usage here
             let ptr = AstPtr::new(attr.syntax());
             let expr_id = source_map.expr_for_node(ptr)?;
             let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
                 return None;
             };
-            let definition = definition_of(name)?;
+            let (definition, _) = definition_of(name)?;
             replace_usage(&mut rewrites, &definition, attr.syntax());
         } else {
             // attr is a definition here
             let ptr = AstPtr::new(attr.syntax());
             let name = source_map.name_for_node(ptr)?;
-            let path_value = attr
-                .syntax()
-                .ancestors()
-                .find_map(ast::AttrpathValue::cast)?;
 
+            let (definition, path_value) = definition_of(name)?;
             // Don't provide assist when there are more than one attrname
             if path_value.attrpath()?.attrs().count() > 1 {
                 return None;
             };
 
-            let definition = path_value.value()?;
             let usages = name_res.iter().filter_map(|(id, res)| match res {
                 &ResolveResult::Definition(def) if def == name => source_map
                     .node_for_expr(id)
@@ -115,8 +119,7 @@ fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr
 
 // Replace an usage of a binding
 fn replace_usage(rewrites: &mut Vec<TextEdit>, replacement: &ast::Expr, original: &SyntaxNode) {
-    let parent = original.parent();
-    if let Some(inherit) = parent.and_then(ast::Inherit::cast) {
+    if let Some(inherit) = original.parent().and_then(ast::Inherit::cast) {
         // Delete one inherit field
         rewrites.push(TextEdit {
             delete: original.text_range(),
@@ -135,7 +138,7 @@ fn replace_usage(rewrites: &mut Vec<TextEdit>, replacement: &ast::Expr, original
     } else {
         rewrites.push(TextEdit {
             delete: original.text_range(),
-            insert: maybe_parenthesize(&replacement, &original),
+            insert: maybe_parenthesize(replacement, original),
         });
     }
 }
