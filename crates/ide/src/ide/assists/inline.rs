@@ -12,20 +12,17 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let source_map = ctx.db.source_map(file_id);
 
     let definition_of = |name: Idx<Name>| -> Option<(Expr, ast::AttrpathValue)> {
-        let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
+        let defs = source_map.nodes_for_name(name).collect::<Vec<_>>();
+        let ptr = defs.first()?;
+        let grandparent = ptr.to_node(ctx.ast.syntax()).parent()?.parent()?;
+        let path_value = ast::AttrpathValue::cast(grandparent)?;
+
         // Only provide assist when there is only one node
         // i.e. `let a.b = 1; a.c = 2; in a` is not supported
-        if let [ptr] = nodes.as_slice() {
-            ptr.to_node(ctx.ast.syntax())
-                .parent()?
-                .parent()
-                .and_then(|node| {
-                    let path_value = ast::AttrpathValue::cast(node)?;
-                    Some((path_value.value()?, path_value))
-                })
-        } else {
-            None
-        }
+        if path_value.attrpath()?.attrs().count() > 1 {
+            return None;
+        };
+        Some((path_value.value()?, path_value))
     };
 
     let mut rewrites: Vec<TextEdit> = vec![];
@@ -38,21 +35,17 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let (definition, _) = definition_of(name)?;
         replace_usage(&mut rewrites, &definition, usage.syntax());
     } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
-        let attr_syntax = attr.syntax();
+        let parent = attr.syntax().parent()?;
 
         // `foo` in `{ foo }: …` is considered as an attr.
         // PatField is a bind site without definition so doesn't make sense here.
-        if attr_syntax.parent().and_then(ast::PatField::cast).is_some() {
+        if ast::PatField::cast(parent.clone()).is_some() {
             return None;
         }
 
         // `foo` in { inherit `foo`; } is considered as an attr.
-        if attr_syntax.parent().and_then(ast::Inherit::cast).is_some()
-            && attr_syntax
-                .parent()?
-                .parent()
-                .and_then(ast::LetIn::cast)
-                .is_none()
+        if ast::Inherit::cast(parent.clone()).is_some()
+            && parent.parent().and_then(ast::LetIn::cast).is_none()
         {
             // Attr is an usage here
             let ptr = AstPtr::new(attr.syntax());
@@ -68,10 +61,6 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             let name = source_map.name_for_node(ptr)?;
 
             let (definition, path_value) = definition_of(name)?;
-            // Don't provide assist when there are more than one attrname
-            if path_value.attrpath()?.attrs().count() > 1 {
-                return None;
-            };
 
             let usages = name_res.iter().filter_map(|(id, res)| match res {
                 &ResolveResult::Definition(def) if def == name => source_map
