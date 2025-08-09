@@ -3,7 +3,7 @@ use crate::def::{AstPtr, ResolveResult};
 use crate::TextEdit;
 use smol_str::{SmolStr, ToSmolStr};
 use syntax::ast::AstNode;
-use syntax::{ast, SyntaxNode};
+use syntax::{ast, SyntaxNode, TextRange};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
@@ -61,20 +61,12 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
         let definition = path_value.value()?;
 
-        let usages = name_res
-            .iter()
-            .filter_map(|(id, res)| match res {
-                &ResolveResult::Definition(def) if def == name_id => source_map
-                    .node_for_expr(id)
-                    .map(|ptr| ptr.to_node(ctx.ast.syntax())),
-                _ => None,
-            })
-            // Don't consider inherit usages for now
-            .filter(|usage| usage.parent().and_then(ast::Inherit::cast).is_none())
-            .collect::<Vec<_>>();
-        if usages.is_empty() {
-            return None;
-        }
+        let usages = name_res.iter().filter_map(|(id, res)| match res {
+            &ResolveResult::Definition(def) if def == name_id => source_map
+                .node_for_expr(id)
+                .map(|ptr| ptr.to_node(ctx.ast.syntax())),
+            _ => None,
+        });
 
         let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
         if is_letin {
@@ -85,10 +77,29 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         };
 
         for usage in usages {
-            rewrites.push(TextEdit {
-                delete: usage.text_range(),
-                insert: maybe_parenthesize(&definition, &usage),
-            });
+            let parent = usage.parent();
+            if let Some(inherit) = parent.and_then(ast::Inherit::cast) {
+                // Delete one inherit field
+                rewrites.push(TextEdit {
+                    delete: usage.text_range(),
+                    insert: "".into(),
+                });
+
+                // Insert new binding right after
+                rewrites.push(TextEdit {
+                    delete: TextRange::new(
+                        inherit.syntax().text_range().end(),
+                        inherit.syntax().text_range().end(),
+                    ),
+                    // Unambiguous and never need parens
+                    insert: format!(" {} = {};", usage.text(), definition.syntax().text()).into(),
+                });
+            } else {
+                rewrites.push(TextEdit {
+                    delete: usage.text_range(),
+                    insert: maybe_parenthesize(&definition, &usage),
+                });
+            }
         }
     } else {
         return None;
@@ -162,7 +173,10 @@ mod tests {
     #[test]
     fn no_inherit() {
         check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
-        check("let $0foo = 1; in { inherit foo; }", expect!["let  in { foo = 1; }"]);
+        check(
+            "let $0foo = 1; in { inherit foo; }",
+            expect!["let  in { foo = 1; }"],
+        );
         check_no("with lib; let inherit (lib) $0foo; in foo");
         check_no("with lib; let inherit (lib) foo; in $0foo");
     }
