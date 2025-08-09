@@ -171,18 +171,40 @@ mod tests {
     }
 
     #[test]
-    fn no_inherit() {
-        check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
+    fn allow_inherit_usage_def() {
+        // inherit in usage from definition
         check(
             "let $0foo = 1; in { inherit foo; }",
-            expect!["let  in { foo = 1; }"],
+            expect!["let  in { inherit ; foo = 1; }"],
         );
+        check(
+            "let $0foo = 1; bar = 2; in { inherit foo bar; }",
+            expect!["let  bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+    }
+
+    #[test]
+    fn allow_inherit_usage_ref() {
+        // inherit in usage from definition
+        check(
+            "let foo = 1; in { inherit $0foo; }",
+            expect!["let foo = 1; in { inherit ; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in { inherit $0foo bar; }",
+            expect!["let foo = 1; bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+    }
+
+    #[test]
+    fn no_inherit_definition() {
         check_no("with lib; let inherit (lib) $0foo; in foo");
         check_no("with lib; let inherit (lib) foo; in $0foo");
     }
 
     #[test]
     fn no_patfield() {
+        check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
         check_no("{ outputs = { $0nixpkgs, ... }: { inherit nixpkgs; }; }");
         check_no("{ outputs = { $0nixpkgs, ... }: nixpkgs; }");
     }
