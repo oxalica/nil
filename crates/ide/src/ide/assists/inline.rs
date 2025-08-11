@@ -35,7 +35,11 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let (definition, _) = definition_of(name)?;
         replace_usage(&mut rewrites, &definition, usage.syntax());
     } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
-        let parent = attr.syntax().parent()?;
+        let (parent, parent2, parent3) = {
+            let mut it = attr.syntax().ancestors();
+            it.next(); // drop self
+            (it.next()?, it.next(), it.next())
+        };
 
         // `foo` in `{ foo }: …` is considered as an attr.
         // PatField is a bind site without definition so doesn't make sense here.
@@ -45,7 +49,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
 
         // `foo` in { inherit `foo`; } is considered as an attr.
         if ast::Inherit::cast(parent.clone()).is_some()
-            && parent.parent().and_then(ast::LetIn::cast).is_none()
+            && parent2.clone().and_then(ast::AttrSet::cast).is_some()
         {
             // Attr is an usage here
             let ptr = AstPtr::new(attr.syntax());
@@ -55,12 +59,22 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             };
             let (definition, _) = definition_of(name)?;
             replace_usage(&mut rewrites, &definition, attr.syntax());
-        } else {
+        } else if let Some(path_value) = parent2.clone().and_then(ast::AttrpathValue::cast) {
+            // Only handle let in or recursive attribute set, a plain attribute set doesn't create a binding.
+            if parent3.clone().and_then(ast::LetIn::cast).is_none()
+                && parent3
+                    .clone()
+                    .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
+                    .is_none()
+            {
+                return None;
+            }
+
             // attr is a definition here
             let ptr = AstPtr::new(attr.syntax());
             let name = source_map.name_for_node(ptr)?;
 
-            let (definition, path_value) = definition_of(name)?;
+            let (definition, _) = definition_of(name)?;
 
             let usages = name_res.iter().filter_map(|(id, res)| match res {
                 &ResolveResult::Definition(def) if def == name => source_map
@@ -84,6 +98,8 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             for usage in usages {
                 replace_usage(&mut rewrites, &definition, &usage);
             }
+        } else {
+            return None;
         }
     } else {
         return None;
@@ -213,5 +229,10 @@ mod tests {
         check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
         check_no("{ outputs = { $0nixpkgs, ... }: { inherit nixpkgs; }; }");
         check_no("{ outputs = { $0nixpkgs, ... }: nixpkgs; }");
+    }
+
+    #[test]
+    fn no_attr() {
+        check_no("{ $0foo = 1; }");
     }
 }
