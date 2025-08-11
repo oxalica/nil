@@ -11,7 +11,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
-    let definition_of = |name: Idx<Name>| -> Option<(Expr, ast::AttrpathValue)> {
+    let definition_of = |name: Idx<Name>| -> Option<Expr> {
         let defs = source_map.nodes_for_name(name).collect::<Vec<_>>();
         let ptr = defs.first()?;
         let grandparent = ptr.to_node(ctx.ast.syntax()).parent()?.parent()?;
@@ -22,7 +22,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         if path_value.attrpath()?.attrs().count() > 1 {
             return None;
         };
-        Some((path_value.value()?, path_value))
+        path_value.value()
     };
 
     let mut rewrites: Vec<TextEdit> = vec![];
@@ -32,7 +32,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let &ResolveResult::Definition(name) = name_res.get(expr)? else {
             return None;
         };
-        let (definition, _) = definition_of(name)?;
+        let definition = definition_of(name)?;
         replace_usage(&mut rewrites, &definition, usage.syntax());
     } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
         let (parent, parent2, parent3) = {
@@ -57,25 +57,24 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
             let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
                 return None;
             };
-            let (definition, _) = definition_of(name)?;
+            let definition = definition_of(name)?;
             replace_usage(&mut rewrites, &definition, attr.syntax());
         } else if let Some(path_value) = parent2.clone().and_then(ast::AttrpathValue::cast) {
+            let is_letin = parent3.clone().and_then(ast::LetIn::cast).is_some();
+            let is_rec_attr = parent3
+                .clone()
+                .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
+                .is_some();
+
             // Only handle let in or recursive attribute set, a plain attribute set doesn't create a binding.
-            if parent3.clone().and_then(ast::LetIn::cast).is_none()
-                && parent3
-                    .clone()
-                    .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
-                    .is_none()
-            {
+            if !is_letin && !is_rec_attr {
                 return None;
             }
 
             // attr is a definition here
             let ptr = AstPtr::new(attr.syntax());
             let name = source_map.name_for_node(ptr)?;
-
-            let (definition, _) = definition_of(name)?;
-
+            let definition = definition_of(name)?;
             let usages = name_res.iter().filter_map(|(id, res)| match res {
                 &ResolveResult::Definition(def) if def == name => source_map
                     .node_for_expr(id)
@@ -83,18 +82,12 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                 _ => None,
             });
 
-            let is_letin = path_value
-                .syntax()
-                .parent()
-                .and_then(ast::LetIn::cast)
-                .is_some();
             if is_letin {
                 rewrites.push(TextEdit {
                     delete: path_value.syntax().text_range(),
                     insert: Default::default(),
                 });
             };
-
             for usage in usages {
                 replace_usage(&mut rewrites, &definition, &usage);
             }
