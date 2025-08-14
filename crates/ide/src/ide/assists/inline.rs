@@ -192,6 +192,10 @@ mod tests {
             "let $0foo = 1; bar = 2; in { inherit foo bar; }",
             expect!["let  bar = 2; in { inherit  bar; foo = 1; }"],
         );
+        check(
+            "let $0foo = 1; bar = 2; in let inherit foo bar; in null",
+            expect!["let  bar = 2; in let inherit  bar; foo = 1; in null"],
+        );
     }
 
     #[test]
@@ -203,6 +207,10 @@ mod tests {
         check(
             "let foo = 1; bar = 2; in { inherit $0foo bar; }",
             expect!["let foo = 1; bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in let inherit $0foo bar; in null",
+            expect!["let foo = 1; bar = 2; in let inherit  bar; foo = 1; in null"],
         );
     }
 
