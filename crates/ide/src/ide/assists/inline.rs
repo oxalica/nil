@@ -11,7 +11,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
-    let definition_of = |name: Idx<Name>| -> Option<Expr> {
+    let definition_of = |name: Idx<Name>| -> Option<(Expr, ast::AttrpathValue)> {
         let defs = source_map.nodes_for_name(name).collect::<Vec<_>>();
         let ptr = defs.first()?;
         let grandparent = ptr.to_node(ctx.ast.syntax()).parent()?.parent()?;
@@ -22,7 +22,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         if path_value.attrpath()?.attrs().count() > 1 {
             return None;
         };
-        path_value.value()
+        Some((path_value.value()?, path_value))
     };
 
     let mut rewrites: Vec<TextEdit> = vec![];
@@ -32,49 +32,44 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
         let &ResolveResult::Definition(name) = name_res.get(expr)? else {
             return None;
         };
-        let definition = definition_of(name)?;
+        let (definition, _) = definition_of(name)?;
         replace_usage(&mut rewrites, &definition, usage.syntax());
     } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
-        let (parent, parent2, parent3) = {
+        let (parent, _, parent3) = {
             let mut it = attr.syntax().ancestors();
             it.next(); // drop self
             (it.next()?, it.next(), it.next())
         };
 
+        let is_patfield = ast::PatField::cast(parent.clone()).is_some();
+        let is_inherit = ast::Inherit::cast(parent.clone()).is_some();
+        let is_in_letin = parent3.clone().and_then(ast::LetIn::cast).is_some();
+        let is_in_recattr = parent3
+            .clone()
+            .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
+            .is_some();
+
         // `foo` in `{ foo }: …` is considered as an attr.
         // PatField is a bind site without definition so doesn't make sense here.
-        if ast::PatField::cast(parent.clone()).is_some() {
+        if is_patfield {
             return None;
         }
 
-        // `foo` in { inherit `foo`; } is considered as an attr.
-        if ast::Inherit::cast(parent.clone()).is_some()
-            && parent2.clone().and_then(ast::AttrSet::cast).is_some()
-        {
+        // `foo` in `{ inherit foo; }` or `let inherit foo; in` is considered as an attr.
+        if is_inherit {
             // Attr is an usage here
             let ptr = AstPtr::new(attr.syntax());
             let expr_id = source_map.expr_for_node(ptr)?;
             let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
                 return None;
             };
-            let definition = definition_of(name)?;
+            let (definition, _) = definition_of(name)?;
             replace_usage(&mut rewrites, &definition, attr.syntax());
-        } else if let Some(path_value) = parent2.clone().and_then(ast::AttrpathValue::cast) {
-            let is_letin = parent3.clone().and_then(ast::LetIn::cast).is_some();
-            let is_rec_attr = parent3
-                .clone()
-                .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
-                .is_some();
-
-            // Only handle let in or recursive attribute set, a plain attribute set doesn't create a binding.
-            if !is_letin && !is_rec_attr {
-                return None;
-            }
-
+        } else if is_in_letin || is_in_recattr {
             // attr is a definition here
             let ptr = AstPtr::new(attr.syntax());
             let name = source_map.name_for_node(ptr)?;
-            let definition = definition_of(name)?;
+            let (definition, path_value) = definition_of(name)?;
             let usages = name_res.iter().filter_map(|(id, res)| match res {
                 &ResolveResult::Definition(def) if def == name => source_map
                     .node_for_expr(id)
@@ -82,7 +77,7 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
                 _ => None,
             });
 
-            if is_letin {
+            if is_in_letin {
                 rewrites.push(TextEdit {
                     delete: path_value.syntax().text_range(),
                     insert: Default::default(),
