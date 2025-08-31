@@ -1,80 +1,104 @@
+use std::sync::Arc;
+
 use super::{AssistKind, AssistsCtx};
-use crate::def::{AstPtr, ResolveResult};
-use crate::TextEdit;
+use crate::def::{AstPtr, Name, NameResolution, ResolveResult};
+use crate::{ModuleSourceMap, TextEdit};
+use la_arena::Idx;
 use smol_str::{SmolStr, ToSmolStr};
-use syntax::ast::AstNode;
-use syntax::{ast, SyntaxNode};
+use syntax::ast::{AstNode, Expr};
+use syntax::{ast, SyntaxNode, TextRange};
 
 pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let file_id = ctx.frange.file_id;
-    let parse = ctx.db.parse(file_id);
     let name_res = ctx.db.name_resolution(file_id);
     let source_map = ctx.db.source_map(file_id);
 
-    let mut rewrites: Vec<TextEdit> = vec![];
+    let definition_of = |name: Idx<Name>| -> Option<(ast::AttrpathValue, ast::Attr, Expr)> {
+        let defs = source_map.nodes_for_name(name).collect::<Vec<_>>();
+        let ptr = defs.first()?;
+        let grandparent = ptr.to_node(ctx.ast.syntax()).parent()?.parent()?;
+        let path_value = ast::AttrpathValue::cast(grandparent)?;
 
+        // Only provide assist when there is only one node
+        // i.e. `let a.b = 1; a.c = 2; in a` is not supported
+        let attrs = path_value.attrpath()?.attrs().collect::<Vec<_>>();
+        match attrs.as_slice() {
+            [attr] => Some((path_value.clone(), attr.clone(), path_value.value()?)),
+            _ => None,
+        }
+    };
+
+    let mut rewrites: Vec<TextEdit> = vec![];
     if let Some(usage) = ctx.covering_node::<ast::Ref>() {
         let ptr = AstPtr::new(usage.syntax());
-        let expr_id = source_map.expr_for_node(ptr)?;
-        let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
+        let expr = source_map.expr_for_node(ptr)?;
+        let &ResolveResult::Definition(name) = name_res.get(expr)? else {
             return None;
         };
-        let definition = {
-            let nodes = source_map.nodes_for_name(name).collect::<Vec<_>>();
-            // Only provide assist when there is only one node
-            // i.e. `let a.b = 1; a.c = 2; in a` is not supported
-            if let [ptr] = nodes.as_slice() {
-                ptr.to_node(&parse.syntax_node())
-                    .ancestors()
-                    .flat_map(ast::AttrpathValue::cast)
-                    .find_map(|path_value| path_value.value())?
-            } else {
+        let (_, _, definition) = definition_of(name)?;
+        replace_usage(&mut rewrites, &definition, usage.syntax());
+    } else if let Some(attr) = ctx.covering_node::<ast::Attr>() {
+        let (parent, _, parent3) = {
+            let mut it = attr.syntax().ancestors();
+            it.next(); // drop self
+            (it.next()?, it.next(), it.next())
+        };
+
+        let is_patfield = ast::PatField::cast(parent.clone()).is_some();
+        let is_inherit = ast::Inherit::cast(parent.clone()).is_some();
+        let is_in_letin = parent3.clone().and_then(ast::LetIn::cast).is_some();
+        let is_in_recattr = parent3
+            .clone()
+            .and_then(|x| ast::AttrSet::cast(x)?.rec_token())
+            .is_some();
+
+        // `foo` in `{ foo }: …` is considered as an attr.
+        // PatField is a bind site without definition so doesn't make sense here.
+        if is_patfield {
+            return None;
+        }
+
+        // `foo` in `{ inherit foo; }` or `let inherit foo; in` is considered as an attr.
+        if is_inherit {
+            // Attr is an usage here
+            let ptr = AstPtr::new(attr.syntax());
+            let expr_id = source_map.expr_for_node(ptr)?;
+            let &ResolveResult::Definition(name) = name_res.get(expr_id)? else {
+                return None;
+            };
+            let (_, _, definition) = definition_of(name)?;
+            replace_usage(&mut rewrites, &definition, attr.syntax());
+        } else if is_in_letin || is_in_recattr {
+            // attr is a definition here
+            let ptr = AstPtr::new(attr.syntax());
+            let name = source_map.name_for_node(ptr)?;
+            let (path_value, binding, definition) = definition_of(name)?;
+
+            // We must not publish assist when the binding is recursive, since it can not be rewritten.
+            let binding_ptr = AstPtr::new(binding.syntax());
+            let needle = source_map.name_for_node(binding_ptr)?;
+            if usage_count_in(needle, definition.syntax(), &source_map, &name_res) > 0 {
                 return None;
             }
-        };
 
-        rewrites.push(TextEdit {
-            delete: usage.syntax().text_range(),
-            insert: maybe_parenthesize(&definition, usage.syntax()),
-        });
-    } else if let Some(definition) = ctx.covering_node::<ast::Attr>() {
-        let ptr = AstPtr::new(definition.syntax());
-        let name_id = source_map.name_for_node(ptr)?;
-        let path_value = definition
-            .syntax()
-            .ancestors()
-            .find_map(ast::AttrpathValue::cast)?;
-
-        // Don't provide assist when there are more than one attrname
-        if path_value.attrpath()?.attrs().count() > 1 {
-            return None;
-        };
-
-        let definition = path_value.value()?;
-
-        let usages = name_res
-            .iter()
-            .filter_map(|(id, res)| match res {
-                &ResolveResult::Definition(def) if def == name_id => source_map
+            let usages = name_res.iter().filter_map(|(id, res)| match res {
+                &ResolveResult::Definition(def) if def == name => source_map
                     .node_for_expr(id)
                     .map(|ptr| ptr.to_node(ctx.ast.syntax())),
                 _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        let is_letin = ast::LetIn::cast(path_value.syntax().parent()?).is_some();
-        if is_letin {
-            rewrites.push(TextEdit {
-                delete: path_value.syntax().text_range(),
-                insert: Default::default(),
             });
-        };
 
-        for usage in usages {
-            rewrites.push(TextEdit {
-                delete: usage.text_range(),
-                insert: maybe_parenthesize(&definition, &usage),
-            });
+            if is_in_letin {
+                rewrites.push(TextEdit {
+                    delete: path_value.syntax().text_range(),
+                    insert: Default::default(),
+                });
+            };
+            for usage in usages {
+                replace_usage(&mut rewrites, &definition, &usage);
+            }
+        } else {
+            return None;
         }
     } else {
         return None;
@@ -90,6 +114,29 @@ pub(super) fn inline(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     Some(())
 }
 
+// Check recursively if one node is contained in another one.
+fn usage_count_in(
+    needle: Idx<Name>,
+    hay: &SyntaxNode,
+    source_map: &Arc<ModuleSourceMap>,
+    name_res: &Arc<NameResolution>,
+) -> i8 {
+    let self_reference_amount: i8 = hay
+        .children()
+        .map(|child| {
+            let resolve_result = source_map
+                .expr_for_node(AstPtr::new(&child))
+                .and_then(|expr_id| name_res.get(expr_id));
+
+            match resolve_result {
+                Some(&ResolveResult::Definition(name_id)) if name_id == needle => 1,
+                _ => usage_count_in(needle, &child, source_map, name_res),
+            }
+        })
+        .sum();
+    self_reference_amount
+}
+
 // Parenthesize a node properly given the replacement context
 fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr {
     let parent = original.parent().and_then(ast::Expr::cast);
@@ -101,6 +148,32 @@ fn maybe_parenthesize(replacement: &ast::Expr, original: &SyntaxNode) -> SmolStr
     }
 }
 
+// Replace an usage of a binding
+fn replace_usage(rewrites: &mut Vec<TextEdit>, replacement: &ast::Expr, original: &SyntaxNode) {
+    if let Some(inherit) = original.parent().and_then(ast::Inherit::cast) {
+        // Delete one inherit field
+        rewrites.push(TextEdit {
+            delete: original.text_range(),
+            insert: Default::default(),
+        });
+
+        // Insert new binding right after
+        rewrites.push(TextEdit {
+            delete: TextRange::new(
+                inherit.syntax().text_range().end(),
+                inherit.syntax().text_range().end(),
+            ),
+            // Unambiguous and never need parens
+            insert: format!(" {} = {};", original.text(), replacement.syntax().text()).into(),
+        });
+    } else {
+        rewrites.push(TextEdit {
+            delete: original.text_range(),
+            insert: maybe_parenthesize(replacement, original),
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use expect_test::expect;
@@ -108,10 +181,7 @@ mod tests {
 
     #[test]
     fn let_in_ref() {
-        check(
-            r#"let a = "foo"; in $0a"#,
-            expect![r#"let a = "foo"; in "foo""#],
-        );
+        check("let a = 1; in $0a", expect!["let a = 1; in 1"]);
         check(
             "let a = x: x; in $0a 1",
             expect!["let a = x: x; in (x: x) 1"],
@@ -125,12 +195,13 @@ mod tests {
 
     #[test]
     fn no_let_in_multi() {
-        check_no(r#"let a.b = "foo"; a.c = "bar"; in $0a"#);
-        check_no(r#"let a.b$0 = "foo"; a.c = "bar"; in a"#);
+        check_no("let a.b = 1; a.c = 2; in $0a");
+        check_no("let a.b$0 = 1; a.c = 2; in a");
+        check_no("let $0a.b = 1; a.c = 2; in a");
     }
 
     #[test]
-    fn attr_ref() {
+    fn rec_attr_ref() {
         check(
             "rec { foo = 1; bar = $0foo; }",
             expect!["rec { foo = 1; bar = 1; }"],
@@ -138,10 +209,83 @@ mod tests {
     }
 
     #[test]
-    fn attr_def() {
+    fn rec_attr_def() {
         check(
             "rec { $0foo = 1; bar = foo; baz = foo; }",
             expect!["rec { foo = 1; bar = 1; baz = 1; }"],
         );
+    }
+
+    #[test]
+    fn allow_inherit_usage_def() {
+        check(
+            "let $0foo = 1; in { inherit foo; }",
+            expect!["let  in { inherit ; foo = 1; }"],
+        );
+        check(
+            "let $0foo = 1; bar = 2; in { inherit foo bar; }",
+            expect!["let  bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+        check(
+            "let $0foo = 1; bar = 2; in let inherit foo bar; in null",
+            expect!["let  bar = 2; in let inherit  bar; foo = 1; in null"],
+        );
+    }
+
+    #[test]
+    fn allow_inherit_usage_ref() {
+        check(
+            "let foo = 1; in { inherit $0foo; }",
+            expect!["let foo = 1; in { inherit ; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in { inherit $0foo bar; }",
+            expect!["let foo = 1; bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in let inherit $0foo bar; in null",
+            expect!["let foo = 1; bar = 2; in let inherit  bar; foo = 1; in null"],
+        );
+    }
+
+    #[test]
+    fn no_allow_inherit_as_def() {
+        check_no("let inherit (lib) $0foo; in foo");
+        check_no("let inherit (lib) foo; in $0foo");
+    }
+
+    #[test]
+    fn no_patfield() {
+        check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
+        check_no("{ outputs = { $0nixpkgs, ... }: { inherit nixpkgs; }; }");
+        check_no("{ outputs = { $0nixpkgs, ... }: nixpkgs; }");
+    }
+
+    #[test]
+    fn no_attr() {
+        check_no("{ $0foo = 1; }");
+    }
+
+    #[test]
+    fn no_recursive_usage() {
+        // Silly but semantically correct cases
+        check(
+            "{ foo = f: let x = f x; in $0x; }",
+            expect!["{ foo = f: let x = f x; in f x; }"],
+        );
+        check(
+            "{ foo = f: let x = f $0x; in x; }",
+            expect!["{ foo = f: let x = f (f x); in x; }"],
+        );
+        check(
+            "{ foo = f: let x = f x; in { inherit $0x; }; }",
+            expect!["{ foo = f: let x = f x; in { inherit ; x = f x; }; }"],
+        );
+
+        // Cases where rewriting would change the semantics
+        check_no("{ foo = f: let $0x = f x; in x; }");
+        check_no("let $0x = f x; in x");
+        check_no("f: rec { $0x = f x; }");
+        check_no("let $0y = { y = y; }; in y");
     }
 }
