@@ -13,6 +13,7 @@ macro_rules! define_check_assist {
     };
 }
 
+mod add_to_inherit;
 mod add_to_top_level_lambda_param;
 mod convert_to_inherit;
 mod flatten_attrset;
@@ -59,6 +60,7 @@ pub(crate) fn assists(db: &dyn DefDatabase, frange: FileRange) -> Vec<Assist> {
         rewrite_string::rewrite_uri_to_string,
         rewrite_string::unquote_attr,
         inline::inline,
+        add_to_inherit::add_to_inherit,
     ];
 
     let mut ctx = AssistsCtx::new(db, frange);
