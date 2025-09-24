@@ -142,6 +142,18 @@ let
 in {}
 ```
 
+### `remove_unused_with`
+
+Remove an unused `with ...`.
+
+```nix
+foo = with pkgs; [ pkgs.bar ];
+```
+=>
+```nix
+foo = [ pkgs.bar ];
+```
+
 ### `rewrite_string_to_indented` and `rewrite_indented_to_string`
 
 Rewrite between double quoted strings and indented strings
