@@ -180,44 +180,71 @@ mod tests {
     define_check_assist!(super::inline);
 
     #[test]
-    fn let_in_ref() {
+    fn let_in() {
+        // usage
         check("let a = 1; in $0a", expect!["let a = 1; in 1"]);
         check(
             "let a = x: x; in $0a 1",
             expect!["let a = x: x; in (x: x) 1"],
         );
+        // definition
+        check("let $0a = 1; in a", expect!["let  in 1"]);
+        check("let $0a = x: x; in a 1", expect!["let  in (x: x) 1"]);
     }
 
     #[test]
-    fn let_in_def() {
-        check("let $0a = x: x; in a a", expect!["let  in (x: x) (x: x)"]);
-    }
-
-    #[test]
-    fn no_let_in_multi() {
+    fn reject_multi_let_in() {
+        // usage
         check_no("let a.b = 1; a.c = 2; in $0a");
-        check_no("let a.b$0 = 1; a.c = 2; in a");
+        // definition
         check_no("let $0a.b = 1; a.c = 2; in a");
+        check_no("let a.b$0 = 1; a.c = 2; in a");
     }
 
     #[test]
-    fn rec_attr_ref() {
+    fn rec_attr() {
+        // usage
         check(
-            "rec { foo = 1; bar = $0foo; }",
-            expect!["rec { foo = 1; bar = 1; }"],
+            "rec { foo = 1; bar = foo; baz = $0foo; }",
+            expect!["rec { foo = 1; bar = foo; baz = 1; }"],
         );
-    }
-
-    #[test]
-    fn rec_attr_def() {
+        check(
+            "rec { foo = x: x; bar = foo; baz = $0foo; }",
+            expect!["rec { foo = x: x; bar = foo; baz = x: x; }"],
+        );
+        // definition
         check(
             "rec { $0foo = 1; bar = foo; baz = foo; }",
             expect!["rec { foo = 1; bar = 1; baz = 1; }"],
         );
+        check(
+            "rec { $0foo = x: x; bar = foo; baz = foo; }",
+            expect!["rec { foo = x: x; bar = x: x; baz = x: x; }"],
+        );
     }
 
     #[test]
-    fn allow_inherit_usage_def() {
+    fn reject_non_rec_attr() {
+        check_no("{ $0foo = 1; }");
+    }
+
+    #[test]
+    fn let_inherit_in() {
+        // usage
+        check(
+            "let foo = 1; in { inherit $0foo; }",
+            expect!["let foo = 1; in { inherit ; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in { inherit $0foo bar; }",
+            expect!["let foo = 1; bar = 2; in { inherit  bar; foo = 1; }"],
+        );
+        check(
+            "let foo = 1; bar = 2; in let inherit $0foo bar; in null",
+            expect!["let foo = 1; bar = 2; in let inherit  bar; foo = 1; in null"],
+        );
+
+        // definition
         check(
             "let $0foo = 1; in { inherit foo; }",
             expect!["let  in { inherit ; foo = 1; }"],
@@ -233,58 +260,38 @@ mod tests {
     }
 
     #[test]
-    fn allow_inherit_usage_ref() {
-        check(
-            "let foo = 1; in { inherit $0foo; }",
-            expect!["let foo = 1; in { inherit ; foo = 1; }"],
-        );
-        check(
-            "let foo = 1; bar = 2; in { inherit $0foo bar; }",
-            expect!["let foo = 1; bar = 2; in { inherit  bar; foo = 1; }"],
-        );
-        check(
-            "let foo = 1; bar = 2; in let inherit $0foo bar; in null",
-            expect!["let foo = 1; bar = 2; in let inherit  bar; foo = 1; in null"],
-        );
-    }
-
-    #[test]
-    fn no_allow_inherit_as_def() {
-        check_no("let inherit (lib) $0foo; in foo");
+    fn reject_inherit_from() {
+        // usage
         check_no("let inherit (lib) foo; in $0foo");
+        check_no("{ foo = inherit (lib) $0bar; }");
+        // definition
+        check_no("let inherit (lib) $0foo; in foo");
     }
 
     #[test]
-    fn no_patfield() {
+    fn reject_patfield() {
+        // usage
         check_no("{ outputs = { nixpkgs, ... }: { inherit $0nixpkgs; }; }");
         check_no("{ outputs = { $0nixpkgs, ... }: { inherit nixpkgs; }; }");
+        // definition
         check_no("{ outputs = { $0nixpkgs, ... }: nixpkgs; }");
     }
 
     #[test]
-    fn no_attr() {
-        check_no("{ $0foo = 1; }");
-    }
-
-    #[test]
-    fn no_recursive_usage() {
+    fn recursive_usage() {
         // Silly but semantically correct cases
+        check("f: let x = f x; in $0x", expect!["f: let x = f x; in f x"]);
         check(
-            "{ foo = f: let x = f x; in $0x; }",
-            expect!["{ foo = f: let x = f x; in f x; }"],
+            "f: let x = f $0x; in x",
+            expect!["f: let x = f (f x); in x"],
         );
         check(
-            "{ foo = f: let x = f $0x; in x; }",
-            expect!["{ foo = f: let x = f (f x); in x; }"],
-        );
-        check(
-            "{ foo = f: let x = f x; in { inherit $0x; }; }",
-            expect!["{ foo = f: let x = f x; in { inherit ; x = f x; }; }"],
+            "f: let x = f x; in { inherit $0x; }",
+            expect!["f: let x = f x; in { inherit ; x = f x; }"],
         );
 
         // Cases where rewriting would change the semantics
-        check_no("{ foo = f: let $0x = f x; in x; }");
-        check_no("let $0x = f x; in x");
+        check_no("f: let $0x = f x; in x");
         check_no("f: rec { $0x = f x; }");
         check_no("let $0y = { y = y; }; in y");
     }
