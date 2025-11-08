@@ -1,9 +1,13 @@
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::{path, vec};
+
 use crate::def::{AstPtr, BindingValue, Expr, ExprId, ModuleScopes, NameKind};
 use crate::ty::{self, AttrSource, DisplayConfig, Ty};
-use crate::{FilePos, InferenceResult, Module, ModuleSourceMap, TyDatabase};
+use crate::{FilePos, InferenceResult, Module, ModuleSourceMap, TyDatabase, VfsPath};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use smol_str::SmolStr;
-use syntax::ast::{self, AstNode};
+use smol_str::{SmolStr, ToSmolStr};
+use syntax::ast::{self, AstNode, LiteralKind};
 use syntax::rowan::TokenAtOffset;
 use syntax::semantic::{escape_literal_attr, is_valid_ident, AttrKind};
 use syntax::{match_ast, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, T};
@@ -61,6 +65,8 @@ pub enum CompletionItemKind {
     BuiltinConst,
     BuiltinFunction,
     BuiltinAttrset,
+    File,
+    Folder,
 }
 
 impl From<BuiltinKind> for CompletionItemKind {
@@ -90,6 +96,7 @@ struct Context<'a> {
     scopes: &'a ModuleScopes,
     infer: &'a InferenceResult,
     fpos: FilePos,
+    vfs_path: VfsPath,
     // The token at cursor (left biased) to complete.
     token: SyntaxToken,
     // The replace range for the result.
@@ -106,6 +113,9 @@ pub(crate) fn completions(
 ) -> Vec<CompletionItem> {
     let parse = db.parse(file_id);
 
+    let sid = db.file_source_root(file_id);
+    let vfs_path = db.source_root(sid).path_for_file(file_id).clone();
+
     // Always completes from the LHS if we are in the middle of two tokens,
     // with the exception when LHS is the binding terminator `;`,
     // then we must regard it as a new binding starting.
@@ -120,7 +130,9 @@ pub(crate) fn completions(
     // the result should replace it.
     // Otherwise, if we are not in (or after) any identifiers, we are completing a fresh new
     // identifier or snippet, the result should be inserted to the current position.
-    let (replace_range, prefix) = if token.kind() == SyntaxKind::IDENT || token.kind().is_keyword()
+    let (replace_range, prefix) = if token.kind() == SyntaxKind::IDENT
+        || token.kind() == SyntaxKind::PATH
+        || token.kind().is_keyword()
     {
         // Clamp the prefix range in case where we are typing inside an identifier.
         // Eg. `foo|bar`. This is not clear if we want to replace `foobar` or just insert,
@@ -142,6 +154,7 @@ pub(crate) fn completions(
         scopes: &scopes,
         infer: &infer,
         fpos,
+        vfs_path,
         token: token.clone(),
         replace_range,
         prefix,
@@ -241,6 +254,9 @@ impl Context<'_> {
         if prefix.is_empty() {
             return true;
         }
+
+        let p_str = String::from_utf8_lossy(prefix);
+        // FIXME: this is broken i think?
         for b in replace.bytes() {
             if prefix.first().unwrap() == &b {
                 prefix = &prefix[1..];
@@ -300,6 +316,116 @@ impl Context<'_> {
     /// Complete in expression position, with the name scope of `expr_node`.
     /// Eg. `a + |` or `let a = 1; in |`.
     fn complete_expr(&mut self, expr_node: ast::Expr) -> Option<()> {
+        if let ast::Expr::Literal(ref literal) = expr_node {
+            // FIXME: `./$0` isn't considered a Path but a BINARY_OP.
+            // Probably an issue with parser?
+            // Maybe parser could changed to work similarly like
+            // in the case of trailing slash error in paths?
+            // I.e. It needs to be parsed path but still disallow it.
+
+            if literal.kind() == Some(LiteralKind::Path)
+                && matches!(self.vfs_path, VfsPath::Path(_))
+            {
+                let curr_file_path = match &self.vfs_path {
+                    VfsPath::Path(x) => x,
+                    VfsPath::Virtual(_) => unreachable!("we just checked it's not Virtual"),
+                };
+
+                let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = vec![
+                    // "../".to_string() // If we're gonna display this at all,
+                    // display only if the path is valid.
+                ];
+
+                let raw_literal = literal.token().unwrap().to_string();
+
+                // NOTE: "*" is a valid character in unix path,
+                // but it's not supported in Nix path literals,
+                // so we don't have to care about escaping "*"" for globbing.
+                let literal_path = PathBuf::from_str(&(raw_literal + "*")).unwrap();
+
+                let is_original_path_starts_with_dot_component = literal_path
+                    .components()
+                    .nth(0)
+                    .expect("path literals should have at least 1 segment")
+                    .eq(&path::Component::CurDir);
+
+                // Glob root should be relative to the current file dir, not the workspace root.
+                let glob_root = curr_file_path
+                    .parent()
+                    .expect("a file in a workspace should always have parent dir");
+
+                // This works for absolute literal paths as well.
+                let path = glob_root.join(literal_path);
+
+                let pattern = path.display().to_string();
+
+                let glob_paths = glob::glob_with(
+                    &pattern,
+                    glob::MatchOptions {
+                        case_sensitive: false,
+                        require_literal_separator: true,
+                        require_literal_leading_dot: false,
+                    },
+                )
+                .expect("glob pattern must be valid")
+                .take(300); // FIXME: do we even wanna limit here or not?
+
+                for entry in glob_paths {
+                    let entry = match entry {
+                        Ok(x) => x,
+                        Err(e) => {
+                            tracing::debug!("glob error: {e:?}");
+                            continue;
+                        }
+                    };
+
+                    // FIXME: there are some shenanigans with ".." in paths,
+                    // because I think glob drops ".." from the middle of result paths?
+                    // In such cases the completion entry will be wrong.
+                    let entry = entry.strip_prefix(glob_root).unwrap_or(&entry);
+
+                    let entry_path: SmolStr = {
+                        let mut pb = PathBuf::new();
+                        if is_original_path_starts_with_dot_component
+                            && entry.is_relative()
+                            && entry
+                                .iter()
+                                .nth(0)
+                                .map(|segment| segment == ".")
+                                .unwrap_or(true)
+                        {
+                            // Glob entries drop "." first component, but we want it preserved.
+                            pb.push(path::Component::CurDir);
+                        }
+                        pb.push(entry);
+                        pb.to_string_lossy().to_smolstr()
+                    };
+
+                    let kind = if entry.is_dir() {
+                        CompletionItemKind::Folder
+                    } else {
+                        CompletionItemKind::File // or symlink.
+                    };
+
+                    path_completions.push((entry_path, kind));
+                }
+
+                for (path, compl_kind) in path_completions {
+                    self.record_item(CompletionItem {
+                        label: path.clone(),
+                        replace_range: self.replace_range,
+                        replace: path.clone(),
+                        kind: compl_kind,
+                        signature: None,
+                        description: None,
+                        documentation: None,
+                    });
+                }
+            }
+
+            return Some(());
+        };
+
         let expr_id = self
             .source_map
             .expr_for_node(AstPtr::new(expr_node.syntax()))?;
@@ -649,6 +775,11 @@ mod tests {
         check("let i$0", "in", expect!["(Keyword) let in"]);
         check("if a th$0", "then", expect!["(Keyword) if a then"]);
     }
+
+    // #[test]
+    // fn filesystem_path() {
+    //     todo!()
+    // }
 
     #[test]
     fn local_binding() {

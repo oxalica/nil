@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 builtin = { path = "../builtin" }
 either = "1.8.0"
+glob = "0.3.2"
 if_chain = "1.0.2"
 indexmap = "2"
 itertools = "0.14"
@@ -20,6 +21,7 @@ smallvec = { version = "1.10.0", features = ["const_generics", "union"] }
 smol_str = "0.3"
 syntax = { path = "../syntax" }
 url = "2.3.1"
+tracing = { version = "0.1.36", features = ["release_max_level_debug"] }
 
 [dev-dependencies]
 anyhow = "1.0.60"

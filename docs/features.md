@@ -42,6 +42,7 @@ This incomplete list tracks noteble features currently implemented or planned.
           Evaluated from the flake input named `nixpkgs`.
   - [x] Pat-parameter definition.
     - [x] Flake inputs in the parameter of `outputs`.
+  - [x] Filesystem path completion.
 
 - [x] Diagnostics. `textDocument/publishDiagnostics`
 
