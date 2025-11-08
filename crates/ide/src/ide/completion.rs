@@ -317,116 +317,12 @@ impl Context<'_> {
             if literal.kind() == Some(LiteralKind::Path)
                 && matches!(self.vfs_path, VfsPath::Path(_))
             {
-                let curr_file_path = match &self.vfs_path {
-                    VfsPath::Path(x) => x,
+                let curr_file_path = match self.vfs_path {
+                    VfsPath::Path(ref x) => x.clone(),
                     VfsPath::Virtual(_) => unreachable!("we just checked it's not Virtual"),
                 };
 
-                let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
-
-                let raw_literal = literal
-                    .token()
-                    .expect("path literal should be stored as token")
-                    .to_string();
-
-                // NOTE: "*" is a valid character in unix path,
-                // but it's not supported in Nix path literals,
-                // so we don't have to care about escaping it for globbing.
-                // This applies to other glob special chars as well.
-                let literal_path = PathBuf::from_str(&(raw_literal + "*"))
-                    .expect("path literal should be valid as a path");
-
-                let (literal_path_cleaned, home_dir_to_strip) = match literal_path
-                    .strip_prefix("~/")
-                {
-                    Ok(p) => match std::env::var("HOME").unwrap_or_default().as_str() {
-                        "" => {
-                            // TODO: log warning about unset $HOME?
-                            return None;
-                        }
-                        home_dir => (PathBuf::from(home_dir).join(p), Some(home_dir.to_string())),
-                    },
-                    Err(_) => (literal_path, None),
-                };
-
-                // Glob root should be relative to the current file dir, not the workspace root.
-                let glob_root = curr_file_path
-                    .parent()
-                    .expect("a file in a workspace should always have parent dir");
-
-                // (This works for absolute literal paths as well)
-                let glob_pattern = glob_root.join(&literal_path_cleaned).display().to_string();
-
-                let glob_paths = glob::glob_with(
-                    &glob_pattern,
-                    glob::MatchOptions {
-                        case_sensitive: false,
-                        require_literal_separator: true,
-                        require_literal_leading_dot: false,
-                    },
-                )
-                .expect("glob pattern should be valid");
-
-                for glob_path in glob_paths {
-                    let Ok(entry) = glob_path else {
-                        // TODO: maybe log the glob error?
-                        continue;
-                    };
-
-                    // Replace absolute path with relative, if it was relative before.
-                    let entry = if literal_path_cleaned.is_relative() {
-                        entry.strip_prefix(glob_root).unwrap_or(&entry)
-                    } else {
-                        &entry
-                    };
-
-                    // Replace absolute home path back to `~` if it was substituted.
-                    let entry = &match home_dir_to_strip {
-                        Some(ref home_dir) => entry
-                            .strip_prefix(home_dir)
-                            .map(|p| {
-                                PathBuf::from_str("~/")
-                                    .expect("~/ is always valid filepath")
-                                    .join(p)
-                            })
-                            .unwrap_or(entry.to_path_buf()),
-                        None => entry.to_path_buf(),
-                    };
-
-                    let path_cleaned: SmolStr = {
-                        let mut pb = PathBuf::new();
-                        if entry.is_relative()
-                            && !entry.starts_with(".")
-                            && !entry.starts_with("..")
-                            && !entry.starts_with("~")
-                        {
-                            // Re-add "." as first component for relative paths.
-                            pb.push(path::Component::CurDir);
-                        }
-                        pb.push(entry);
-                        pb.to_string_lossy().to_smolstr()
-                    };
-
-                    let kind = if entry.is_dir() {
-                        CompletionItemKind::Folder
-                    } else {
-                        CompletionItemKind::File // or symlink.
-                    };
-
-                    path_completions.push((path_cleaned, kind));
-                }
-
-                for (path, compl_kind) in path_completions {
-                    self.record_item(CompletionItem {
-                        label: path.clone(),
-                        replace_range: self.replace_range,
-                        replace: path.clone(),
-                        kind: compl_kind,
-                        signature: None,
-                        description: None,
-                        documentation: None,
-                    });
-                }
+                self.complete_filepath(curr_file_path, literal)?;
             }
 
             return Some(());
@@ -492,6 +388,118 @@ impl Context<'_> {
             });
 
         Some(())
+    }
+
+    fn complete_filepath(
+        &mut self,
+        curr_file_path: PathBuf,
+        filepath_literal: &ast::Literal,
+    ) -> Option<()> {
+        let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
+
+        let raw_literal = filepath_literal
+            .token()
+            .expect("path literal should be stored as token")
+            .to_string();
+
+        // NOTE: "*" is a valid character in unix path,
+        // but it's not supported in Nix path literals,
+        // so we don't have to care about escaping it for globbing.
+        // This applies to other glob special chars as well.
+        let glob_pattern_1 = PathBuf::from_str(&(raw_literal + "*"))
+            .expect("path literal should be valid as a path");
+
+        let (glob_pattern_cleaned, home_dir_to_strip) = match glob_pattern_1.strip_prefix("~/") {
+            Ok(p) => match std::env::var("HOME").unwrap_or_default().as_str() {
+                "" => {
+                    // TODO: log warning about unset $HOME?
+                    return None;
+                }
+                home_dir => (PathBuf::from(home_dir).join(p), Some(home_dir.to_string())),
+            },
+            Err(_) => (glob_pattern_1, None),
+        };
+
+        // Glob root should be relative to the current file dir, not the workspace root.
+        let glob_root = curr_file_path
+            .parent()
+            .expect("a file in a workspace should always have parent dir");
+
+        // (This works for absolute literal paths as well)
+        let glob_pattern_abs = glob_root.join(&glob_pattern_cleaned).display().to_string();
+
+        let glob_results = glob::glob_with(
+            &glob_pattern_abs,
+            glob::MatchOptions {
+                case_sensitive: false,
+                require_literal_separator: true,
+                require_literal_leading_dot: false,
+            },
+        )
+        .expect("glob pattern should be valid");
+
+        for glob_result in glob_results {
+            let Ok(entry) = glob_result else {
+                // TODO: maybe log the glob error?
+                continue;
+            };
+
+            // Replace absolute path with relative, if it was relative before.
+            let entry = if glob_pattern_cleaned.is_relative() {
+                entry.strip_prefix(glob_root).unwrap_or(&entry)
+            } else {
+                &entry
+            };
+
+            // Replace absolute home path back to `~` if it was substituted.
+            let entry = &match home_dir_to_strip {
+                Some(ref home_dir) => entry
+                    .strip_prefix(home_dir)
+                    .map(|p| {
+                        PathBuf::from_str("~/")
+                            .expect("~/ is always valid filepath")
+                            .join(p)
+                    })
+                    .unwrap_or(entry.to_path_buf()),
+                None => entry.to_path_buf(),
+            };
+
+            let path_cleaned: SmolStr = {
+                let mut pb = PathBuf::new();
+                if entry.is_relative()
+                    && !entry.starts_with(".")
+                    && !entry.starts_with("..")
+                    && !entry.starts_with("~")
+                {
+                    // Re-add "." as first component for relative paths.
+                    pb.push(path::Component::CurDir);
+                }
+                pb.push(entry);
+                pb.to_string_lossy().to_smolstr()
+            };
+
+            let kind = if entry.is_dir() {
+                CompletionItemKind::Folder
+            } else {
+                CompletionItemKind::File // or symlink.
+            };
+
+            path_completions.push((path_cleaned, kind));
+        }
+
+        for (path, compl_kind) in path_completions {
+            self.record_item(CompletionItem {
+                label: path.clone(),
+                replace_range: self.replace_range,
+                replace: path.clone(),
+                kind: compl_kind,
+                signature: None,
+                description: None,
+                documentation: None,
+            });
+        }
+
+        None
     }
 
     /// Complete in binding position.
@@ -781,11 +789,6 @@ mod tests {
         check("let i$0", "in", expect!["(Keyword) let in"]);
         check("if a th$0", "then", expect!["(Keyword) if a then"]);
     }
-
-    // #[test]
-    // fn filesystem_path() {
-    //     todo!()
-    // }
 
     #[test]
     fn local_binding() {
