@@ -1,6 +1,6 @@
+use std::path;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{path, vec};
 
 use crate::def::{AstPtr, BindingValue, Expr, ExprId, ModuleScopes, NameKind};
 use crate::ty::{self, AttrSource, DisplayConfig, Ty};
@@ -255,7 +255,6 @@ impl Context<'_> {
             return true;
         }
 
-        let p_str = String::from_utf8_lossy(prefix);
         // FIXME: this is broken i think?
         for b in replace.bytes() {
             if prefix.first().unwrap() == &b {
@@ -317,12 +316,6 @@ impl Context<'_> {
     /// Eg. `a + |` or `let a = 1; in |`.
     fn complete_expr(&mut self, expr_node: ast::Expr) -> Option<()> {
         if let ast::Expr::Literal(ref literal) = expr_node {
-            // FIXME: `./$0` isn't considered a Path but a BINARY_OP.
-            // Probably an issue with parser?
-            // Maybe parser could changed to work similarly like
-            // in the case of trailing slash error in paths?
-            // I.e. It needs to be parsed path but still disallow it.
-
             if literal.kind() == Some(LiteralKind::Path)
                 && matches!(self.vfs_path, VfsPath::Path(_))
             {
@@ -331,47 +324,48 @@ impl Context<'_> {
                     VfsPath::Virtual(_) => unreachable!("we just checked it's not Virtual"),
                 };
 
-                let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = vec![
-                    // "../".to_string() // If we're gonna display this at all,
-                    // display only if the path is valid.
-                ];
+                let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
 
                 let raw_literal = literal.token().unwrap().to_string();
 
                 // NOTE: "*" is a valid character in unix path,
                 // but it's not supported in Nix path literals,
-                // so we don't have to care about escaping "*"" for globbing.
+                // so we don't have to care about escaping it for globbing.
+                // This applies to other glob special chars as well.
                 let literal_path = PathBuf::from_str(&(raw_literal + "*")).unwrap();
 
-                let is_original_path_starts_with_dot_component = literal_path
-                    .components()
-                    .nth(0)
-                    .expect("path literals should have at least 1 segment")
-                    .eq(&path::Component::CurDir);
+                let (literal_path_cleaned, home_dir_to_strip) =
+                    match literal_path.strip_prefix("~/") {
+                        Ok(stripped) => match std::env::home_dir() {
+                            Some(home_dir) => (home_dir.join(stripped), Some(home_dir)),
+                            None => {
+                                // TODO: log warning about unset $HOME?
+                                return None;
+                            }
+                        },
+                        Err(_) => (literal_path, None),
+                    };
 
                 // Glob root should be relative to the current file dir, not the workspace root.
                 let glob_root = curr_file_path
                     .parent()
                     .expect("a file in a workspace should always have parent dir");
 
-                // This works for absolute literal paths as well.
-                let path = glob_root.join(literal_path);
-
-                let pattern = path.display().to_string();
+                // (This works for absolute literal paths as well)
+                let glob_pattern = glob_root.join(&literal_path_cleaned).display().to_string();
 
                 let glob_paths = glob::glob_with(
-                    &pattern,
+                    &glob_pattern,
                     glob::MatchOptions {
                         case_sensitive: false,
                         require_literal_separator: true,
                         require_literal_leading_dot: false,
                     },
                 )
-                .expect("glob pattern must be valid")
-                .take(300); // FIXME: do we even wanna limit here or not?
+                .expect("glob pattern must be valid");
 
-                for entry in glob_paths {
-                    let entry = match entry {
+                for glob_path in glob_paths {
+                    let entry = match glob_path {
                         Ok(x) => x,
                         Err(e) => {
                             tracing::debug!("glob error: {e:?}");
@@ -379,22 +373,34 @@ impl Context<'_> {
                         }
                     };
 
-                    // FIXME: there are some shenanigans with ".." in paths,
-                    // because I think glob drops ".." from the middle of result paths?
-                    // In such cases the completion entry will be wrong.
-                    let entry = entry.strip_prefix(glob_root).unwrap_or(&entry);
+                    // Replace absolute path with relative, if it was relative before.
+                    let entry = if literal_path_cleaned.is_relative() {
+                        entry.strip_prefix(glob_root).unwrap_or(&entry)
+                    } else {
+                        &entry
+                    };
 
-                    let entry_path: SmolStr = {
+                    // Replace absolute home path back to `~` if it was substituted.
+                    let entry = &match home_dir_to_strip {
+                        Some(ref home_dir) => entry
+                            .strip_prefix(home_dir)
+                            .map(|p| {
+                                PathBuf::from_str("~/")
+                                    .expect("~/ is always valid filepath")
+                                    .join(p)
+                            })
+                            .unwrap_or(entry.to_path_buf()),
+                        None => entry.to_path_buf(),
+                    };
+
+                    let path_cleaned: SmolStr = {
                         let mut pb = PathBuf::new();
-                        if is_original_path_starts_with_dot_component
-                            && entry.is_relative()
-                            && entry
-                                .iter()
-                                .nth(0)
-                                .map(|segment| segment == ".")
-                                .unwrap_or(true)
+                        if entry.is_relative()
+                            && !entry.starts_with(".")
+                            && !entry.starts_with("..")
+                            && !entry.starts_with("~")
                         {
-                            // Glob entries drop "." first component, but we want it preserved.
+                            // Re-add "." as first component for relative paths.
                             pb.push(path::Component::CurDir);
                         }
                         pb.push(entry);
@@ -407,7 +413,7 @@ impl Context<'_> {
                         CompletionItemKind::File // or symlink.
                     };
 
-                    path_completions.push((entry_path, kind));
+                    path_completions.push((path_cleaned, kind));
                 }
 
                 for (path, compl_kind) in path_completions {

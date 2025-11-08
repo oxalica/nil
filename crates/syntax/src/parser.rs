@@ -471,7 +471,7 @@ impl Parser<'_> {
             }
             Some(k @ (INT | FLOAT | PATH | SEARCH_PATH | URI)) => {
                 if k == PATH {
-                    self.validate_path_fragment(false);
+                    self.validate_path_fragment(false, false);
                 }
                 self.start_node(LITERAL);
                 self.bump();
@@ -553,7 +553,7 @@ impl Parser<'_> {
                 }
                 PATH_FRAGMENT => {
                     let is_last = matches!(self.peek_iter_non_ws().nth(1), Some(PATH_END));
-                    self.validate_path_fragment(!is_last);
+                    self.validate_path_fragment(!is_last, true);
                     self.bump();
                 }
                 T!["${"] => self.dynamic(),
@@ -565,7 +565,11 @@ impl Parser<'_> {
     }
 
     /// Validate the next path fragment and emit errors about slashes.
-    fn validate_path_fragment(&mut self, allow_trailing_slash: bool) {
+    fn validate_path_fragment(
+        &mut self,
+        allow_trailing_slash: bool,
+        is_inside_path_interpolation: bool,
+    ) {
         let Some((PATH_FRAGMENT | PATH, range)) = self.peek_full() else {
             unreachable!()
         };
@@ -581,8 +585,17 @@ impl Parser<'_> {
                     kind: ErrorKind::PathDuplicatedSlashes,
                 });
             });
+
         let last_char = TextRange::at(range.end() - TextSize::from(1), 1.into());
-        if !allow_trailing_slash && &self.src[last_char] == "/" {
+
+        if !is_inside_path_interpolation
+            && (&self.src[range] == "./" || &self.src[range] == "../" || &self.src[range] == "~/")
+        {
+            self.errors.push(Error {
+                range,
+                kind: ErrorKind::PathDotSlashInsufficient,
+            });
+        } else if !allow_trailing_slash && &self.src[last_char] == "/" {
             self.errors.push(Error {
                 range: last_char,
                 kind: ErrorKind::PathTrailingSlash,
