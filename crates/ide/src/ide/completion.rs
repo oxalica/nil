@@ -254,7 +254,6 @@ impl Context<'_> {
         if prefix.is_empty() {
             return true;
         }
-
         for b in replace.bytes() {
             if prefix.first().unwrap() == &b {
                 prefix = &prefix[1..];
@@ -325,13 +324,17 @@ impl Context<'_> {
 
                 let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
 
-                let raw_literal = literal.token().unwrap().to_string();
+                let raw_literal = literal
+                    .token()
+                    .expect("path literal should be stored as token")
+                    .to_string();
 
                 // NOTE: "*" is a valid character in unix path,
                 // but it's not supported in Nix path literals,
                 // so we don't have to care about escaping it for globbing.
                 // This applies to other glob special chars as well.
-                let literal_path = PathBuf::from_str(&(raw_literal + "*")).unwrap();
+                let literal_path = PathBuf::from_str(&(raw_literal + "*"))
+                    .expect("path literal should be valid as a path");
 
                 let (literal_path_cleaned, home_dir_to_strip) = match literal_path
                     .strip_prefix("~/")
@@ -362,15 +365,12 @@ impl Context<'_> {
                         require_literal_leading_dot: false,
                     },
                 )
-                .expect("glob pattern must be valid");
+                .expect("glob pattern should be valid");
 
                 for glob_path in glob_paths {
-                    let entry = match glob_path {
-                        Ok(x) => x,
-                        Err(e) => {
-                            tracing::debug!("glob error: {e:?}");
-                            continue;
-                        }
+                    let Ok(entry) = glob_path else {
+                        // TODO: maybe log the glob error?
+                        continue;
                     };
 
                     // Replace absolute path with relative, if it was relative before.
