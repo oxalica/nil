@@ -255,7 +255,6 @@ impl Context<'_> {
             return true;
         }
 
-        // FIXME: this is broken i think?
         for b in replace.bytes() {
             if prefix.first().unwrap() == &b {
                 prefix = &prefix[1..];
@@ -334,17 +333,18 @@ impl Context<'_> {
                 // This applies to other glob special chars as well.
                 let literal_path = PathBuf::from_str(&(raw_literal + "*")).unwrap();
 
-                let (literal_path_cleaned, home_dir_to_strip) =
-                    match literal_path.strip_prefix("~/") {
-                        Ok(stripped) => match std::env::home_dir() {
-                            Some(home_dir) => (home_dir.join(stripped), Some(home_dir)),
-                            None => {
-                                // TODO: log warning about unset $HOME?
-                                return None;
-                            }
-                        },
-                        Err(_) => (literal_path, None),
-                    };
+                let (literal_path_cleaned, home_dir_to_strip) = match literal_path
+                    .strip_prefix("~/")
+                {
+                    Ok(p) => match std::env::var("HOME").unwrap_or_default().as_str() {
+                        "" => {
+                            // TODO: log warning about unset $HOME?
+                            return None;
+                        }
+                        home_dir => (PathBuf::from(home_dir).join(p), Some(home_dir.to_string())),
+                    },
+                    Err(_) => (literal_path, None),
+                };
 
                 // Glob root should be relative to the current file dir, not the workspace root.
                 let glob_root = curr_file_path
