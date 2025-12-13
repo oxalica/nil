@@ -322,7 +322,7 @@ impl Context<'_> {
                     VfsPath::Virtual(_) => unreachable!("we just checked it's not Virtual"),
                 };
 
-                self.complete_filepath(curr_file_path, literal)?;
+                self.complete_filepath(curr_file_path)?;
             }
 
             return Some(());
@@ -390,23 +390,14 @@ impl Context<'_> {
         Some(())
     }
 
-    fn complete_filepath(
-        &mut self,
-        curr_file_path: PathBuf,
-        filepath_literal: &ast::Literal,
-    ) -> Option<()> {
+    fn complete_filepath(&mut self, curr_file_path: PathBuf) -> Option<()> {
         let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
-
-        let raw_literal = filepath_literal
-            .token()
-            .expect("path literal should be stored as token")
-            .to_string();
 
         // NOTE: "*" is a valid character in unix path,
         // but it's not supported in Nix path literals,
         // so we don't have to care about escaping it for globbing.
         // This applies to other glob special chars as well.
-        let glob_pattern_1 = PathBuf::from_str(&(raw_literal + "*"))
+        let glob_pattern_1 = PathBuf::from_str(&(self.prefix.to_owned() + "*"))
             .expect("path literal should be valid as a path");
 
         let (glob_pattern_cleaned, home_dir_to_strip) = match glob_pattern_1.strip_prefix("~/") {

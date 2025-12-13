@@ -639,7 +639,6 @@ dependencies = [
  "smallvec",
  "smol_str",
  "syntax",
- "tracing",
  "url",
 ]
 
