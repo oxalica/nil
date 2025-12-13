@@ -43,6 +43,7 @@ pub enum ErrorKind {
     ExpectBinding,
     PathTrailingSlash,
     PathDuplicatedSlashes,
+    PathDotSlashInsufficient,
 }
 
 impl fmt::Display for ErrorKind {
@@ -61,6 +62,9 @@ impl fmt::Display for ErrorKind {
             Self::ExpectBinding => "Expecting a binding like `path = value;` or `inherit attr;`",
             Self::PathTrailingSlash => "Path with trailing slash is not allowed",
             Self::PathDuplicatedSlashes => "Path with duplicated slashes is not allowed",
+            Self::PathDotSlashInsufficient => {
+                "Paths like `./` and `../` are not allowed. Replace with `./.` or `../.`"
+            }
         }
         .fmt(f)
     }
