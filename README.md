@@ -50,7 +50,7 @@ Flake output structure (not necessarily up-to-date):
 
 ### Neovim native LSP and [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig)
 
-We are officially supported by nvim-lspconfig, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/0fafc3ef648bd612757630097c96b725a36a0476/doc/server_configurations.txt#nil_ls),
+We are officially supported by nvim-lspconfig, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/master/doc/configs.md#nil_ls),
 also [the example config for testing](dev/nvim-lsp.nix).
 
 :warning: There is a known performance issue for semantic highlighting with
