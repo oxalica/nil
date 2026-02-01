@@ -17,7 +17,7 @@ pub async fn eval_all_options(nix_command: &Path, nixpkgs_path: &Path) -> Result
         .kill_on_drop(true)
         .args([
             "eval",
-            "--experimental-features",
+            "--extra-experimental-features",
             "nix-command",
             "--read-only",
             "--impure",

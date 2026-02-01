@@ -23,7 +23,7 @@ pub async fn eval_flake_output(
         .args([
             "flake",
             "show",
-            "--experimental-features",
+            "--extra-experimental-features",
             "nix-command flakes",
             "--json",
         ])
