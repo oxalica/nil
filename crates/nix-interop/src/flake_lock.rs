@@ -213,7 +213,7 @@ pub async fn archive(nix_command: &Path, flake_url: &FlakeUrl) -> Result<()> {
         .args([
             "flake",
             "archive",
-            "--experimental-features",
+            "--extra-experimental-features",
             "nix-command flakes",
             "--json",
         ])
