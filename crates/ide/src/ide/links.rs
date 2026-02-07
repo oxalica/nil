@@ -91,14 +91,34 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
     let mut uri = Url::parse(uri).ok()?;
     let scheme = uri.scheme();
 
-    // Shortcut `github:owner/repo(/ref_or_rev)?`.
+    // Shortcut `github:owner/repo(/ref_or_rev)?`
     if scheme == "github" {
-        let mut iter = uri.path().splitn(3, '/');
+        let mut iter = uri.path().split('/');
         let owner = iter.next()?;
         let repo = iter.next()?;
-        // let rev = iter.next()?; // TODO
+
+        let extra_segments = match iter.next() {
+            Some("pull") => {
+                let pr_num = iter.next()?;
+                format!("/pull/{pr_num}")
+            }
+            Some(ref_or_rev) => {
+                format!("/tree/{ref_or_rev}")
+            }
+            None => uri
+                .query_pairs()
+                .find_map(|(k, v)| {
+                    if k == "rev" || k == "ref" {
+                        Some(format!("/tree/{v}"))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default(),
+        };
+
         return Some(
-            format!("https://github.com/{owner}/{repo}")
+            format!("https://github.com/{owner}/{repo}{extra_segments}")
                 .parse()
                 .unwrap(),
         );
@@ -183,14 +203,18 @@ mod tests {
             r#"[
                 github:NixOS/nixpkgs
                 "github:NixOS/nixpkgs/nixos-22.05"
+                "github:NixOS/nixpkgs/e576e3c9cf9bad747afcddd9e34f51d18c855b4e"
+                "github:NixOS/nixpkgs/e576e3c"
                 "github:NixOS/nixpkgs/pull/190594/head"
                 "file:///root"
                 "https://example.com?foo=1#bar"
             ]"#,
             expect![[r#"
                 github:NixOS/nixpkgs -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
-                "github:NixOS/nixpkgs/nixos-22.05" -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
-                "github:NixOS/nixpkgs/pull/190594/head" -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
+                "github:NixOS/nixpkgs/nixos-22.05" -> https://github.com/NixOS/nixpkgs/tree/nixos-22.05: https://github.com/NixOS/nixpkgs/tree/nixos-22.05
+                "github:NixOS/nixpkgs/e576e3c9cf9bad747afcddd9e34f51d18c855b4e" -> https://github.com/NixOS/nixpkgs/tree/e576e3c9cf9bad747afcddd9e34f51d18c855b4e: https://github.com/NixOS/nixpkgs/tree/e576e3c9cf9bad747afcddd9e34f51d18c855b4e
+                "github:NixOS/nixpkgs/e576e3c" -> https://github.com/NixOS/nixpkgs/tree/e576e3c: https://github.com/NixOS/nixpkgs/tree/e576e3c
+                "github:NixOS/nixpkgs/pull/190594/head" -> https://github.com/NixOS/nixpkgs/pull/190594: https://github.com/NixOS/nixpkgs/pull/190594
                 "https://example.com?foo=1#bar" -> https://example.com/?foo=1#bar: https://example.com/?foo=1#bar
             "#]],
         );
