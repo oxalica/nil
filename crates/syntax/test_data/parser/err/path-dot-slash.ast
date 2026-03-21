@@ -1,0 +1,18 @@
+4..6: PathDotSlashInsufficient
+9..12: PathDotSlashInsufficient
+15..17: PathDotSlashInsufficient
+SOURCE_FILE@0..20
+  LIST@0..19
+    L_BRACK@0..1 "["
+    SPACE@1..4 "\n  "
+    LITERAL@4..6
+      PATH@4..6 "./"
+    SPACE@6..9 "\n  "
+    LITERAL@9..12
+      PATH@9..12 "../"
+    SPACE@12..15 "\n  "
+    LITERAL@15..17
+      PATH@15..17 "~/"
+    SPACE@17..18 "\n"
+    R_BRACK@18..19 "]"
+  SPACE@19..20 "\n"

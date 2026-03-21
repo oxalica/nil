@@ -1,9 +1,13 @@
+use std::path;
+use std::path::PathBuf;
+use std::str::FromStr;
+
 use crate::def::{AstPtr, BindingValue, Expr, ExprId, ModuleScopes, NameKind};
 use crate::ty::{self, AttrSource, DisplayConfig, Ty};
-use crate::{FilePos, InferenceResult, Module, ModuleSourceMap, TyDatabase};
+use crate::{FilePos, InferenceResult, Module, ModuleSourceMap, TyDatabase, VfsPath};
 use builtin::{BuiltinKind, ALL_BUILTINS};
-use smol_str::SmolStr;
-use syntax::ast::{self, AstNode};
+use smol_str::{SmolStr, ToSmolStr};
+use syntax::ast::{self, AstNode, LiteralKind};
 use syntax::rowan::TokenAtOffset;
 use syntax::semantic::{escape_literal_attr, is_valid_ident, AttrKind};
 use syntax::{match_ast, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, T};
@@ -61,6 +65,8 @@ pub enum CompletionItemKind {
     BuiltinConst,
     BuiltinFunction,
     BuiltinAttrset,
+    File,
+    Folder,
 }
 
 impl From<BuiltinKind> for CompletionItemKind {
@@ -90,6 +96,7 @@ struct Context<'a> {
     scopes: &'a ModuleScopes,
     infer: &'a InferenceResult,
     fpos: FilePos,
+    vfs_path: VfsPath,
     // The token at cursor (left biased) to complete.
     token: SyntaxToken,
     // The replace range for the result.
@@ -106,6 +113,9 @@ pub(crate) fn completions(
 ) -> Vec<CompletionItem> {
     let parse = db.parse(file_id);
 
+    let sid = db.file_source_root(file_id);
+    let vfs_path = db.source_root(sid).path_for_file(file_id).clone();
+
     // Always completes from the LHS if we are in the middle of two tokens,
     // with the exception when LHS is the binding terminator `;`,
     // then we must regard it as a new binding starting.
@@ -120,7 +130,9 @@ pub(crate) fn completions(
     // the result should replace it.
     // Otherwise, if we are not in (or after) any identifiers, we are completing a fresh new
     // identifier or snippet, the result should be inserted to the current position.
-    let (replace_range, prefix) = if token.kind() == SyntaxKind::IDENT || token.kind().is_keyword()
+    let (replace_range, prefix) = if token.kind() == SyntaxKind::IDENT
+        || token.kind() == SyntaxKind::PATH
+        || token.kind().is_keyword()
     {
         // Clamp the prefix range in case where we are typing inside an identifier.
         // Eg. `foo|bar`. This is not clear if we want to replace `foobar` or just insert,
@@ -142,6 +154,7 @@ pub(crate) fn completions(
         scopes: &scopes,
         infer: &infer,
         fpos,
+        vfs_path,
         token: token.clone(),
         replace_range,
         prefix,
@@ -300,6 +313,21 @@ impl Context<'_> {
     /// Complete in expression position, with the name scope of `expr_node`.
     /// Eg. `a + |` or `let a = 1; in |`.
     fn complete_expr(&mut self, expr_node: ast::Expr) -> Option<()> {
+        if let ast::Expr::Literal(ref literal) = expr_node {
+            if literal.kind() == Some(LiteralKind::Path)
+                && matches!(self.vfs_path, VfsPath::Path(_))
+            {
+                let curr_file_path = match self.vfs_path {
+                    VfsPath::Path(ref x) => x.clone(),
+                    VfsPath::Virtual(_) => unreachable!("we just checked it's not Virtual"),
+                };
+
+                self.complete_filepath(curr_file_path)?;
+            }
+
+            return Some(());
+        };
+
         let expr_id = self
             .source_map
             .expr_for_node(AstPtr::new(expr_node.syntax()))?;
@@ -360,6 +388,109 @@ impl Context<'_> {
             });
 
         Some(())
+    }
+
+    fn complete_filepath(&mut self, curr_file_path: PathBuf) -> Option<()> {
+        let mut path_completions: Vec<(SmolStr, CompletionItemKind)> = Vec::new();
+
+        // NOTE: "*" is a valid character in unix path,
+        // but it's not supported in Nix path literals,
+        // so we don't have to care about escaping it for globbing.
+        // This applies to other glob special chars as well.
+        let glob_pattern_1 = PathBuf::from_str(&(self.prefix.to_owned() + "*"))
+            .expect("path literal should be valid as a path");
+
+        let (glob_pattern_cleaned, home_dir_to_strip) = match glob_pattern_1.strip_prefix("~/") {
+            Ok(p) => match std::env::var("HOME").unwrap_or_default().as_str() {
+                "" => {
+                    // TODO: log warning about unset $HOME?
+                    return None;
+                }
+                home_dir => (PathBuf::from(home_dir).join(p), Some(home_dir.to_string())),
+            },
+            Err(_) => (glob_pattern_1, None),
+        };
+
+        // Glob root should be relative to the current file dir, not the workspace root.
+        let glob_root = curr_file_path
+            .parent()
+            .expect("a file in a workspace should always have parent dir");
+
+        // (This works for absolute literal paths as well)
+        let glob_pattern_abs = glob_root.join(&glob_pattern_cleaned).display().to_string();
+
+        let glob_results = glob::glob_with(
+            &glob_pattern_abs,
+            glob::MatchOptions {
+                case_sensitive: false,
+                require_literal_separator: true,
+                require_literal_leading_dot: false,
+            },
+        )
+        .expect("glob pattern should be valid");
+
+        for glob_result in glob_results {
+            let Ok(entry) = glob_result else {
+                // TODO: maybe log the glob error?
+                continue;
+            };
+
+            // Replace absolute path with relative, if it was relative before.
+            let entry = if glob_pattern_cleaned.is_relative() {
+                entry.strip_prefix(glob_root).unwrap_or(&entry)
+            } else {
+                &entry
+            };
+
+            // Replace absolute home path back to `~` if it was substituted.
+            let entry = &match home_dir_to_strip {
+                Some(ref home_dir) => entry
+                    .strip_prefix(home_dir)
+                    .map(|p| {
+                        PathBuf::from_str("~/")
+                            .expect("~/ is always valid filepath")
+                            .join(p)
+                    })
+                    .unwrap_or(entry.to_path_buf()),
+                None => entry.to_path_buf(),
+            };
+
+            let path_cleaned: SmolStr = {
+                let mut pb = PathBuf::new();
+                if entry.is_relative()
+                    && !entry.starts_with(".")
+                    && !entry.starts_with("..")
+                    && !entry.starts_with("~")
+                {
+                    // Re-add "." as first component for relative paths.
+                    pb.push(path::Component::CurDir);
+                }
+                pb.push(entry);
+                pb.to_string_lossy().to_smolstr()
+            };
+
+            let kind = if entry.is_dir() {
+                CompletionItemKind::Folder
+            } else {
+                CompletionItemKind::File // or symlink.
+            };
+
+            path_completions.push((path_cleaned, kind));
+        }
+
+        for (path, compl_kind) in path_completions {
+            self.record_item(CompletionItem {
+                label: path.clone(),
+                replace_range: self.replace_range,
+                replace: path.clone(),
+                kind: compl_kind,
+                signature: None,
+                description: None,
+                documentation: None,
+            });
+        }
+
+        None
     }
 
     /// Complete in binding position.

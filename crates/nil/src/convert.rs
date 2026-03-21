@@ -138,6 +138,8 @@ pub(crate) fn to_completion_item(line_map: &LineMap, item: CompletionItem) -> ls
         CompletionItemKind::BuiltinConst => lsp::CompletionItemKind::CONSTANT,
         CompletionItemKind::BuiltinFunction => lsp::CompletionItemKind::FUNCTION,
         CompletionItemKind::BuiltinAttrset => lsp::CompletionItemKind::CLASS,
+        CompletionItemKind::File => lsp::CompletionItemKind::FILE,
+        CompletionItemKind::Folder => lsp::CompletionItemKind::FOLDER,
     };
     lsp::CompletionItem {
         label: item.label.into(),

@@ -97,7 +97,7 @@ regex_dfa! {
         // Here we try to accept multiple and trailing slashes except the first one,
         // and phrase them out in the parser to avoid parser abuse :)
         PATH_START = r"(~|[a-zA-Z0-9._+-]*)/([a-zA-Z0-9._+-][/a-zA-Z0-9._+-]*)?\$\{",
-        PATH = r"(~|[a-zA-Z0-9._+-]*)/[a-zA-Z0-9._+-][/a-zA-Z0-9._+-]*",
+        PATH = r"(?:(~|[a-zA-Z0-9._+-]*)/[a-zA-Z0-9._+-][/a-zA-Z0-9._+-]*)|(\./|\.\./|~/)",
         SEARCH_PATH = r"<[a-zA-Z0-9._+-]+(/[a-zA-Z0-9._+-]+)*>",
         FLOAT = r"(\d+\.\d*|\.\d+)([Ee][+-]?\d+)?",
         INT = r"\d+",
