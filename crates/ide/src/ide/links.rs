@@ -130,7 +130,7 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
         let owner = iter.next()?;
         let repo = iter.next()?;
         // let rev = iter.next()?; // TODO
-        return Some(format!("https://sr.ht/{owner}/{repo}").parse().unwrap());
+        return Some(format!("https://git.sr.ht/{owner}/{repo}").parse().unwrap());
     }
 
     // For `anything+(file|path)://...`, chop it to `file://`.
