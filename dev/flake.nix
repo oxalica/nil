@@ -49,7 +49,7 @@
                 watchman # Required by coc.nvim for file watching.
 
                 jq
-                nixfmt-rfc-style
+                nixfmt
                 (import ./nvim-lsp.nix { inherit pkgs; })
                 (import ./vim-coc.nix { inherit pkgs; })
                 (import ./vim-lsp.nix { inherit pkgs; })

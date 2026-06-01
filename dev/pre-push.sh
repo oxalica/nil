@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eu
-# Requires: [ git nixfmt-rfc-style fd typos ], rust toolchain, npm toolchain
+# Requires: [ git nixfmt fd typos ], rust toolchain, npm toolchain
 
 die() { echo "$*" >&2; exit 1; }
 
