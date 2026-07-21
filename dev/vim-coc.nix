@@ -95,7 +95,7 @@ let
   };
 
 in
-pkgs.vim_configurable.customize {
+pkgs.vim-full.customize {
   name = "vim-coc";
   vimrcConfig = {
     inherit customRC;
