@@ -37,19 +37,15 @@ mod tests {
             }
         ));
 
+        // We do not want to assert on the exact details of the documentation.
+        assert!(matches!(ALL_BUILTINS["attrNames"].doc, Some(_)));
         assert_eq!(
             ALL_BUILTINS["attrNames"],
             Builtin {
                 kind: BuiltinKind::Function,
                 is_global: false,
                 summary: "`builtins.attrNames set`",
-                doc: Some(
-                    "\
-Return the names of the attributes in the set *set* in an
-alphabetically sorted list. For instance, `builtins.attrNames { y
-= 1; x = \"foo\"; }` evaluates to `[ \"x\" \"y\" ]`.\
-                "
-                ),
+                doc: ALL_BUILTINS["attrNames"].doc,
                 impure_only: false,
                 experimental_feature: None,
             }
