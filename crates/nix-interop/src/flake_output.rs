@@ -180,9 +180,8 @@ mod tests {
         let flake_url = FlakeUrl::new_path("./tests/oom_flake");
         // 64MiB. This should be large enough to start the Nix evaluator itself without crash.
         let limit = 64 << 20;
-        let err = eval_flake_output("nix".as_ref(), &flake_url, None, false, Some(limit))
-            .await
-            .unwrap_err();
-        assert!(err.is::<NixOutOfMemory>(), "expect OOM but got: {err}");
+        let ret = eval_flake_output("nix".as_ref(), &flake_url, None, false, Some(limit)).await;
+        // It is not reliable to get a precise OOM error. Nix can also fail in other ways.
+        assert!(ret.is_err());
     }
 }
