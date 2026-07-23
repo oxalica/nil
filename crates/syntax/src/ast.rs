@@ -329,6 +329,14 @@ impl Expr {
             _ => false,
         }
     }
+
+    pub fn unwrap_all_paren(self) -> Expr {
+        let mut res = self;
+        while let Self::Paren(e) = res {
+            res = e.expr().unwrap();
+        }
+        res
+    }
 }
 
 asts! {
