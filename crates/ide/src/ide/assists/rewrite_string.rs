@@ -55,9 +55,10 @@ pub(super) fn quote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let syntax = node.syntax();
 
     // Name should be an attribute, not a e.g. lambda parameter.
-    if syntax.parent().map_or(true, |parent| {
-        !matches!(parent.kind(), SyntaxKind::ATTR_PATH | SyntaxKind::INHERIT)
-    }) {
+    if syntax
+        .parent()
+        .is_none_or(|parent| !matches!(parent.kind(), SyntaxKind::ATTR_PATH | SyntaxKind::INHERIT))
+    {
         return None;
     }
 
@@ -86,7 +87,7 @@ pub(super) fn unquote_attr(ctx: &mut AssistsCtx<'_>) -> Option<()> {
     let syntax = node.syntax();
     if syntax
         .parent()
-        .map_or(true, |parent| parent.kind() != SyntaxKind::ATTR_PATH)
+        .is_none_or(|parent| parent.kind() != SyntaxKind::ATTR_PATH)
     {
         return None;
     };

@@ -152,11 +152,7 @@ impl Fixture {
                         let n = iter.next().unwrap().to_digit(10).unwrap() as usize;
                         let pos =
                             FilePos::new(cur_file, TextSize::try_from(cur_text.len()).unwrap());
-                        ensure!(
-                            markers[n].replace(pos).is_none(),
-                            "Duplicated marker: {}",
-                            n
-                        );
+                        ensure!(markers[n].replace(pos).is_none(), "Duplicated marker: {n}",);
                     } else {
                         cur_text.push(ch);
                     }
@@ -187,8 +183,7 @@ impl Fixture {
         text.truncate(text.trim_end_matches('\n').len());
         ensure!(
             self.files.insert(path.clone(), text).is_none(),
-            "Duplicated path: {:?}",
-            path
+            "Duplicated path: {path:?}",
         );
         self.file_ids.push(file);
         Ok(())

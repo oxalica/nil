@@ -219,7 +219,7 @@ impl FromStr for RawPattern {
 
         let parse = syntax::parser::parse_file_tokens(src, tokens);
         if let Some(err) = parse.errors().first() {
-            bail!("syntax error: {}", err);
+            bail!("syntax error: {err}");
         }
         Ok(Self {
             placeholders,
