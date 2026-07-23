@@ -38,7 +38,7 @@ mod tests {
         ));
 
         // We do not want to assert on the exact details of the documentation.
-        assert!(matches!(ALL_BUILTINS["attrNames"].doc, Some(_)));
+        assert!(ALL_BUILTINS["attrNames"].doc.is_some());
         assert_eq!(
             ALL_BUILTINS["attrNames"],
             Builtin {

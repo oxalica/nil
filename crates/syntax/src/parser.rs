@@ -391,9 +391,7 @@ impl Parser<'_> {
             _ => self.expr_select_opt(),
         }
 
-        loop {
-            let Some(tok) = self.peek_non_ws() else { break };
-
+        while let Some(tok) = self.peek_non_ws() {
             if let Some(lbp) = tok.postfix_bp() {
                 if lbp < min_bp {
                     break;

@@ -19,7 +19,7 @@ and is regularly updated.
 - If you use `nix-env`, run `nix-env -iA nixpkgs.nil`
 - If you use `nix profile`, run `nix profile install nixpkgs#nil`
 - If you want to compile it from source:
-  1. Install stable Rust toolchain >= 1.77
+  1. Install stable Rust toolchain >= 1.79
   1. Install nix >= 2.4 and make sure the binary `nix` is in your `PATH`.
   1. Build and install via `cargo install --git https://github.com/oxalica/nil nil`
 
@@ -120,7 +120,7 @@ There are various other configurations to tweak. Refer to the
 
 ### Emacs with [lsp-bridge](https://github.com/manateelazycat/lsp-bridge/)
 
-Add the following elisp code to your configuration. 
+Add the following elisp code to your configuration.
 
 ```elisp
 (use-package lsp-bridge

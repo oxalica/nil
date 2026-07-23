@@ -14,7 +14,7 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 # Should be sync with CI and README.
-rust-version = "1.77"
+rust-version = "1.79"
 
 [profile.dev]
 debug = 1
@@ -33,3 +33,5 @@ uninlined-format-args = "warn"
 
 # WAIT: https://github.com/rust-lang/rust-clippy/issues/11436
 missing-panics-doc = "allow"
+# Sometime it breaks symmetry of a match-like if-else-chain.
+question-mark = "allow"
