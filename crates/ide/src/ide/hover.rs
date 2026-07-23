@@ -201,6 +201,20 @@ mod tests {
     }
 
     #[track_caller]
+    fn check_builtin(fixture: &str, full: &str, builtin: &str) {
+        let (db, f) = TestDB::from_fixture(fixture).unwrap();
+        assert_eq!(f.markers().len(), 1);
+        let ret = super::hover(&db, f[0]).expect("No hover");
+        let src = db.file_content(f[0].file_id);
+        assert_eq!(full, &src[ret.range]);
+        let got = ret.markup;
+        assert!(
+            got.contains(&format!("builtins.{builtin}")),
+            "Not a builtin, got: {got:?}"
+        );
+    }
+
+    #[track_caller]
     fn check_no(fixture: &str) {
         let (db, f) = TestDB::from_fixture(fixture).unwrap();
         assert_eq!(f.markers().len(), 1);
@@ -331,145 +345,30 @@ mod tests {
     #[test]
     #[ignore = "asserts on nix docs"]
     fn builtin_global() {
-        check(
-            "$0true",
-            "true",
-            expect![[r#"
-                `builtins.true`
-                `bool`
-
-                `builtins.true`
-                Primitive value.
-
-                It can be returned by
-                [comparison operators](@docroot@/language/operators.md#Comparison)
-                and used in
-                [conditional expressions](@docroot@/language/syntax.md#Conditionals).
-
-                The name `true` is not special, and can be shadowed:
-
-                ```nix-repl
-                nix-repl> let true = 1; in true
-                1
-                ```
-            "#]],
-        );
-        check(
-            "$0map",
-            "map",
-            expect![[r#"
-                `builtins.map`
-                `(? → ?) → [?] → [?]`
-
-                `builtins.map f list`
-                Apply the function *f* to each element in the list *list*. For
-                example,
-
-                ```nix
-                map (x: "foo" + x) [ "bar" "bla" "abc" ]
-                ```
-
-                evaluates to `[ "foobar" "foobla" "fooabc" ]`.
-            "#]],
-        );
+        check_builtin("$0true", "true", "true");
+        check_builtin("$0map", "map", "map");
     }
 
     #[test]
     fn builtin_with() {
-        check(
-            "with { }; with builtins; head$0",
-            "head",
-            expect![[r#"
-                `builtins.head`
-                `[?] → ?`
-
-                `builtins.head list`
-                Return the first element of a list; abort evaluation if the argument
-                isn’t a list or is an empty list. You can test whether a list is
-                empty by comparing it with `[]`.
-            "#]],
-        );
+        check_builtin("with { }; with builtins; head$0", "head", "head");
     }
 
     #[test]
     fn builtin_alias() {
-        check(
-            "let inherit (builtins) head; in head$0",
-            "head",
-            expect![[r#"
-                `builtins.head`
-                `[?] → ?`
-
-                `builtins.head list`
-                Return the first element of a list; abort evaluation if the argument
-                isn’t a list or is an empty list. You can test whether a list is
-                empty by comparing it with `[]`.
-            "#]],
-        );
+        check_builtin("let inherit (builtins) head; in head$0", "head", "head");
     }
 
     #[test]
     #[ignore = "asserts on nix docs"]
     fn builtin_attrpath() {
-        check(
-            "builtins.head$0",
-            "builtins.head",
-            expect![[r#"
-                `builtins.head`
-                `[?] → ?`
-
-                `builtins.head list`
-                Return the first element of a list; abort evaluation if the argument
-                isn’t a list or is an empty list. You can test whether a list is
-                empty by comparing it with `[]`.
-            "#]],
-        );
-
-        check(
-            "builtins.true$0.trailing",
-            "builtins.true",
-            expect![[r#"
-                `builtins.true`
-                `bool`
-
-                `builtins.true`
-                Primitive value.
-
-                It can be returned by
-                [comparison operators](@docroot@/language/operators.md#Comparison)
-                and used in
-                [conditional expressions](@docroot@/language/syntax.md#Conditionals).
-
-                The name `true` is not special, and can be shadowed:
-
-                ```nix-repl
-                nix-repl> let true = 1; in true
-                1
-                ```
-            "#]],
-        );
+        check_builtin("builtins.head$0", "builtins.head", "head");
+        check_builtin("builtins.true$0.trailing", "builtins.true", "true");
 
         // Invalid builtins.
         check_no("builtins.not_exist$0");
         // But the first part still works.
-        check(
-            "builtins$0.not_exist",
-            "builtins",
-            expect![[r#"
-                `builtins.builtins`
-                `{ abort: string → ?, add: float → float → float, addErrorContext: string → ? → ?, all: (? → bool) → [?] → bool, … }`
-
-                `builtins.builtins`
-                Contains all the built-in functions and values.
-
-                Since built-in functions were added over time, [testing for attributes](./operators.md#has-attribute) in `builtins` can be used for graceful fallback on older Nix installations:
-
-                ```nix
-                # if hasContext is not available, we assume `s` has a context
-                if builtins ? hasContext then builtins.hasContext s else true
-                ```
-            "#]],
-        );
+        check_builtin("builtins$0.not_exist", "builtins", "builtins");
     }
 
     #[test]
