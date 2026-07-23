@@ -1,7 +1,7 @@
 {
   pkgs ? import <nixpkgs> { },
 }:
-pkgs.vim_configurable.customize {
+pkgs.vim-full.customize {
   name = "vim-lsp";
 
   vimrcConfig = {

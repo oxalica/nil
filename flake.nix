@@ -26,7 +26,7 @@ rec {
         {
           rustPlatform,
           nixVersions,
-          nixfmt-rfc-style,
+          nixfmt,
           ...
         }:
         rustPlatform.buildRustPackage {
@@ -42,7 +42,7 @@ rec {
           nativeBuildInputs = [ (nixVersions.latest or nixVersions.unstable) ];
 
           CFG_RELEASE = "git-${rev}";
-          CFG_DEFAULT_FORMATTER = lib.getExe nixfmt-rfc-style;
+          CFG_DEFAULT_FORMATTER = lib.getExe nixfmt;
 
           meta = {
             inherit description;

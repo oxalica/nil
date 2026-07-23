@@ -2,7 +2,7 @@
   description = "Development Environment for nil";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -49,7 +49,7 @@
                 watchman # Required by coc.nvim for file watching.
 
                 jq
-                nixfmt-rfc-style
+                nixfmt
                 (import ./nvim-lsp.nix { inherit pkgs; })
                 (import ./vim-coc.nix { inherit pkgs; })
                 (import ./vim-lsp.nix { inherit pkgs; })
