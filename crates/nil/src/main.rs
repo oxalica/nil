@@ -313,7 +313,7 @@ fn emit_diagnostics(
             .with_message(diag.message())
             .with_labels_iter(labels);
 
-        term::emit(writer, &config, &files, &diag)?;
+        term::emit_to_write_style(writer, &config, &files, &diag)?;
     }
 
     Ok(())
