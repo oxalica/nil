@@ -71,9 +71,6 @@ This incomplete list tracks noteble features currently implemented or planned.
 - [x] Semantic highlighting. `textDocument/semanticTokens/{range,full}`
   - [ ] Delta response. `textDocument/semanticTokens/full/delta`
 
-  :warning: There is a known performance issue for semantic highlighting with
-  neovim native LSP. See more details in https://github.com/oxalica/nil/issues/83
-
   Note: [`coc.nvim`] doesn't enable semantic highlighting by default.
   You need to manually enable it in settings.
   ```jsonc

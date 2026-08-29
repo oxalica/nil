@@ -53,9 +53,6 @@ Flake output structure (not necessarily up-to-date):
 We are officially supported by nvim-lspconfig, see [upstream docs](https://github.com/neovim/nvim-lspconfig/blob/master/doc/configs.md#nil_ls),
 also [the example config for testing](dev/nvim-lsp.nix).
 
-:warning: There is a known performance issue for semantic highlighting with
-neovim native LSP. See more details in https://github.com/oxalica/nil/issues/83
-
 ### Vim/Neovim with [coc.nvim](https://github.com/neoclide/coc.nvim)
 
 Merge this setting into your `coc-settings.json` (open with `:CocConfig`).
