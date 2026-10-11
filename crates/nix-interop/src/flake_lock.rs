@@ -234,6 +234,18 @@ pub async fn archive(nix_command: &Path, flake_url: &FlakeUrl) -> Result<()> {
     Ok(())
 }
 
+pub async fn archive_local(nix_command: &Path, root: &Path) -> Result<()> {
+    let flake_url = FlakeUrl::new_local(root);
+    let path_url = FlakeUrl::new_path(root);
+    match archive(nix_command, &flake_url).await {
+        // `git+file:` hides untracked files, including a `flake.nix` that is not added yet.
+        Err(err) if flake_url != path_url => archive(nix_command, &path_url)
+            .await
+            .with_context(|| format!("{err:#}\nThen retried with `{path_url}`")),
+        ret => ret,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +287,55 @@ mod tests {
     async fn archive() {
         let flake = FlakeUrl::new_path("./tests/test_flake");
         super::archive("nix".as_ref(), &flake).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn archive_local_falls_back_to_path() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = crate::tests::scratch_dir("archive-local");
+        let stub = |name: &str, status: &str| {
+            let path = root.join(name);
+            fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nfor last; do :; done\necho \"$last\" >> \"$0.log\"\n{status}\n"
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let log = |nix: &Path| fs::read_to_string(nix.with_extension("log")).unwrap();
+
+        let repo_dir = root.join("repo");
+        fs::create_dir_all(repo_dir.join(".git")).unwrap();
+        let repo = repo_dir.display();
+
+        let untracked = stub("untracked", r#"case "$last" in git+file:*) exit 1 ;; esac"#);
+        archive_local(&untracked, &repo_dir).await.unwrap();
+        assert_eq!(log(&untracked), format!("git+file://{repo}\npath:{repo}\n"));
+
+        let broken = stub("broken", "exit 1");
+        let err = archive_local(&broken, &repo_dir).await.unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains(&format!("`nix flake archive git+file://{repo}` failed")),
+            "{msg}"
+        );
+        assert!(
+            msg.contains(&format!("`nix flake archive path:{repo}` failed")),
+            "{msg}"
+        );
+
+        let plain = root.join("plain");
+        fs::create_dir_all(&plain).unwrap();
+        let ok = stub("ok", "exit 0");
+        archive_local(&ok, &plain).await.unwrap();
+        assert_eq!(log(&ok), format!("path:{}\n", plain.display()));
+
+        fs::remove_dir_all(&root).unwrap();
     }
 }

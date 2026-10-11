@@ -25,6 +25,25 @@ impl FlakeUrl {
         Self(format!("path:{}", path.as_ref().display()))
     }
 
+    /// The Nix CLI resolves a local flake inside a Git work tree to `git+file:`,
+    /// which copies only tracked files.
+    pub fn new_local(path: impl AsRef<Path>) -> Self {
+        let path = path.as_ref();
+        let Some(top) = path.ancestors().find(|dir| dir.join(".git").exists()) else {
+            return Self::new_path(path);
+        };
+        let subdir = path.strip_prefix(top).expect("ancestors are prefixes");
+        if subdir.as_os_str().is_empty() {
+            Self(format!("git+file://{}", top.display()))
+        } else {
+            Self(format!(
+                "git+file://{}?dir={}",
+                top.display(),
+                subdir.display()
+            ))
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -62,9 +81,54 @@ impl From<PathBuf> for FlakeUrl {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::process::Stdio;
 
     use tokio::process::Command;
+
+    use super::FlakeUrl;
+
+    pub(crate) fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("nil-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn local_flake_url() {
+        let root = scratch_dir("local-flake-url");
+
+        let plain = root.join("plain");
+        fs::create_dir_all(&plain).unwrap();
+        assert_eq!(
+            FlakeUrl::new_local(&plain).as_str(),
+            format!("path:{}", plain.display()),
+        );
+
+        let repo = root.join("repo");
+        let nested = repo.join("sub/flake");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::create_dir_all(&nested).unwrap();
+        assert_eq!(
+            FlakeUrl::new_local(&repo).as_str(),
+            format!("git+file://{}", repo.display()),
+        );
+        assert_eq!(
+            FlakeUrl::new_local(&nested).as_str(),
+            format!("git+file://{}?dir=sub/flake", repo.display()),
+        );
+
+        let worktree = root.join("worktree");
+        fs::create_dir_all(&worktree).unwrap();
+        fs::write(worktree.join(".git"), "gitdir: ../repo/.git/worktrees/w\n").unwrap();
+        assert_eq!(
+            FlakeUrl::new_local(&worktree).as_str(),
+            format!("git+file://{}", worktree.display()),
+        );
+
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     pub(crate) async fn get_nix_system() -> String {
         let output = Command::new("nix")
