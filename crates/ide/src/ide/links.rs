@@ -1,5 +1,6 @@
 use crate::def::{AstPtr, Expr, ExprId, Literal};
 use crate::{DefDatabase, FileId, FileRange, VfsPath};
+use itertools::Itertools;
 use syntax::TextRange;
 use url::Url;
 
@@ -96,16 +97,14 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
         let mut iter = uri.path().split('/');
         let owner = iter.next()?;
         let repo = iter.next()?;
+        let remainder = iter.join("/");
 
-        let extra_segments = match iter.next() {
-            Some("pull") => {
-                let pr_num = iter.next()?;
-                format!("/pull/{pr_num}")
+        let extra_segments = match remainder.as_str() {
+            x if x.starts_with("pull/") => {
+                let pull_slash_pr_num = x.strip_suffix("/head").unwrap_or(x);
+                format!("/{pull_slash_pr_num}")
             }
-            Some(ref_or_rev) => {
-                format!("/tree/{ref_or_rev}")
-            }
-            None => uri
+            "" => uri
                 .query_pairs()
                 .find_map(|(k, v)| {
                     if k == "rev" || k == "ref" {
@@ -115,6 +114,9 @@ fn try_resolve_link_uri(uri: &str) -> Option<Url> {
                     }
                 })
                 .unwrap_or_default(),
+            ref_or_rev => {
+                format!("/tree/{ref_or_rev}")
+            }
         };
 
         return Some(
@@ -202,19 +204,23 @@ mod tests {
         check(
             r#"[
                 github:NixOS/nixpkgs
+                "github:NixOS/nixpkgs/"
                 "github:NixOS/nixpkgs/nixos-22.05"
                 "github:NixOS/nixpkgs/e576e3c9cf9bad747afcddd9e34f51d18c855b4e"
                 "github:NixOS/nixpkgs/e576e3c"
                 "github:NixOS/nixpkgs/pull/190594/head"
+                "github:oxalica/nil/feat/inlay-hints"
                 "file:///root"
                 "https://example.com?foo=1#bar"
             ]"#,
             expect![[r#"
                 github:NixOS/nixpkgs -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
+                "github:NixOS/nixpkgs/" -> https://github.com/NixOS/nixpkgs: https://github.com/NixOS/nixpkgs
                 "github:NixOS/nixpkgs/nixos-22.05" -> https://github.com/NixOS/nixpkgs/tree/nixos-22.05: https://github.com/NixOS/nixpkgs/tree/nixos-22.05
                 "github:NixOS/nixpkgs/e576e3c9cf9bad747afcddd9e34f51d18c855b4e" -> https://github.com/NixOS/nixpkgs/tree/e576e3c9cf9bad747afcddd9e34f51d18c855b4e: https://github.com/NixOS/nixpkgs/tree/e576e3c9cf9bad747afcddd9e34f51d18c855b4e
                 "github:NixOS/nixpkgs/e576e3c" -> https://github.com/NixOS/nixpkgs/tree/e576e3c: https://github.com/NixOS/nixpkgs/tree/e576e3c
                 "github:NixOS/nixpkgs/pull/190594/head" -> https://github.com/NixOS/nixpkgs/pull/190594: https://github.com/NixOS/nixpkgs/pull/190594
+                "github:oxalica/nil/feat/inlay-hints" -> https://github.com/oxalica/nil/tree/feat/inlay-hints: https://github.com/oxalica/nil/tree/feat/inlay-hints
                 "https://example.com?foo=1#bar" -> https://example.com/?foo=1#bar: https://example.com/?foo=1#bar
             "#]],
         );
